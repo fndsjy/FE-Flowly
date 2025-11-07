@@ -1,0 +1,14 @@
+:root {
+  scroll-behavior: smooth;
+  scroll-padding-top: 60px;
+}
+
+body {
+    margin: 0 auto;
+    font-family: 'Poppins', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    background-color: white;
+    color: black;
+  }
