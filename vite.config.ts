@@ -8,5 +8,16 @@ export default defineConfig({
       restart: ['src/**/*.{ts,tsx}'],
     }),
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5174/v1',
+        changeOrigin: true,
+        secure: false,
+        // Opsional: rewrite path jika perlu
+        // rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
   // plugins: [react()],
 })
