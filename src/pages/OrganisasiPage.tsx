@@ -243,6 +243,7 @@ const OrganisasiPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.structureId}
+                onClick={() => window.location.href = `/organisasi/${item.structureId}`}
                 className="bg-white rounded-2xl p-5 shadow-lg shadow-gray-400
                 hover:shadow-xl hover:border-rose-300 transition duration-300"
               >
@@ -279,20 +280,24 @@ const OrganisasiPage = () => {
                   {isAdmin && (
                     <div className="flex gap-2 mt-4">
                       <button
-                        onClick={() => openEditModal(item)}
-                        className="px-3 py-1 bg-[#272e79] hover:bg-white hover:text-[#272e79] hover:border hover:border-[#272e79] text-white text-sm rounded-lg"
+                        onClick={(e) => {
+                          e.stopPropagation(); // ⛔ cegah pindah halaman
+                          openEditModal(item);
+                        }}
+                        className="psx-3 py-1 px-3 bg-[#272e79] hover:bg-white hover:text-[#272e79] hover:border hover:border-[#272e79] text-white text-sm rounded-lg"
                       >
                         <i className="fa-regular fa-pen-to-square"></i> Edit
                       </button>
 
                       <button
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation(); // ⛔ cegah pindah halaman
                           setDeleteConfirm({
                             open: true,
                             structureId: item.structureId,
                             name: item.name,
-                          })
-                        }
+                          });
+                        }}
                         className="px-3 py-1 bg-rose-400 hover:bg-white hover:text-rose-400 hover:border hover:border-rose-400  text-white text-sm rounded-lg"
                       >
                         <i className="fa-solid fa-trash"></i> Delete

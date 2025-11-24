@@ -6,6 +6,7 @@ import IkatanKerjaPage from './pages/IkatanKerjaPage';
 import NotFoundPage from './pages/NotFoundPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import OrgChartPage from './pages/OrgChartPage';
 
 // 🔹 Import ToastProvider
 import { ToastProvider } from './components/organisms/MessageToast';
@@ -19,6 +20,7 @@ const App = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/organisasi" element={<OrganisasiPage />} />
+          <Route path="/organisasi/:structureId" element={<OrgChartPage />} />
           <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
