@@ -1,228 +1,113 @@
-// src/pages/HomePage.tsx
-import { useState, useEffect } from 'react';
+// src/pages/IkatanKerjaPage.tsx
+import { useState } from 'react';
 import Sidebar from '../components/organisms/Sidebar';
-import { Link } from 'react-router-dom';
 
 const HomePage = () => {
   const [isOpen, setIsOpen] = useState(true);
-  const [date, setDate] = useState<string>('');
-
-  useEffect(() => {
-    const now = new Date();
-    setDate(now.toLocaleDateString('id-ID', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    }));
-  }, []);
-
   const toggleSidebar = () => setIsOpen(!isOpen);
 
-  // Mock data — nanti bisa ganti API
-  const orgStats = {
-    units: 12,
-    positions: 45,
-    coverage: 100, // % jabatan yang terisi
-  };
-
-  const sopStats = {
-    divisions: 8,
-    completed: 5,
-    coverage: 62.5, // (5/8)*100
-  };
-
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-indigo-25">
+    <div className="flex min-h-screen">
       <Sidebar isOpen={isOpen} onToggle={toggleSidebar} />
       <div
         className={`transition-all duration-300 ${
           isOpen ? 'ml-64' : 'ml-16'
-        } flex-1 p-4 md:p-6`}
+        } flex-1 p-6 bg-gradient-to-br from-gray-50 to-blue-50`}
       >
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-800">DOMAS Dashboard</h1>
-          <p className="text-gray-600 mt-1">
-            {date}
+          <h1 className="text-2xl font-extrabold text-gray-800">Dashboard</h1>
+          <p className="text-gray-500 mt-1">Manajemen kontrak & status kepegawaian</p>
+        </div>
+
+        {/* Maintenance Card */}
+        <div className="flex flex-col items-center justify-center max-w-3xl mx-auto my-16">
+          {/* Emoji + Status */}
+          <div className="flex items-center space-x-3 mb-4">
+            {/* <span className="text-4xl animate-bounce">🔧</span> */}
+            <span className="px-4 py-1 bg-yellow-100 text-yellow-800 font-medium rounded-full text-sm">
+              Under Construction
+            </span>
+          </div>
+
+          {/* Judul besar */}
+          <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-800 max-w-2xl">
+            Fitur ini sedang kami <span className="text-indigo-600 underline decoration-wavy">upgrade</span> biar makin canggih
+          </h2>
+
+          {/* Subtitle */}
+          <p className="mt-4 text-gray-600 text-center max-w-xl leading-relaxed">
+            Tim DOMAS lagi kerja ekstra di balik layar — bikin sistem ikatan kerja yang:
+            <br />
+            <span className="inline-flex items-center space-x-1 mt-2 text-sm font-medium">
+              <span>✅</span> <span>Real-time</span>
+              <span>⚡</span> <span>Auto-remind</span>
+              <span>📊</span> <span>Analytics-ready</span>
+            </span>
           </p>
-        </div>
 
-        {/* Status Overview — 2 Card */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
-          {/* Organisasi Card */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 p-6 shadow-sm">
-            <div className="flex items-start">
-              <div className="p-3 bg-blue-100 rounded-xl mr-4">
-                <span className="text-2xl">🏢</span>
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-800">Struktur Organisasi</h3>
-                <p className="text-gray-600 text-sm mt-1">
-                  Unit: <span className="font-medium">{orgStats.units}</span> | 
-                  Jabatan: <span className="font-medium">{orgStats.positions}</span>
-                </p>
-                <div className="mt-3 flex items-center">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full" 
-                      style={{ width: `${orgStats.coverage}%` }}
-                    ></div>
-                  </div>
-                  <span className="ml-2 text-sm font-medium text-gray-700">
-                    {orgStats.coverage}% terisi
-                  </span>
-                </div>
-              </div>
-            </div>
-            <Link 
-              to="/organisasi" 
-              className="mt-4 inline-flex items-center text-blue-600 font-medium hover:text-blue-800"
+          {/* Ilustrasi SVG (tanpa external image) */}
+          <div className="mt-10 w-full max-w-md">
+            <svg
+              viewBox="0 0 400 200"
+              className="w-full h-auto text-gray-300"
+              xmlns="http://www.w3.org/2000/svg"
             >
-              Lihat Detail Struktur →
-            </Link>
+              {/* Background */}
+              <rect width="400" height="200" fill="currentColor" rx="12" opacity="0.1" />
+              
+              {/* Laptop */}
+              <rect x="100" y="60" width="200" height="100" rx="8" fill="#e5e7eb" stroke="#9ca3af" strokeWidth="2" />
+              <rect x="110" y="70" width="180" height="80" rx="4" fill="#f9fafb" />
+              <circle cx="190" cy="110" r="6" fill="#fbbf24" />
+              
+              {/* Progress bar animasi */}
+              <rect x="120" y="160" width="160" height="6" rx="3" fill="#e5e7eb" />
+              <rect x="120" y="160" width="95" height="6" rx="3" fill="#8b5cf6">
+                <animate attributeName="width" values="0;120;95" dur="3s" repeatCount="indefinite" />
+              </rect>
+              
+              {/* Sparks */}
+              <path d="M150 50 L152 40 L154 50 Z" fill="#fbbf24">
+                <animate attributeName="opacity" values="0;1;0" dur="1.5s" repeatCount="indefinite" begin="0s" />
+              </path>
+              <path d="M250 45 L252 35 L254 45 Z" fill="#fbbf24">
+                <animate attributeName="opacity" values="0;1;0" dur="1.5s" repeatCount="indefinite" begin="0.5s" />
+              </path>
+            </svg>
           </div>
 
-          {/* Ikatan Kerja Card */}
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-100 p-6 shadow-sm">
-            <div className="flex items-start">
-              <div className="p-3 bg-amber-100 rounded-xl mr-4">
-                <span className="text-2xl">📄</span>
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-800">SOP & Ikatan Kerja</h3>
-                <p className="text-gray-600 text-sm mt-1">
-                  Divisi: <span className="font-medium">{sopStats.divisions}</span> | 
-                  Lengkap: <span className="font-medium">{sopStats.completed}</span>
-                </p>
-                <div className="mt-3 flex items-center">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-amber-500 h-2 rounded-full" 
-                      style={{ width: `${sopStats.coverage}%` }}
-                    ></div>
-                  </div>
-                  <span className="ml-2 text-sm font-medium text-gray-700">
-                    {sopStats.coverage}% selesai
-                  </span>
-                </div>
-              </div>
-            </div>
-            <Link 
-              to="/ikatan-kerja" 
-              className="mt-4 inline-flex items-center text-amber-600 font-medium hover:text-amber-800"
-            >
-              Kelola SOP Divisi →
-            </Link>
-          </div>
-        </div>
-
-        {/* Visual Summary — Mini Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Jabatan per Divisi (Bar Chart SVG sederhana) */}
-          <div className="bg-white rounded-2xl border p-5 shadow-sm">
-            <h3 className="font-bold text-gray-800 mb-3">Jabatan per Unit</h3>
-            <div className="space-y-3">
-              {[
-                { name: 'Direksi', count: 5 },
-                { name: 'HRD', count: 8 },
-                { name: 'Keuangan', count: 6 },
-                { name: 'IT', count: 12 },
-                { name: 'Operasional', count: 14 },
-              ].map((item, i) => (
-                <div key={i}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium">{item.name}</span>
-                    <span className="text-gray-600">{item.count}</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-indigo-500 rounded-full"
-                      style={{ width: `${(item.count / 14) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* SOP Completion — Circular Progress */}
-          <div className="bg-white rounded-2xl border p-5 flex flex-col items-center justify-center shadow-sm">
-            <h3 className="font-bold text-gray-800 mb-2">Kelengkapan SOP</h3>
-            <div className="relative w-32 h-32 mb-4">
-              <svg viewBox="0 0 36 36" className="w-full h-full">
-                <path
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          {/* Estimasi waktu & kontak */}
+          <div className="mt-10 text-center space-y-3 max-w-xl">
+            <p className="text-gray-600 text-sm">
+              Butuh bantuan darurat? Hubungi tim support via:
+              <br />
+              <a
+                href="mailto:contact_us@domas.co.id"
+                className="inline-flex items-center space-x-1 font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                <span>✉️ contact_us@domas.co.id</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
                   fill="none"
-                  stroke="#e5e7eb"
-                  strokeWidth="2"
-                />
-                <path
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="2"
-                  strokeDasharray={`${sopStats.coverage}, 100`}
-                  strokeLinecap="round"
-                  className="transition-all duration-1000"
-                />
-                <text
-                  x="50%"
-                  y="50%"
-                  textAnchor="middle"
-                  dy=".3em"
-                  className="text-lg font-bold text-gray-700"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
                 >
-                  {Math.round(sopStats.coverage)}%
-                </text>
-              </svg>
-            </div>
-            <p className="text-center text-gray-600 text-sm max-w-xs">
-              3 divisi belum memiliki SOP lengkap: <strong>Marketing, R&D, Umum</strong>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
+                </svg>
+              </a>
             </p>
-            <button className="mt-3 px-4 py-2 bg-amber-50 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-100 transition-colors">
-              Lengkapi Sekarang
-            </button>
-          </div>
-        </div>
-
-        {/* Action Prompt */}
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-6 text-white">
-          <h3 className="text-xl font-bold mb-2">🎯 Apa yang ingin Anda lakukan hari ini?</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-            <ActionCard 
-              icon="➕" 
-              title="Tambah Unit" 
-              desc="Buat unit/jabatan baru"
-              color="bg-white/20"
-            />
-            <ActionCard 
-              icon="📤" 
-              title="Upload SOP" 
-              desc="Upload dokumen divisi"
-              color="bg-white/20"
-            />
-            <ActionCard 
-              icon="📥" 
-              title="Unduh Template" 
-              desc="Struktur & SOP standar"
-              color="bg-white/20"
-            />
           </div>
         </div>
       </div>
     </div>
   );
 };
-
-const ActionCard = ({ icon, title, desc, color }: { 
-  icon: string; title: string; desc: string; color: string 
-}) => (
-  <div className={`${color} rounded-xl p-3 cursor-pointer hover:bg-white/30 transition-colors`}>
-    <div className="text-xl mb-1">{icon}</div>
-    <h4 className="font-bold text-sm">{title}</h4>
-    <p className="text-xs opacity-90 mt-1">{desc}</p>
-  </div>
-);
 
 export default HomePage;
