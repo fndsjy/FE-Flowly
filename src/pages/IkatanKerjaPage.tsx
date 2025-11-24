@@ -16,7 +16,7 @@ const IkatanKerjaPage = () => {
       >
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-800">🛠️ Ikatan Kerja</h1>
+          <h1 className="text-2xl font-extrabold text-gray-800">Ikatan Kerja</h1>
           <p className="text-gray-500 mt-1">Manajemen kontrak & status kepegawaian</p>
         </div>
 
@@ -24,7 +24,7 @@ const IkatanKerjaPage = () => {
         <div className="flex flex-col items-center justify-center max-w-3xl mx-auto my-16">
           {/* Emoji + Status */}
           <div className="flex items-center space-x-3 mb-4">
-            <span className="text-4xl animate-bounce">🔧</span>
+            {/* <span className="text-4xl animate-bounce">🔧</span> */}
             <span className="px-4 py-1 bg-yellow-100 text-yellow-800 font-medium rounded-full text-sm">
               Under Construction
             </span>
@@ -32,7 +32,7 @@ const IkatanKerjaPage = () => {
 
           {/* Judul besar */}
           <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-800 max-w-2xl">
-            Fitur ini sedang kami <span className="text-indigo-600 underline decoration-wavy">upgrade</span> biar makin canggih 🔥
+            Fitur ini sedang kami <span className="text-indigo-600 underline decoration-wavy">upgrade</span> biar makin canggih
           </h2>
 
           {/* Subtitle */}
