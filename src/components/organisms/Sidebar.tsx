@@ -121,7 +121,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         {isOpen && (
           <a href="/" className="mx-auto hover:scale-110">
-            <img src="images/logo-domas.png" alt="Logo Domas" width={80} />
+            <img src="/images/logo-domas.png" alt="Logo Domas" width={80} />
           </a>
         )}
 
@@ -166,7 +166,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
               <Link
                 to={item.path}
                 className={`flex items-center w-full p-3 rounded-lg transition-colors ${
-                  location.pathname === item.path
+                  location.pathname.startsWith(item.path)
                     ? "bg-gradient-to-r from-rose-400 via-gray-900 to-gray-900 text-white font-semibold border border-white"
                     : "hover:bg-gray-700 text-gray-300"
                 }`}
@@ -183,7 +183,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
               </Link>
 
               {/* Pointer segitiga */}
-              {location.pathname === item.path && isOpen && (
+              {location.pathname.startsWith(item.path) && isOpen && (
                 <div
                   className="absolute right-0 top-1/2 -translate-y-1/2 w-0 h-0 
                     border-t-24 border-b-24 border-r-24 border-l-0 

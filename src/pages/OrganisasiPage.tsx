@@ -132,7 +132,7 @@ const OrganisasiPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json?.error || "Gagal menyimpan data", "error");
+        showToast(json?.issues?.[0]?.message || json.errors || json.message || json?.error || "Gagal menyimpan data", "error");
         setIsSubmitting(false);
         return;
       }
@@ -169,7 +169,7 @@ const OrganisasiPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json?.error || "Gagal menghapus data", "error");
+        showToast(json?.issues?.[0]?.message || json.errors || json.message || json?.error || "Gagal menghapus data", "error");
         setIsDeleting(false);
         return;
       }
