@@ -117,6 +117,15 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     },
   ];
 
+  /* ---------------- FILTER MENU BY ROLE ---------------- */
+  const visibleMenuItems = menuItems.filter((item) => {
+    // Hide Administrator menu kalau user bukan roleLevel 1
+    if (item.id === "administrator" && user?.roleLevel !== 1) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div
       className={`fixed left-0 top-0 h-screen bg-gray-900 text-white transition-all duration-300 ${
@@ -165,7 +174,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
 
       {/* Menu */}
       <nav className="mt-6 pl-2">
-        {menuItems
+        {visibleMenuItems
           .filter((item) => item.id !== "toggle")
           .map((item) => (
             <div key={item.id} className="relative group overflow-hidden">

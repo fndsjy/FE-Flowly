@@ -10,6 +10,8 @@ import OrgChartPage from './pages/OrgChartPage';
 
 // 🔹 Import ToastProvider
 import { ToastProvider } from './components/organisms/MessageToast';
+import AdministratorPage from './pages/AdministratorPage';
+import ProtectedAdminRoute from './ProtectedAdminRoute';
 
 const App = () => {
   return (
@@ -22,6 +24,7 @@ const App = () => {
           <Route path="/organisasi" element={<OrganisasiPage />} />
           <Route path="/organisasi/:structureId" element={<OrgChartPage />} />
           <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
+          <Route path="/administrator" element={<ProtectedAdminRoute><AdministratorPage /></ProtectedAdminRoute>} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
