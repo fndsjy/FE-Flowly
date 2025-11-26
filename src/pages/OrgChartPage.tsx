@@ -473,28 +473,28 @@ const OrgChartPage = () => {
       {deleteConfirm.open && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-xl w-96 text-center">
-            <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <img src="/images/delete-confirm.png" alt="Delete Confirmation" className="w-40 mx-auto" />
+            {/* <div className="bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <i className="fa-solid fa-triangle-exclamation text-rose-500 text-2xl"></i>
-            </div>
+            </div> */}
             <h3 className="font-semibold text-lg">
               Hapus <span className="text-rose-500">{deleteConfirm.name}</span>?
             </h3>
             <p className="text-gray-600 mt-2 text-sm">
-              Node ini dan seluruh bawahannya akan disembunyikan (soft delete).  
-              Aksi ini bisa dibatalkan oleh admin.
+              Data akan sulit dipulihkan
             </p>
 
             <div className="flex justify-center gap-3 mt-6">
               <button
                 onClick={() => setDeleteConfirm({ open: false, nodeId: "", name: "" })}
-                className="px-4 py-2 border border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg hover:bg-gray-50"
               >
                 Batal
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className={`px-4 py-2 bg-rose-500 text-white rounded-lg ${
+                className={`px-4 py-2 bg-rose-400 text-white rounded-lg ${
                   isDeleting ? "opacity-60 cursor-not-allowed" : "hover:bg-rose-600"
                 }`}
               >

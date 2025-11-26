@@ -109,6 +109,12 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       icon: <IkatanKerjaIcon />,
       path: "/ikatan-kerja",
     },
+    {
+      id: "administrator",
+      label: "Administrator",
+      icon: <AdministratorIcon />,
+      path: "/administrator",
+    },
   ];
 
   return (
@@ -285,6 +291,10 @@ const IkatanKerjaIcon = () => (
       d="M9.663 17h4.673M12 3v1m6.364 1.636l-1.404 1.404M21 12h-1M4 12H3m3.343-5.657l-1.404 1.404M15 10.328l2.293 2.293M3 18.328l2.293-2.293"
     />
   </svg>
+);
+
+const AdministratorIcon = () => (
+  <i className="fa-solid fa-person h-5 w-4 mx-auto ml-1"></i>
 );
 
 export default Sidebar;
