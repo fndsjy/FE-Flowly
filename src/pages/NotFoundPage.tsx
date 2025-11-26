@@ -1,55 +1,63 @@
-import React from "react";
+import React, { useState } from "react";
+import Sidebar from "../components/organisms/Sidebar";
 
 const NotFoundPage = () => {
+  const [isOpen, setIsOpen] = useState(true);
+  const toggleSidebar = () => setIsOpen(!isOpen);
+
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center 
-                 bg-gradient-to-r from-rose-400 via-gray-900 to-gray-900 
-                 text-white px-4"
-    >
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+      {/* SIDEBAR */}
+      <Sidebar isOpen={isOpen} onToggle={toggleSidebar} />
 
-      <img src='images/logo-domas.png' alt='Logo Domas' width={160} className='mx-auto my-6' />
+      {/* MAIN CONTENT */}
+      <div
+        className={`flex-1 flex flex-col items-center justify-center px-6 transition-all duration-300 ${
+          isOpen ? "ml-64" : "ml-16"
+        }`}
+      >
 
-      {/* Animasi 404 */}
-      <div className="relative">
-        <p className="text-9xl md:text-[12rem] font-black tracking-tighter">
-          <span className="relative inline-block animate-pulse">
-            4
-            <span className="absolute -top-2 -right-2 text-rose-300 text-4xl animate-bounce">
-              •
+        {/* ANIMASI 404 */}
+        <div className="relative text-[#303781]">
+          <p className="flex justify-center items-center text-8xl md:text-[10rem] font-black tracking-tighter">
+            <span className="relative inline-block animate-pulse">
+              4
+              <span className="absolute -top-2 -right-2 text-rose-300 text-4xl animate-bounce">
+                •
+              </span>
             </span>
-          </span>
-          <span className="opacity-70 mx-2">0</span>
-          <span className="relative inline-block">
-            4
-            <span className="absolute -bottom-2 -left-2 text-rose-300 text-4xl animate-ping">
-              •
+            <img src="/images/404.png" alt="404" className="w-48 mx-auto"></img>
+            {/* <span className="opacity-70 mx-2">0</span> */}
+            <span className="relative inline-block ml-[-1rem]">
+              4
+              <span className="absolute -bottom-2 -left-2 text-rose-300 text-4xl animate-ping">
+                •
+              </span>
             </span>
-          </span>
-        </p>
-      </div>
+          </p>
+        </div>
 
-      {/* Pesan */}
-      <div className="mt-8 text-center">
+        {/* PESAN */}
         <h1 className="text-2xl md:text-3xl font-bold mb-2">
           Oops! Halaman tidak ditemukan.
         </h1>
-        <p className="text-gray-300 mb-6">
-          Sepertinya kamu tersesat
+        <p className="text-gray-400 mb-6 text-center">
+          Sepertinya kamu tersesat.
         </p>
+
         <a
           href="/"
-          className="inline-block px-6 py-3 bg-[#303781] hover:bg-rose-400
+          className="inline-block px-6 py-3 bg-rose-400 hover:bg-white hover:text-rose-400 hover:border hover:border-rose-400
                      text-white font-semibold rounded-full transition-all 
                      shadow-lg hover:shadow-rose-500/30"
         >
           Kembali ke Beranda
         </a>
-      </div>
 
-      {/* Decorative elements (opsional) */}
-      <div className="absolute top-10 right-10 w-3 h-3 rounded-full bg-rose-400 animate-pulse"></div>
-      <div className="absolute bottom-20 left-10 w-2 h-2 rounded-full bg-rose-300 animate-bounce"></div>
+        {/* DECORATIVE ELEMENTS */}
+        <div className="absolute top-10 right-10 w-3 h-3 rounded-full bg-rose-400 animate-pulse"></div>
+        <div className="absolute bottom-20 left-10 w-2 h-2 rounded-full bg-rose-300 animate-bounce"></div>
+      </div>
     </div>
   );
 };
