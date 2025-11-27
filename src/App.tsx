@@ -12,6 +12,8 @@ import OrgChartPage from './pages/OrgChartPage';
 import { ToastProvider } from './components/organisms/MessageToast';
 import AdministratorPage from './pages/AdministratorPage';
 import ProtectedAdminRoute from './ProtectedAdminRoute';
+import UserListPage from './pages/UserListPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 
 const App = () => {
   return (
@@ -24,7 +26,9 @@ const App = () => {
           <Route path="/organisasi" element={<OrganisasiPage />} />
           <Route path="/organisasi/:structureId" element={<OrgChartPage />} />
           <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
+          <Route path="/me" element={<ChangePasswordPage />} />
           <Route path="/administrator" element={<ProtectedAdminRoute><AdministratorPage /></ProtectedAdminRoute>} />
+          <Route path="/administrator/users" element={<ProtectedAdminRoute><UserListPage /></ProtectedAdminRoute>} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>

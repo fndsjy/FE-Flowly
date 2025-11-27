@@ -1,9 +1,10 @@
 // OrgChartPage.tsx
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { Tree, TreeNode } from "react-organizational-chart";
 import { useToast } from "../components/organisms/MessageToast";
+import BackButton from "../components/atoms/BackButton";
 
 interface OrgChartNode {
   nodeId: string;
@@ -26,7 +27,7 @@ const domasColor = "#272e79";
 
 const OrgChartPage = () => {
   const { structureId } = useParams<{ structureId: string }>();
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
 
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
@@ -334,12 +335,13 @@ const OrgChartPage = () => {
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <button
+            <BackButton />
+            {/* <button
               onClick={() => navigate(-1)}
               className="flex items-center justify-center w-10 h-10 rounded-full text-[#272e79] shadow-lg shadow-gray-400 hover:bg-gray-100"
             >
               <i className="fa-solid fa-arrow-left"></i>
-            </button>
+            </button> */}
             <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
               Detail Struktur {structureName || structureId}
             </h1>
