@@ -8,7 +8,7 @@ const menuItems = [
     id: "users",
     title: "User",
     description: "Manajemen user, role, dan akses",
-    route: "/users",
+    route: "/administrator/users",
     icon: "fa-solid fa-user-group",
   },
   // tambah item lainnya nanti di sini

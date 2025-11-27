@@ -1,7 +1,7 @@
 // src/components/organisms/Sidebar.tsx
 
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSignInAlt, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
@@ -33,6 +33,7 @@ interface SidebarProps {
 const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   const [activeMenu, setActiveMenu] = useState<string>("organization");
   const [user, setUser] = useState<UserProfile | null>(null);
+  const navigate = useNavigate();
 
   const location = useLocation();
 
@@ -225,7 +226,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
         >
           {/* Avatar hanya muncul jika login */}
           {user && (
-            <div className="ms-2 w-10 h-10 rounded-full bg-rose-400 flex items-center justify-center text-white text-xl font-semibold shadow-md">
+            <div className="ms-2 w-10 h-10 rounded-full bg-rose-400 flex items-center justify-center text-white text-xl font-semibold shadow-md" onClick={() => navigate("/me")}>
               {user.name.charAt(0).toUpperCase()}
             </div>
           )}
@@ -233,7 +234,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
           {/* Jika user login → tampilkan nama + logout */}
           {user && isOpen && (
             <div className="flex-1">
-              <p className="space-y-4 font-medium leading-tight">{user.name}</p>
+              <a href="/me"><p className="space-y-4 font-medium leading-tight">{user.name}</p></a>
 
               <button
                 onClick={handleLogout}
