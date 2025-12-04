@@ -102,7 +102,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       id: "organization",
       label: "Organisasi",
       icon: <OrganizationIcon />,
-      path: "/organisasi",
+      path: "/pilar",
     },
     {
       id: "ikatan-kerja",

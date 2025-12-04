@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 
-interface OrgStructure {
-  structureId: string;
-  name: string;
+interface pilar {
+  id: string;
+  pilarName: string;
   description: string;
+  pic: number | null;
+  picName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,13 +34,14 @@ const formatDate = (dateString: string) => {
   );
 };
 
-const OrganisasiPage = () => {
+const PilarPage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
 
-  const [data, setData] = useState<OrgStructure[]>([]);
+  const [data, setData] = useState<pilar[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [employees, setEmployees] = useState<{ UserId: number, Name: string }[]>([]);
 
   /* ------------------------- ROLE USER ------------------------- */
   const [roleLevel, setRoleLevel] = useState<number | null>(null);
@@ -65,18 +68,25 @@ const OrganisasiPage = () => {
   /* ------------------------- FETCH DATA ------------------------- */
   const fetchData = async () => {
     try {
-      const res = await fetch("/api/orgstructure");
+      const res = await fetch("/api/pilar");
       const json = await res.json();
       setData(json.response);
     } catch (err) {
-      console.error("Error fetching org structure:", err);
+      console.error("Error fetching pilar:", err);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchEmployees = async () => {
+    const res = await fetch("/api/employee");
+    const json = await res.json();
+    setEmployees(json.response); // format: [{UserId, Name}]
+  };
+
   useEffect(() => {
     fetchData();
+    fetchEmployees();
   }, []);
 
   /* ------------------------- MODAL / STATE ------------------------- */
@@ -84,16 +94,17 @@ const OrganisasiPage = () => {
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [formData, setFormData] = useState({
-    structureId: "",
-    name: "",
+    id: "",
+    pilarName: "",
     description: "",
+    pic: null as number | null,
   });
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
-    structureId: string;
-    name: string;
-  }>({ open: false, structureId: "", name: "" });
+    id: string;
+    pilarName: string;
+  }>({ open: false, id: "", pilarName: "" });
 
   const { showToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -104,16 +115,17 @@ const OrganisasiPage = () => {
 
   const openAddModal = () => {
     setFormMode("add");
-    setFormData({ structureId: "", name: "", description: "" });
+    setFormData({ id: "", pilarName: "", description: "", pic: null });
     setShowForm(true);
   };
 
-  const openEditModal = (item: OrgStructure) => {
+  const openEditModal = (item: pilar) => {
     setFormMode("edit");
     setFormData({
-      structureId: item.structureId,
-      name: item.name,
+      id: item.id,
+      pilarName: item.pilarName,
       description: item.description,
+      pic: item.pic || null
     });
     setShowForm(true);
   };
@@ -122,7 +134,7 @@ const OrganisasiPage = () => {
     try {
       const method = formMode === "add" ? "POST" : "PUT";
 
-      const res = await fetch("/api/orgstructure", {
+      const res = await fetch("/api/pilar", {
         method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -139,8 +151,8 @@ const OrganisasiPage = () => {
 
       showToast(
         formMode === "add"
-          ? "Struktur berhasil ditambahkan! 🎉"
-          : "Struktur berhasil diperbarui! ✨",
+          ? "Pilar berhasil ditambahkan! 🎉"
+          : "Pilar berhasil diperbarui! ✨",
         "success"
       );
 
@@ -157,12 +169,12 @@ const OrganisasiPage = () => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const res = await fetch("/api/orgstructure", {
+      const res = await fetch("/api/pilar", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          structureId: deleteConfirm.structureId,
+          id: deleteConfirm.id,
         }),
       });
 
@@ -174,9 +186,9 @@ const OrganisasiPage = () => {
         return;
       }
 
-      showToast("Struktur berhasil dihapus 🗑️", "success");
+      showToast("Pilar berhasil dihapus 🗑️", "success");
 
-      setDeleteConfirm({ open: false, structureId: "", name: "" });
+      setDeleteConfirm({ open: false, id: "", pilarName: "" });
       fetchData();
     } catch (err) {
       console.error("Error delete:", err);
@@ -186,11 +198,17 @@ const OrganisasiPage = () => {
     }
   };
 
+  const getPicName = (id: number | null) => {
+    if (!id) return "-";
+    const emp = employees.find((e) => e.UserId === id);
+    return emp ? emp.Name : `ID ${id}`;
+  };
+
   /* ------------------------- FILTER ------------------------- */
   const filtered = data.filter(
     (item) =>
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.description.toLowerCase().includes(search.toLowerCase())
+      (item.pilarName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.description ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -205,7 +223,7 @@ const OrganisasiPage = () => {
         {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
-            Struktur Organisasi
+            Pilar
           </h1>
         </div>
 
@@ -225,7 +243,7 @@ const OrganisasiPage = () => {
               onClick={openAddModal}
               className="px-4 py-2 bg-[#272e79] hover:bg-white hover:border hover:border-[#272e79] hover:text-[#272e79] text-white rounded-xl shadow"
             >
-              + Tambah Struktur
+              + Tambah Pilar
             </button>
           )}
         </div>
@@ -233,7 +251,7 @@ const OrganisasiPage = () => {
         {/* LOADING */}
         {loading && (
           <p className="text-gray-500 animate-pulse">
-            Loading data struktur organisasi...
+            Loading data pilar ...
           </p>
         )}
 
@@ -242,40 +260,29 @@ const OrganisasiPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filtered.map((item) => (
               <div
-                key={item.structureId}
-                onClick={() => window.location.href = `/organisasi/${item.structureId}`}
+                key={item.id}
+                onClick={() => window.location.href = `/pilar/${item.id}`}
                 className="bg-white rounded-2xl p-5 shadow-lg shadow-gray-400
-                hover:shadow-xl hover:border-rose-300 transition duration-300"
+                hover:shadow-xl hover:border-rose-300 transition duration-300 flex flex-col"
               >
-                <h2
-                  className="text-xl font-semibold"
-                  style={{ color: domasColor }}
-                >
-                  {item.name}
-                </h2>
+                <div className="flex-1">
+                  <h2 className="text-xl font-semibold line-clamp-2" style={{ color: domasColor }}>
+                    {item.pilarName}
+                  </h2>
 
-                <p className="text-gray-700 mt-2">{item.description}</p>
+                  <p className="text-gray-700 mt-2 truncate">{item.description}</p>
 
-                <div className="mt-4 text-xs text-gray-500 space-y-1">
-                  <p>
-                    Dibuat:{" "}
-                    <span className="text-gray-600">
-                      {formatDate(item.createdAt)}
-                    </span>
-                  </p>
-                  <p>
-                    Update:{" "}
-                    <span className="text-gray-600">
-                      {formatDate(item.updatedAt)}
-                    </span>
-                  </p>
+                  <div className="mt-4 text-xs text-gray-500 space-y-1">
+                    <p>PIC : {getPicName(item.pic)}</p>
+                  </div>
+
+                  {/* <div className="mt-4 text-xs text-gray-500 space-y-1">
+                    <p>Dibuat: <span className="text-gray-600">{formatDate(item.createdAt)}</span></p>
+                    <p>Update: <span className="text-gray-600">{formatDate(item.updatedAt)}</span></p>
+                  </div> */}
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <div className="mt-4 inline-block text-rose-400 font-bold text-sm">
-                    {item.structureId}
-                  </div>
-
                   {/* BUTTON ACTIONS — ADMIN ONLY */}
                   {isAdmin && (
                     <div className="flex gap-2 mt-4">
@@ -294,8 +301,8 @@ const OrganisasiPage = () => {
                           e.stopPropagation(); // ⛔ cegah pindah halaman
                           setDeleteConfirm({
                             open: true,
-                            structureId: item.structureId,
-                            name: item.name,
+                            id: item.id,
+                            pilarName: item.pilarName,
                           });
                         }}
                         className="px-3 py-1 bg-rose-400 hover:bg-white hover:text-rose-400 hover:border hover:border-rose-400  text-white text-sm rounded-lg"
@@ -322,16 +329,16 @@ const OrganisasiPage = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white p-6 rounded-xl shadow-xl w-96">
             <h2 className="font-bold text-xl tracking-wide mb-4 text-[#272e79]">
-              {formMode === "add" ? "Tambah Struktur" : "Edit Struktur"}
+              {formMode === "add" ? "Tambah Pilar" : "Edit Pilar"}
             </h2>
 
             <div className="space-y-3">
               <input
                 type="text"
                 placeholder="Nama"
-                value={formData.name}
+                value={formData.pilarName}
                 onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
+                  setFormData({ ...formData, pilarName: e.target.value })
                 }
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
               />
@@ -344,6 +351,22 @@ const OrganisasiPage = () => {
                 }
                 className="w-full px-3 py-2 rounded-lg h-24 border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
               />
+              <select
+                value={formData.pic ?? ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, pic: e.target.value ? Number(e.target.value) : null })
+                }
+                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 
+                          focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none"
+              >
+                <option value="">— Pilih PIC —</option>
+
+                {employees.map((emp) => (
+                  <option key={emp.UserId} value={emp.UserId}>
+                    {emp.Name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex justify-end gap-3 mt-5">
@@ -373,7 +396,7 @@ const OrganisasiPage = () => {
           <div className="bg-white p-6 rounded-xl shadow-xl w-96">
             <img src="/images/delete-confirm.png" alt="Delete Confirmation" className="w-40 mx-auto" />
             <h2 className="text-lg text-center font-semibold mt-4 mb-1">
-              Hapus <span className="text-rose-500">{deleteConfirm.name}</span>?
+              Hapus <span className="text-rose-500">{deleteConfirm.pilarName}</span>?
             </h2>
             <p className="text-gray-600 mb-4 text-center">
               Data ini akan sulit dipulihkan
@@ -382,7 +405,7 @@ const OrganisasiPage = () => {
             <div className="flex justify-center gap-3">
               <button
                 onClick={() =>
-                  setDeleteConfirm({ open: false, structureId: "", name: "" })
+                  setDeleteConfirm({ open: false, id: "", pilarName: "" })
                 }
                 className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg"
               >
@@ -405,4 +428,4 @@ const OrganisasiPage = () => {
   );
 };
 
-export default OrganisasiPage;
+export default PilarPage;
