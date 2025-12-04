@@ -1,7 +1,7 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import OrganisasiPage from './pages/OrganisasiPage';
+import OrganisasiPage from './pages/PilarPage';
 import IkatanKerjaPage from './pages/IkatanKerjaPage';
 import NotFoundPage from './pages/NotFoundPage';
 import LoginPage from './pages/LoginPage';
@@ -14,6 +14,7 @@ import AdministratorPage from './pages/AdministratorPage';
 import ProtectedAdminRoute from './ProtectedAdminRoute';
 import UserListPage from './pages/UserListPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import PilarPage from './pages/PilarPage';
 
 const App = () => {
   return (
@@ -23,7 +24,7 @@ const App = () => {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/organisasi" element={<OrganisasiPage />} />
+          <Route path="/pilar" element={<PilarPage />} />
           <Route path="/organisasi/:structureId" element={<OrgChartPage />} />
           <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
           <Route path="/me" element={<ChangePasswordPage />} />
