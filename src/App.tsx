@@ -15,6 +15,7 @@ import ProtectedAdminRoute from './ProtectedAdminRoute';
 import UserListPage from './pages/UserListPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import PilarPage from './pages/PilarPage';
+import SBUPage from './pages/SBUPage';
 
 const App = () => {
   return (
@@ -25,6 +26,7 @@ const App = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/pilar" element={<PilarPage />} />
+          <Route path="/pilar/sbu/:pilarId" element={<SBUPage />} />
           <Route path="/organisasi/:structureId" element={<OrgChartPage />} />
           <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
           <Route path="/me" element={<ChangePasswordPage />} />
