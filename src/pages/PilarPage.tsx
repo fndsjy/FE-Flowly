@@ -261,7 +261,7 @@ const PilarPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.id}
-                onClick={() => window.location.href = `/pilar/${item.id}`}
+                onClick={() => window.location.href = `pilar/sbu/${item.id}`}
                 className="bg-white rounded-2xl p-5 shadow-lg shadow-gray-400
                 hover:shadow-xl hover:border-rose-300 transition duration-300 flex flex-col"
               >
