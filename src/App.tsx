@@ -16,6 +16,7 @@ import UserListPage from './pages/UserListPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import PilarPage from './pages/PilarPage';
 import SBUPage from './pages/SBUPage';
+import SBUSUBPage from './pages/SBUSUBPage';
 
 const App = () => {
   return (
@@ -27,6 +28,7 @@ const App = () => {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/pilar" element={<PilarPage />} />
           <Route path="/pilar/sbu/:pilarId" element={<SBUPage />} />
+          <Route path="/pilar/sbu/sbu_sub/:sbuId" element={<SBUSUBPage />} />
           <Route path="/organisasi/:structureId" element={<OrgChartPage />} />
           <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
           <Route path="/me" element={<ChangePasswordPage />} />
