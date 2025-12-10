@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 
@@ -42,6 +43,7 @@ const PilarPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [employees, setEmployees] = useState<{ UserId: number, Name: string }[]>([]);
+  const navigate = useNavigate();
 
   /* ------------------------- ROLE USER ------------------------- */
   const [roleLevel, setRoleLevel] = useState<number | null>(null);
@@ -261,7 +263,7 @@ const PilarPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.id}
-                onClick={() => window.location.href = `pilar/sbu/${item.id}`}
+                onClick={() => navigate(`sbu/${item.id}`)}
                 className="bg-white rounded-2xl p-5 shadow-lg shadow-gray-400
                 hover:shadow-xl hover:border-rose-300 transition duration-300 flex flex-col"
               >
@@ -282,7 +284,7 @@ const PilarPage = () => {
                   </div> */}
                 </div>
 
-                <div className="flex justify-between items-center">
+                <div className="flex justify-end items-center">
                   {/* BUTTON ACTIONS — ADMIN ONLY */}
                   {isAdmin && (
                     <div className="flex gap-2 mt-4">
