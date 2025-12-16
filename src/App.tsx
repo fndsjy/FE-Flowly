@@ -1,12 +1,11 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import OrganisasiPage from './pages/PilarPage';
 import IkatanKerjaPage from './pages/IkatanKerjaPage';
 import NotFoundPage from './pages/NotFoundPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import OrgChartPage from './pages/OrgChartPage';
+import ChartPage from './pages/ChartPage';
 
 // 🔹 Import ToastProvider
 import { ToastProvider } from './components/organisms/MessageToast';
@@ -29,7 +28,7 @@ const App = () => {
           <Route path="/pilar" element={<PilarPage />} />
           <Route path="/pilar/sbu/:pilarId" element={<SBUPage />} />
           <Route path="/pilar/sbu/sbu_sub/:sbuId" element={<SBUSUBPage />} />
-          <Route path="/organisasi/:structureId" element={<OrgChartPage />} />
+          <Route path="/pilar/sbu/sbu_sub/organisasi/:sbuSubId" element={<ChartPage />} />
           <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
           <Route path="/me" element={<ChangePasswordPage />} />
           <Route path="/administrator" element={<ProtectedAdminRoute><AdministratorPage /></ProtectedAdminRoute>} />

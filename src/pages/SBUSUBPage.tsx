@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
@@ -43,6 +43,7 @@ const SBUSUBPage = () => {
 
   const { sbuId } = useParams<{ sbuId: string }>();
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   /* ---------------- GET PROFILE (ROLE) ---------------- */
   useEffect(() => {
@@ -279,6 +280,7 @@ const SBUSUBPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.id}
+                onClick={() => navigate(`/pilar/sbu/sbu_sub/organisasi/${item.id}`)}
                 className="bg-white rounded-2xl p-5 shadow-lg hover:shadow-xl 
               hover:border-rose-300 transition cursor-pointer flex flex-col"
               >
@@ -298,7 +300,9 @@ const SBUSUBPage = () => {
                 {isAdmin && (
                   <div className="flex gap-2 mt-4 justify-end">
                     <button
-                      onClick={() => openEdit(item)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(item)}}
                       className="px-3 py-1 bg-[#272e79] hover:bg-white hover:text-[#272e79]
                 hover:border hover:border-[#272e79] text-white text-sm rounded-lg"
                     >
@@ -306,13 +310,14 @@ const SBUSUBPage = () => {
                     </button>
 
                     <button
-                      onClick={() =>
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setDeleteConfirm({
                           open: true,
                           id: item.id,
                           name: item.sbuSubName,
-                        })
-                      }
+                        });
+                      }}
                       className="px-3 py-1 bg-rose-400 hover:bg-white hover:text-rose-400
               hover:border hover:border-rose-400 text-white text-sm rounded-lg"
                     >
