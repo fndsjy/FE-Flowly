@@ -109,6 +109,7 @@ const ChangePasswordPage = () => {
         const msg =
           json?.issues?.[0]?.message ||
           json?.error ||
+          json?.errors ||
           json?.message ||
           "Gagal mengubah password";
         showToast(msg, "error");
