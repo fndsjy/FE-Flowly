@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Sidebar from '../components/organisms/Sidebar';
 
-const IkatanKerjaPage = () => {
+const MaintenancePage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
 
@@ -14,11 +14,6 @@ const IkatanKerjaPage = () => {
           isOpen ? 'ml-64' : 'ml-16'
         } flex-1 p-6 bg-gradient-to-br from-gray-50 to-blue-50`}
       >
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-extrabold text-gray-800">Ikatan Kerja</h1>
-          <p className="text-gray-500 mt-1">Manajemen kontrak & status kepegawaian</p>
-        </div>
 
         {/* Maintenance Card */}
         <div className="flex flex-col items-center justify-center max-w-3xl mx-auto my-16">
@@ -37,13 +32,7 @@ const IkatanKerjaPage = () => {
 
           {/* Subtitle */}
           <p className="mt-4 text-gray-600 text-center max-w-xl leading-relaxed">
-            Tim DOMAS sedang maintenance di balik layar — bikin sistem ikatan kerja yang:
-            <br />
-            <span className="inline-flex items-center space-x-1 mt-2 text-sm font-medium">
-              <span>✅</span> <span>Real-time</span>
-              <span>⚡</span> <span></span>
-              <span>📊</span> <span></span>
-            </span>
+            Tim DOMAS sedang maintenance di balik layar — lebih terukur, terintegrasi, dan mudah dipelihara
           </p>
 
           {/* Ilustrasi SVG (tanpa external image) */}
@@ -110,4 +99,4 @@ const IkatanKerjaPage = () => {
   );
 };
 
-export default IkatanKerjaPage;
+export default MaintenancePage;

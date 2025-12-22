@@ -1,7 +1,9 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import IkatanKerjaPage from './pages/IkatanKerjaPage';
+import SOPPage from './pages/SOPPage';
+import A3Page from './pages/A3Page';
+import AbsensiPage from './pages/AbsensiPage';
 import NotFoundPage from './pages/NotFoundPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -20,7 +22,7 @@ import SBUSUBPage from './pages/SBUSUBPage';
 const App = () => {
   return (
     <ToastProvider>
-      <BrowserRouter basename='/oms'>
+      <BrowserRouter basename='/oms/'>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -29,7 +31,9 @@ const App = () => {
           <Route path="/pilar/sbu/:pilarId" element={<SBUPage />} />
           <Route path="/pilar/sbu/sbu_sub/:sbuId" element={<SBUSUBPage />} />
           <Route path="/pilar/sbu/sbu_sub/organisasi/:sbuSubId" element={<ChartPage />} />
-          <Route path="/ikatan-kerja" element={<IkatanKerjaPage />} />
+          <Route path="/sop" element={<SOPPage />} />
+          <Route path="/a3" element={<A3Page />} />
+          <Route path="/absensi" element={<AbsensiPage />} />
           <Route path="/me" element={<ChangePasswordPage />} />
           <Route path="/administrator" element={<ProtectedAdminRoute><AdministratorPage /></ProtectedAdminRoute>} />
           <Route path="/administrator/users" element={<ProtectedAdminRoute><UserListPage /></ProtectedAdminRoute>} />

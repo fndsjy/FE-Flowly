@@ -1,16 +1,15 @@
 // import { useState } from 'react';
 // import Sidebar from '../components/organisms/Sidebar';
-import MaintenancePage from './MaintenancePage';
 
-const HomePage = () => {
+import MaintenancePage from "./MaintenancePage";
+
+const SOPPage = () => {
   // const [isOpen, setIsOpen] = useState(true);
   // const toggleSidebar = () => setIsOpen(!isOpen);
 
   return (
-    <div className="">
-      <MaintenancePage />
-    </div>
+    <MaintenancePage />
   );
 };
 
-export default HomePage;
+export default SOPPage;
