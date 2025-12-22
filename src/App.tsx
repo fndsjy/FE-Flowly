@@ -20,7 +20,7 @@ import SBUSUBPage from './pages/SBUSUBPage';
 const App = () => {
   return (
     <ToastProvider>
-      <BrowserRouter>
+      <BrowserRouter basename='/oms'>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />

@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSignInAlt, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
+import { apiFetch } from "../../lib/api";
 
 /* ---------------- USER TYPE ---------------- */
 interface UserProfile {
@@ -31,7 +32,6 @@ interface SidebarProps {
 }
 
 const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
-  const [activeMenu, setActiveMenu] = useState<string>("organization");
   const [user, setUser] = useState<UserProfile | null>(null);
   const navigate = useNavigate();
 
@@ -39,7 +39,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
 
   /* ---------------- FETCH USER PROFILE ---------------- */
   useEffect(() => {
-    fetch("/api/profile", {
+    apiFetch("/profile", {
       method: "GET",
       credentials: "include", // penting agar cookies session ikut dikirim
     })
@@ -58,13 +58,13 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
 
   /* ---------------- LOGOUT ---------------- */
   const handleLogout = async () => {
-    await fetch("/api/logout", {
+    await apiFetch("/logout", {
       method: "POST",
       credentials: "include",
     });
 
     setUser(null);
-    window.location.href = "/login";
+    navigate("/login", { replace: true });
   };
 
   const menuItems: MenuItem[] = [
@@ -106,16 +106,29 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     },
     {
       id: "ikatan-kerja",
-      label: "Ikatan Kerja",
+      label: "SOP",
       icon: <IkatanKerjaIcon />,
       path: "/ikatan-kerja",
     },
+    // {
+    //   id: "A3",
+    //   label: "A3",
+    //   icon: <AdministratorIcon />,
+    //   path: "/ikatan-kerja",
+    // },
+    // {
+    //   id: "KPI",
+    //   label: "KPI",
+    //   icon: <AdministratorIcon />,
+    //   path: "/ikatan-kerja",
+    // },
     {
       id: "administrator",
       label: "Administrator",
       icon: <AdministratorIcon />,
       path: "/administrator",
     },
+    
   ];
 
   /* ---------------- FILTER MENU BY ROLE ---------------- */
@@ -136,9 +149,13 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         {isOpen && (
-          <a href="/" className="mx-auto hover:scale-110">
-            <img src="/images/logo-domas.png" alt="Logo Domas" width={80} />
-          </a>
+          <Link to="/" className="mx-auto hover:scale-110">
+            <img
+              src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+              alt="Logo Domas"
+              width={80}
+            />
+          </Link>
         )}
 
         <button
@@ -186,7 +203,6 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
                     ? "bg-gradient-to-r from-rose-400 via-gray-900 to-gray-900 text-white font-semibold border border-white"
                     : "hover:bg-gray-700 text-gray-300"
                 }`}
-                onClick={() => setActiveMenu(item.id)}
               >
                 <span
                   className={`flex items-center justify-center flex-shrink-0 transition-transform duration-200 ${
@@ -234,7 +250,9 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
           {/* Jika user login → tampilkan nama + logout */}
           {user && isOpen && (
             <div className="flex-1">
-              <a href="/me"><p className="space-y-4 font-medium leading-tight">{user.name}</p></a>
+              <Link to="/me" className="space-y-4 font-medium leading-tight">
+                {user.name}
+              </Link>
 
               <button
                 onClick={handleLogout}
@@ -254,7 +272,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
           {/* Jika belum login → tampil tombol LOGIN */}
           {!user && (
             <button
-              onClick={() => (window.location.href = "/login")}
+              onClick={() => navigate("/login")}
               className="ml-2 w-full flex items-center gap-2 p-3 text-gray-300 hover:bg-gray-700 transition-colors"
             >
               <FontAwesomeIcon icon={faSignInAlt} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "../components/organisms/MessageToast";
+import { apiFetch } from "../lib/api";
 
 const RegisterPage = () => {
   const [form, setForm] = useState({
@@ -28,7 +29,7 @@ const RegisterPage = () => {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/register", {
+      const res = await apiFetch("/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -85,7 +86,7 @@ const RegisterPage = () => {
         {/* MIDDLE IMAGE */}
         <div className="flex justify-center">
           <img
-            src="/images/register.png"
+            src={`${import.meta.env.BASE_URL}images/register.png`}
             alt="Register Illustration"
             className="w-64 drop-shadow-2xl animate-float"
           />

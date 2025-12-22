@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 
 const NotFoundPage = () => {
@@ -26,7 +27,7 @@ const NotFoundPage = () => {
                 •
               </span>
             </span>
-            <img src="/images/404.png" alt="404" className="w-48 mx-auto"></img>
+            <img src={`${import.meta.env.BASE_URL}images/404.png`} alt="404" className="w-48 mx-auto"></img>
             {/* <span className="opacity-70 mx-2">0</span> */}
             <span className="relative inline-block ml-[-1rem]">
               4
@@ -45,14 +46,14 @@ const NotFoundPage = () => {
           Sepertinya kamu tersesat.
         </p>
 
-        <a
-          href="/"
+        <Link
+          to="/"
           className="inline-block px-6 py-3 bg-rose-400 hover:bg-white hover:text-rose-400 hover:border hover:border-rose-400
                      text-white font-semibold rounded-full transition-all 
                      shadow-lg hover:shadow-rose-500/30"
         >
           Kembali ke Beranda
-        </a>
+        </Link>
 
         {/* DECORATIVE ELEMENTS */}
         <div className="absolute top-10 right-10 w-3 h-3 rounded-full bg-rose-400 animate-pulse"></div>
