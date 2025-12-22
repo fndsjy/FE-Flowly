@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
+import { apiFetch } from "../lib/api";
 
 interface pilar {
   id: string;
@@ -14,26 +15,6 @@ interface pilar {
 }
 
 const domasColor = "#272e79";
-
-/* ---------------- FORMAT TANGGAL ---------------- */
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-
-  return (
-    date
-      .toLocaleDateString("id-ID", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-      .replace(".", "") +
-    " – " +
-    date.toLocaleTimeString("id-ID", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  );
-};
 
 const PilarPage = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -52,13 +33,17 @@ const PilarPage = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        const res = await fetch("/api/profile", {
+        const res = await apiFetch("/profile", {
           method: "GET",
           credentials: "include", // penting agar cookies terbawa
         });
 
         const json = await res.json();
-        setRoleLevel(json.response.roleLevel);
+        if (!res.ok) {
+          setRoleLevel(null);
+          return;
+        }
+        setRoleLevel(json?.response?.roleLevel ?? null);
       } catch (err) {
         console.error("Gagal mengambil profil:", err);
       }
@@ -70,9 +55,14 @@ const PilarPage = () => {
   /* ------------------------- FETCH DATA ------------------------- */
   const fetchData = async () => {
     try {
-      const res = await fetch("/api/pilar");
+      const res = await apiFetch("/pilar");
+      if (!res.ok) {
+        setData([]);
+        return;
+      }
       const json = await res.json();
-      setData(json.response);
+      const list = Array.isArray(json?.response) ? json.response : [];
+      setData(list);
     } catch (err) {
       console.error("Error fetching pilar:", err);
     } finally {
@@ -81,9 +71,14 @@ const PilarPage = () => {
   };
 
   const fetchEmployees = async () => {
-    const res = await fetch("/api/employee");
+    const res = await apiFetch("/employee");
+    if (!res.ok) {
+      setEmployees([]);
+      return;
+    }
     const json = await res.json();
-    setEmployees(json.response); // format: [{UserId, Name}]
+    const list = Array.isArray(json?.response) ? json.response : [];
+    setEmployees(list); // format: [{UserId, Name}]
   };
 
   useEffect(() => {
@@ -136,7 +131,7 @@ const PilarPage = () => {
     try {
       const method = formMode === "add" ? "POST" : "PUT";
 
-      const res = await fetch("/api/pilar", {
+      const res = await apiFetch("/pilar", {
         method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -171,7 +166,7 @@ const PilarPage = () => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const res = await fetch("/api/pilar", {
+      const res = await apiFetch("/pilar", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -396,7 +391,7 @@ const PilarPage = () => {
       {deleteConfirm.open && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white p-6 rounded-xl shadow-xl w-96">
-            <img src="/images/delete-confirm.png" alt="Delete Confirmation" className="w-40 mx-auto" />
+            <img src={`${import.meta.env.BASE_URL}images/delete-confirm.png`} alt="Delete Confirmation" className="w-40 mx-auto" />
             <h2 className="text-lg text-center font-semibold mt-4 mb-1">
               Hapus <span className="text-rose-500">{deleteConfirm.pilarName}</span>?
             </h2>

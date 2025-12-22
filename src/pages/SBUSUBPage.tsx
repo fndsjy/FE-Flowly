@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
+import { apiFetch } from "../lib/api";
 
 interface SBU {
   id: number;
   sbuCode: string;
   sbuName: string;
+  sbuPilar?: number;
 }
 
 interface SbuSub {
@@ -49,9 +51,13 @@ const SBUSUBPage = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        const res = await fetch("/api/profile", { credentials: "include" });
+        const res = await apiFetch("/profile", { credentials: "include" });
         const json = await res.json();
-        setRoleLevel(json.response.roleLevel);
+        if (!res.ok) {
+          setRoleLevel(null);
+          return;
+        }
+        setRoleLevel(json?.response?.roleLevel ?? null);
       } catch (err) {
         console.error("Gagal mengambil profil:", err);
       }
@@ -63,7 +69,11 @@ const SBUSUBPage = () => {
   const fetchSbuSub = async (sbuId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/sbu-sub-by-sbu?sbuId=${encodeURIComponent(sbuId)}`);
+      const res = await apiFetch(`/sbu-sub-by-sbu?sbuId=${encodeURIComponent(sbuId)}`);
+      if (!res.ok) {
+        setData([]);
+        return;
+      }
       const json = await res.json();
       const list = Array.isArray(json.data) ? json.data : [];
       setData(list);
@@ -78,15 +88,25 @@ const SBUSUBPage = () => {
 
   /* ---------------- FETCH EMPLOYEES, SBU ---------------- */
   const fetchEmployees = async () => {
-    const res = await fetch("/api/employee");
+    const res = await apiFetch("/employee");
+    if (!res.ok) {
+      setEmployees([]);
+      return;
+    }
     const json = await res.json();
-    setEmployees(json.response);
+    const list = Array.isArray(json?.response) ? json.response : [];
+    setEmployees(list);
   };
 
   const fetchSBUList = async () => {
-    const res = await fetch("/api/sbu");
+    const res = await apiFetch("/sbu");
+    if (!res.ok) {
+      setSbus([]);
+      return;
+    }
     const json = await res.json();
-    setSbus(json.response);
+    const list = Array.isArray(json?.response) ? json.response : [];
+    setSbus(list);
   };
 
   useEffect(() => {
@@ -145,7 +165,7 @@ const SBUSUBPage = () => {
     try {
       const method = formMode === "add" ? "POST" : "PUT";
 
-      const res = await fetch("/api/sbu-sub", {
+      const res = await apiFetch("/sbu-sub", {
         method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -189,7 +209,7 @@ const SBUSUBPage = () => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const res = await fetch("/api/sbu-sub", {
+      const res = await apiFetch("/sbu-sub", {
         method: "DELETE",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -233,6 +253,11 @@ const SBUSUBPage = () => {
     return s ? s.sbuName : "-";
   };
 
+  const numericSbuId = sbuId ? Number(sbuId) : null;
+  const currentSbu = numericSbuId ? sbus.find((s) => s.id === numericSbuId) : undefined;
+  const parentPilarId = data[0]?.sbuPilar ?? currentSbu?.sbuPilar ?? null;
+  const sbuListLink = parentPilarId ? `/pilar/sbu/${parentPilarId}` : "/pilar";
+
   /* ---------------- UI ---------------- */
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -242,9 +267,34 @@ const SBUSUBPage = () => {
         <div className="flex justify-between items-center mb-6 mt-3">
           <div className="flex items-center gap-4">
             <BackButton />
-            <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
-              SBU SUB dari {getSbuName(Number(sbuId))}
-            </h1>
+            <div className="flex flex-col gap-1">
+              <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
+                SBU SUB dari {numericSbuId ? getSbuName(numericSbuId) : "-"}
+              </h1>
+              <nav className="flex items-center text-sm text-gray-500" aria-label="Breadcrumb">
+                <ol className="flex items-center gap-2">
+                  <li>
+                    <Link to="/" className="hover:text-[#272e79] transition-colors">
+                      Home
+                    </Link>
+                  </li>
+                  <li className="text-gray-400">/</li>
+                  <li>
+                    <Link to="/pilar" className="hover:text-[#272e79] transition-colors">
+                      Pilar
+                    </Link>
+                  </li>
+                  <li className="text-gray-400">/</li>
+                  <li>
+                    <Link to={sbuListLink} className="hover:text-[#272e79] transition-colors">
+                      SBU
+                    </Link>
+                  </li>
+                  <li className="text-gray-400">/</li>
+                  <li className="font-semibold text-[#272e79]">SUB SBU</li>
+                </ol>
+              </nav>
+            </div>
           </div>
 
           {isAdmin && (
@@ -416,7 +466,7 @@ const SBUSUBPage = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white p-6 rounded-xl shadow-xl w-96">
             <img
-              src="/images/delete-confirm.png"
+              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
               alt="Delete Confirmation"
               className="w-40 mx-auto"
             />

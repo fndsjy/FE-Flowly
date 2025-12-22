@@ -32,17 +32,17 @@ const IkatanKerjaPage = () => {
 
           {/* Judul besar */}
           <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-800 max-w-2xl">
-            Fitur ini sedang kami <span className="text-indigo-600 underline decoration-wavy">upgrade</span> biar makin canggih
+            Fitur ini sedang kami <span className="text-indigo-600 underline decoration-wavy">upgrade</span>
           </h2>
 
           {/* Subtitle */}
           <p className="mt-4 text-gray-600 text-center max-w-xl leading-relaxed">
-            Tim DOMAS lagi kerja ekstra di balik layar — bikin sistem ikatan kerja yang:
+            Tim DOMAS sedang maintenance di balik layar — bikin sistem ikatan kerja yang:
             <br />
             <span className="inline-flex items-center space-x-1 mt-2 text-sm font-medium">
               <span>✅</span> <span>Real-time</span>
-              <span>⚡</span> <span>Auto-remind</span>
-              <span>📊</span> <span>Analytics-ready</span>
+              <span>⚡</span> <span></span>
+              <span>📊</span> <span></span>
             </span>
           </p>
 

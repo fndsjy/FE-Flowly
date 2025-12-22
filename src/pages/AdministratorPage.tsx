@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 
 const domasColor = "#272e79";
@@ -17,6 +18,7 @@ const menuItems = [
 const AdministratorPage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
 
@@ -63,7 +65,7 @@ const AdministratorPage = () => {
           {filteredItems.map((item) => (
             <div
               key={item.id}
-              onClick={() => (window.location.href = item.route)}
+              onClick={() => navigate(item.route)}
               className="cursor-pointer bg-white rounded-2xl p-5 shadow-lg shadow-gray-400 
               hover:shadow-xl hover:border-rose-300 transition duration-300"
             >

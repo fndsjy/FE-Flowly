@@ -4,6 +4,7 @@ import { Tree, TreeNode } from "react-organizational-chart";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
+import { apiFetch } from "../lib/api";
 
 // Interfaces tetap sama
 interface ChartNode {
@@ -53,7 +54,6 @@ const ChartPage = () => {
   const toggleSidebar = () => setIsOpen(!isOpen);
 
   const [data, setData] = useState<ChartNode[]>([]);
-  const [structureName, setStructureName] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -70,25 +70,12 @@ const ChartPage = () => {
   const { showToast } = useToast();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const panStateRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
-  const thumbDragRef = useRef({
-    isDown: false,
-    startX: 0,
-    startLeft: 0,
-    trackWidth: 0,
-    thumbWidth: 0,
-    maxScroll: 0,
-  });
-  const [thumbState, setThumbState] = useState<{ width: number; left: number; visible: boolean }>({
-    width: 0,
-    left: 0,
-    visible: false,
-  });
 
   /* ---------------- FETCH PROFILE ---------------- */
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch("/api/profile", { method: "GET", credentials: "include" });
+        const res = await apiFetch("/profile", { method: "GET", credentials: "include" });
         if (!res.ok) return;
         const json = await res.json();
         setRoleLevel(json.response?.roleLevel ?? null);
@@ -104,9 +91,9 @@ const ChartPage = () => {
     const fetchMasterData = async () => {
       try {
         const [pilarRes, sbuRes, sbuSubRes] = await Promise.all([
-          fetch("/api/pilar", { credentials: "include" }),
-          fetch("/api/sbu", { credentials: "include" }),
-          fetch("/api/sbu-sub", { credentials: "include" }),
+          apiFetch("/pilar", { credentials: "include" }),
+          apiFetch("/sbu", { credentials: "include" }),
+          apiFetch("/sbu-sub", { credentials: "include" }),
         ]);
 
         if (!pilarRes.ok || !sbuRes.ok || !sbuSubRes.ok) {
@@ -141,7 +128,7 @@ const ChartPage = () => {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const res = await fetch("/api/employee", { credentials: "include" });
+        const res = await apiFetch("/employee", { credentials: "include" });
         if (!res.ok) {
           console.warn("Gagal fetch employees, mungkin tidak ada akses");
           return;
@@ -160,7 +147,7 @@ const ChartPage = () => {
   /* ---------------- FETCH MEMBERS ---------------- */
   const fetchMembersForChart = useCallback(async (chartId: string) => {
     try {
-      const res = await fetch(`/api/chart-member?chartId=${encodeURIComponent(chartId)}`, { credentials: "include" });
+      const res = await apiFetch(`/chart-member?chartId=${encodeURIComponent(chartId)}`, { credentials: "include" });
       if (!res.ok) {
         console.warn("No members for chartId:", chartId);
         setChartMembers((m) => ({ ...m, [chartId]: [] }));
@@ -182,7 +169,7 @@ const ChartPage = () => {
     setError("");
 
     try {
-      const res = await fetch(`/api/chart-by-sbuSub?sbuSubId=${sbuSubId}`, { credentials: "include" });
+      const res = await apiFetch(`/chart-by-sbuSub?sbuSubId=${sbuSubId}`, { credentials: "include" });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`HTTP ${res.status}: ${text}`);
@@ -197,19 +184,6 @@ const ChartPage = () => {
         await fetchMembersForChart(node.chartId);
       }
 
-      const sbuSub = sbuSubMap.get(sbuSubId);
-      if (sbuSub) {
-        const sbu = sbuMap.get(sbuSub.sbuId);
-        const pilar = sbu ? pilarMap.get(sbu.sbuPilar) : undefined;
-
-        if (pilar && sbu) {
-          setStructureName(`${pilar.pilarName} / ${sbu.sbuName} / ${sbuSub.sbuSubName}`);
-        } else {
-          setStructureName(sbuSub.sbuSubName || `SBU SUB #${sbuSubId}`);
-        }
-      } else {
-        setStructureName(`SBU SUB #${sbuSubId}`);
-      }
     } catch (err: any) {
       console.error("Gagal memuat chart:", err);
       setError(`Gagal memuat struktur: ${err.message || "error tidak diketahui"}`);
@@ -217,7 +191,7 @@ const ChartPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [sbuMap, sbuSubMap, pilarMap, fetchMembersForChart]);
+  }, [fetchMembersForChart]);
 
   /* ---------------- React to route sbuSubId ---------------- */
   useEffect(() => {
@@ -310,7 +284,7 @@ const ChartPage = () => {
     setIsSubmitting(true);
 
     try {
-      const url = "/api/chart";
+      const url = "/chart";
       const method = formMode === "add" ? "POST" : "PUT";
 
       const body =
@@ -329,7 +303,7 @@ const ChartPage = () => {
               capacity: formData.capacity,
             };
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -354,7 +328,7 @@ const ChartPage = () => {
         const newChartId = json.response?.chartId || json?.chartId;
         if (newChartId) {
           try {
-            const cmRes = await fetch("/api/chart-member", {
+            const cmRes = await apiFetch("/chart-member", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
@@ -383,7 +357,7 @@ const ChartPage = () => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const res = await fetch("/api/chart", {
+      const res = await apiFetch("/chart", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -420,7 +394,7 @@ const ChartPage = () => {
   const handleAssign = async (userId: number | null) => {
     if (!slotAssign.memberChartId) return;
     try {
-      const res = await fetch("/api/chart-member", {
+      const res = await apiFetch("/chart-member", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -483,7 +457,6 @@ const ChartPage = () => {
     e.preventDefault();
     const deltaX = e.pageX - panStateRef.current.startX;
     container.scrollLeft = panStateRef.current.scrollLeft - deltaX;
-    updateThumb();
   };
 
   const handlePanEnd = () => {
@@ -495,79 +468,6 @@ const ChartPage = () => {
     }
   };
 
-  // Hitung posisi/ukuran thumb horizontal
-  const updateThumb = useCallback(() => {
-    const container = chartContainerRef.current;
-    if (!container) return;
-    const { scrollWidth, clientWidth, scrollLeft } = container;
-    if (scrollWidth <= clientWidth + 1) {
-      setThumbState((prev) => ({ ...prev, visible: false, width: 0, left: 0 }));
-      return;
-    }
-    const ratio = clientWidth / scrollWidth;
-    const thumbWidth = Math.max(60, ratio * clientWidth);
-    const maxLeft = Math.max(clientWidth - thumbWidth, 1);
-    const maxScroll = scrollWidth - clientWidth;
-    const left = (scrollLeft / maxScroll) * maxLeft;
-    setThumbState({ width: thumbWidth, left, visible: true });
-  }, []);
-
-  // Drag bar di bawah chart
-  const handleThumbDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    const container = chartContainerRef.current;
-    if (!container || !thumbState.visible) return;
-    thumbDragRef.current = {
-      isDown: true,
-      startX: e.pageX,
-      startLeft: thumbState.left,
-      trackWidth: container.clientWidth,
-      thumbWidth: thumbState.width,
-      maxScroll: container.scrollWidth - container.clientWidth,
-    };
-    e.preventDefault();
-  };
-
-  const handleThumbMove = useCallback(
-    (e: MouseEvent) => {
-      const container = chartContainerRef.current;
-      const drag = thumbDragRef.current;
-      if (!container || !drag.isDown) return;
-      const maxLeft = Math.max(drag.trackWidth - drag.thumbWidth, 1);
-      const delta = e.pageX - drag.startX;
-      const newLeft = Math.min(Math.max(drag.startLeft + delta, 0), maxLeft);
-      const scrollLeft = (newLeft / maxLeft) * drag.maxScroll;
-      container.scrollLeft = scrollLeft;
-      updateThumb();
-      e.preventDefault();
-    },
-    [updateThumb]
-  );
-
-  const handleThumbUp = useCallback(() => {
-    thumbDragRef.current.isDown = false;
-  }, []);
-
-  useEffect(() => {
-    const move = (e: MouseEvent) => handleThumbMove(e);
-    const up = () => handleThumbUp();
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-    return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-    };
-  }, [handleThumbMove, handleThumbUp]);
-
-  useEffect(() => {
-    const resizeHandler = () => updateThumb();
-    window.addEventListener("resize", resizeHandler);
-    const frame = requestAnimationFrame(updateThumb);
-    return () => {
-      window.removeEventListener("resize", resizeHandler);
-      cancelAnimationFrame(frame);
-    };
-  }, [updateThumb, data]);
-
   // Wheel listener non-passive agar bisa horizontal scroll
   useEffect(() => {
     const container = chartContainerRef.current;
@@ -576,14 +476,13 @@ const ChartPage = () => {
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         e.preventDefault();
         container.scrollLeft += e.deltaY;
-        updateThumb();
       }
     };
     container.addEventListener("wheel", wheelHandler, { passive: false });
     return () => {
       container.removeEventListener("wheel", wheelHandler);
     };
-  }, [updateThumb]);
+  }, []);
 
   const NodeCard = ({ node, members }: { node: ChartNode; members: ChartMember[] }) => (
     <div className="inline-block bg-white border border-gray-200 rounded-xl px-4 py-3 text-center shadow-lg shadow-gray-400 text-gray-800" style={{ minWidth: 240 }}>
@@ -618,7 +517,7 @@ const ChartPage = () => {
                   onClick={async (e) => {
                     e.stopPropagation();
                     try {
-                      const res = await fetch("/api/chart-member", {
+                      const res = await apiFetch("/chart-member", {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
                         credentials: "include",
@@ -779,7 +678,6 @@ const ChartPage = () => {
               onMouseMove={handlePanMove}
               onMouseUp={handlePanEnd}
               onMouseLeave={handlePanEnd}
-              onScroll={updateThumb}
               className="p-4 md:p-6 overflow-x-auto overflow-y-hidden cursor-grab"
             >
               {data.length > 0 ? (
@@ -796,16 +694,16 @@ const ChartPage = () => {
                         .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
 
                       return (
-                        <Tree
-                          key={rootNode.chartId}
-                          lineWidth={"2px"}
-                          lineColor={"#ec5c76"}
-                          lineBorderRadius={"8px"}
-                          label={<NodeCard node={rootNode} members={members} />}
-                          style={{ display: 'inline-block' }}
-                        >
-                          {children.map((child) => renderNode(child))}
-                        </Tree>
+                        <div key={rootNode.chartId} className="inline-block">
+                          <Tree
+                            lineWidth={"2px"}
+                            lineColor={"#ec5c76"}
+                            lineBorderRadius={"8px"}
+                            label={<NodeCard node={rootNode} members={members} />}
+                          >
+                            {children.map((child) => renderNode(child))}
+                          </Tree>
+                        </div>
                       );
                     })}
                 </div>
@@ -827,20 +725,6 @@ const ChartPage = () => {
               )}
             </div>
 
-            {/* {thumbState.visible && (
-              <div className="px-4 md:px-6">
-                <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="absolute top-0 h-3 bg-rose-400 rounded-full cursor-grab active:cursor-grabbing"
-                    style={{ width: `${thumbState.width}px`, left: `${thumbState.left}px` }}
-                    onMouseDown={handleThumbDown}
-                  />
-                </div>
-                <div className="text-xs text-gray-500 mt-1 text-center">
-                  Geser batang merah untuk pindah kanan/kiri atau drag area chart
-                </div>
-              </div>
-            )} */}
           </div>
         )}
       </div>
@@ -979,7 +863,7 @@ const ChartPage = () => {
           <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md text-center">
             {/* Icon */}
             <img
-              src="/images/delete-confirm.png"
+              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
               alt="Delete Confirmation"
               className="w-40 mx-auto"
             />

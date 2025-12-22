@@ -5,6 +5,7 @@ import { useToast } from "../components/organisms/MessageToast";
 
 // Icon
 import { FaLock, FaKey, FaEye, FaEyeSlash } from "react-icons/fa";
+import { apiFetch } from "../lib/api";
 
 const domasColor = "#272e79";
 
@@ -33,7 +34,7 @@ const ChangePasswordPage = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch("/api/profile", {
+        const res = await apiFetch("/profile", {
           credentials: "include",
         });
 
@@ -91,7 +92,7 @@ const ChangePasswordPage = () => {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/password", {
+      const res = await apiFetch("/password", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -125,7 +126,7 @@ const ChangePasswordPage = () => {
 
       // Optional: auto-logout after 2s (since token may be invalidated server-side)
       setTimeout(() => {
-        window.location.href = "/login?changed=true";
+        navigate("/login?changed=true", { replace: true });
       }, 2000);
     } catch (err) {
       console.error("Submit error:", err);

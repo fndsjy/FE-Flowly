@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/organisms/MessageToast';
+import { apiFetch } from "../lib/api";
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
@@ -20,7 +21,7 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/login', {
+      const res = await apiFetch('/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -68,7 +69,7 @@ const LoginPage = () => {
         {/* ===== CENTER IMAGE ===== */}
         <div className="flex justify-center md:col-span-1">
           <img
-            src="/images/login.png"
+            src={`${import.meta.env.BASE_URL}images/login.png`}
             alt="Login Illustration"
             className="w-80 drop-shadow-2xl animate-float"
           />

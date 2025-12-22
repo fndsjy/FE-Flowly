@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
+import { apiFetch } from "../lib/api";
 
 const domasColor = "#272e79";
 
@@ -26,6 +28,7 @@ interface RoleData {
 const UserListPage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
+  const navigate = useNavigate();
 
   const [users, setUsers] = useState<UserData[]>([]);
   const [roles, setRoles] = useState<RoleData[]>([]);
@@ -38,7 +41,7 @@ const UserListPage = () => {
   /* ------------------- FETCH USERS ------------------- */
   const fetchUsers = async () => {
     try {
-      const res = await fetch("/api/users", {
+      const res = await apiFetch("/users", {
         method: "GET",
         credentials: "include",
       });
@@ -62,7 +65,7 @@ const UserListPage = () => {
   /* ------------------- FETCH ROLES ------------------- */
   const fetchRoles = async () => {
     try {
-      const res = await fetch("/api/roles", {
+      const res = await apiFetch("/roles", {
         method: "GET",
         credentials: "include",
       });
@@ -119,7 +122,7 @@ const UserListPage = () => {
   /* ------------------- UPDATE ROLE ------------------- */
   const updateRole = async (userId: string, newRoleId: string) => {
     try {
-      const res = await fetch("/api/role", {
+      const res = await apiFetch("/role", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -172,7 +175,7 @@ const UserListPage = () => {
           />
           {/* BUTTON REGISTER */}
           <button
-            onClick={() => (window.location.href = "/register")}
+            onClick={() => navigate("/register")}
             className="px-4 py-2 bg-[#272e79] hover:bg-white hover:text-[#272e79] hover:border-[#272e79] hover:border rounded-xl text-white shadow"
           >
             + Registrasi User

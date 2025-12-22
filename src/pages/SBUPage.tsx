@@ -1,9 +1,10 @@
 // SBUPage.tsx
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
+import { apiFetch } from "../lib/api";
 
 interface SBU {
   id: number;
@@ -37,7 +38,6 @@ const SBUPage = () => {
 
   const [search, setSearch] = useState("");
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [pilars, setPilars] = useState<Pilar[]>([]);
   const [pilarName, setPilarName] = useState("");
 
   const [roleLevel, setRoleLevel] = useState<number | null>(null);
@@ -52,9 +52,13 @@ const SBUPage = () => {
   useEffect(() => {
     const getProfile = async () => {
       try {
-        const res = await fetch("/api/profile", { credentials: "include" });
+        const res = await apiFetch("/profile", { credentials: "include" });
         const json = await res.json();
-        setRoleLevel(json.response.roleLevel);
+        if (!res.ok) {
+          setRoleLevel(null);
+          return;
+        }
+        setRoleLevel(json?.response?.roleLevel ?? null);
       } catch (err) {
         console.error("Gagal mengambil profil:", err);
       }
@@ -66,7 +70,7 @@ const SBUPage = () => {
   const fetchSBU = async (pilarId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/sbu-by-pilar?pilarId=${encodeURIComponent(pilarId)}`);
+      const res = await apiFetch(`/sbu-by-pilar?pilarId=${encodeURIComponent(pilarId)}`);
       const json = await res.json();
       const sbuList = Array.isArray(json.data) ? json.data : [];
       setData(sbuList);
@@ -80,18 +84,26 @@ const SBUPage = () => {
   };
 
   const fetchEmployees = async () => {
-    const res = await fetch("/api/employee");
+    const res = await apiFetch("/employee");
+    if (!res.ok) {
+      setEmployees([]);
+      return;
+    }
     const json = await res.json();
-    setEmployees(json.response);
+    const list = Array.isArray(json?.response) ? json.response : [];
+    setEmployees(list);
   };
 
   const fetchPilars = async () => {
-    const res = await fetch("/api/pilar");
+    const res = await apiFetch("/pilar");
+    if (!res.ok) {
+      setPilarName("");
+      return;
+    }
     const json = await res.json();
-    setPilars(json.response);
-
+    const list = Array.isArray(json?.response) ? json.response : [];
     if (pilarId) {
-        const found = json.response.find((p: Pilar) => p.id === Number(pilarId));
+        const found = list.find((p: Pilar) => p.id === Number(pilarId));
         if (found) setPilarName(found.pilarName);
     }
   };
@@ -167,7 +179,7 @@ const SBUPage = () => {
     try {
       const method = formMode === "add" ? "POST" : "PUT";
 
-      const res = await fetch("/api/sbu", {
+      const res = await apiFetch("/sbu", {
         method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -214,7 +226,7 @@ const SBUPage = () => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const res = await fetch("/api/sbu", {
+      const res = await apiFetch("/sbu", {
         method: "DELETE",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -264,9 +276,28 @@ const SBUPage = () => {
         <div className="flex justify-between items-center mb-6 mt-3">
             <div className="flex items-center justify-left gap-4">
                 <BackButton /> 
-                <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
+                <div className="flex flex-col gap-1">
+                  <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
                     SBU {pilarName}
-                </h1>
+                  </h1>
+                  <nav className="flex items-center text-sm text-gray-500" aria-label="Breadcrumb">
+                    <ol className="flex items-center gap-2">
+                      <li>
+                        <Link to="/" className="hover:text-[#272e79] transition-colors">
+                          Home
+                        </Link>
+                      </li>
+                      <li className="text-gray-400">/</li>
+                      <li>
+                        <Link to="/pilar" className="hover:text-[#272e79] transition-colors">
+                          Pilar
+                        </Link>
+                      </li>
+                      <li className="text-gray-400">/</li>
+                      <li className="font-semibold text-[#272e79]">SBU</li>
+                    </ol>
+                  </nav>
+                </div>
             </div>
           {isAdmin && (
             <button
@@ -444,7 +475,7 @@ const SBUPage = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white p-6 rounded-xl shadow-xl w-96">
             <img
-              src="/images/delete-confirm.png"
+              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
               alt="Delete Confirmation"
               className="w-40 mx-auto"
             />
