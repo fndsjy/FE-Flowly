@@ -105,23 +105,23 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       path: "/pilar",
     },
     {
-      id: "ikatan-kerja",
+      id: "sop",
       label: "SOP",
-      icon: <IkatanKerjaIcon />,
-      path: "/ikatan-kerja",
+      icon: <SOPIcon />,
+      path: "/sop",
     },
-    // {
-    //   id: "A3",
-    //   label: "A3",
-    //   icon: <AdministratorIcon />,
-    //   path: "/ikatan-kerja",
-    // },
-    // {
-    //   id: "KPI",
-    //   label: "KPI",
-    //   icon: <AdministratorIcon />,
-    //   path: "/ikatan-kerja",
-    // },
+    {
+      id: "A3",
+      label: "A3",
+      icon: <A3Icon />,
+      path: "/A3",
+    },
+    {
+      id: "absensi",
+      label: "Absensi",
+      icon: <AbsensiIcon />,
+      path: "/absensi",
+    },
     {
       id: "administrator",
       label: "Administrator",
@@ -304,7 +304,11 @@ const OrganizationIcon = () => (
   </svg>
 );
 
-const IkatanKerjaIcon = () => (
+const SOPIcon = () => (
+  <i className="fa-solid fa-file h-5 w-4 mx-auto ml-1"></i>
+);
+
+const A3Icon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     className="h-5 w-5"
@@ -319,6 +323,10 @@ const IkatanKerjaIcon = () => (
       d="M9.663 17h4.673M12 3v1m6.364 1.636l-1.404 1.404M21 12h-1M4 12H3m3.343-5.657l-1.404 1.404M15 10.328l2.293 2.293M3 18.328l2.293-2.293"
     />
   </svg>
+);
+
+const AbsensiIcon = () => (
+  <i className="fa-solid fa-fingerprint h-5 w-4 mx-auto ml-1"></i>
 );
 
 const AdministratorIcon = () => (
