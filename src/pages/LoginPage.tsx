@@ -5,6 +5,7 @@ import { apiFetch } from "../lib/api";
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
+  const [badgeNumber, setBadgeNumber] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -21,10 +22,25 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
+      const trimmedUsername = username.trim();
+      const trimmedBadgeNumber = badgeNumber.trim();
+      const hasUsername = trimmedUsername.length > 0;
+      const hasBadgeNumber = trimmedBadgeNumber.length > 0;
+
+      if (hasUsername === hasBadgeNumber) {
+        showToast('Isi salah satu: username atau badge number.', 'error');
+        setIsLoading(false);
+        return;
+      }
+
+      const loginPayload = hasUsername
+        ? { username: trimmedUsername, password }
+        : { badgeNumber: trimmedBadgeNumber, password };
+
       const res = await apiFetch('/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(loginPayload),
       });
 
       const data = await res.json();
@@ -43,6 +59,7 @@ const LoginPage = () => {
       showToast(`Login berhasil! 🎉`, 'success');
       navigate('/');
     } catch (err) {
+      console.error(err);
       showToast('Gagal terhubung ke server.', 'error');
       setIsLoading(false);
     }
@@ -90,8 +107,21 @@ const LoginPage = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                required
                 placeholder="Enter username"
+                className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-rose-500 outline-none"
+              />
+            </div>
+
+            <div className="text-center text-xs text-gray-400">atau</div>
+
+            {/* Badge Number */}
+            <div>
+              <label className="block text-gray-300 mb-1">Badge Number</label>
+              <input
+                type="text"
+                value={badgeNumber}
+                onChange={(e) => setBadgeNumber(e.target.value)}
+                placeholder="Enter badge number"
                 className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-rose-500 outline-none"
               />
             </div>

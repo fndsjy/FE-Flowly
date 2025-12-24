@@ -16,6 +16,7 @@ interface ChartNode {
   position: string;
   capacity: number;
   orderIndex: number;
+  jobDesc?: string | null;
 }
 
 interface ChartMember {
@@ -46,6 +47,12 @@ interface SbuSubItem {
   pic?: number;
 }
 
+interface EmployeeItem {
+  UserId: number;
+  Name?: string;
+  jobDesc?: string | null;
+}
+
 const domasColor = "#272e79";
 
 const ChartPage = () => {
@@ -64,7 +71,7 @@ const ChartPage = () => {
   const [selectedSbuSub, setSelectedSbuSub] = useState<number | null>(null);
 
   const [chartMembers, setChartMembers] = useState<Record<string, ChartMember[]>>({});
-  const [employees, setEmployees] = useState<{ UserId: number; Name?: string }[]>([]);
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [roleLevel, setRoleLevel] = useState<number | null>(null);
   const isAdmin = roleLevel === 1;
   const { showToast } = useToast();
@@ -134,7 +141,7 @@ const ChartPage = () => {
           return;
         }
         const json = await res.json();
-        const empList = (json.response || json.data || json) as { UserId: number; Name?: string }[];
+        const empList = (json.response || json.data || json) as EmployeeItem[];
         setEmployees(empList);
       } catch (err) {
         console.warn("Gagal mengambil daftar pegawai:", err);
@@ -221,6 +228,7 @@ const ChartPage = () => {
     sbuId: undefined,
     sbuSubId: undefined,
     position: "",
+    jobDesc: "",
     parentId: "",
     capacity: 1,
     assignUserId: null as number | null,
@@ -233,6 +241,13 @@ const ChartPage = () => {
     slotIndex: number;
   }>({ open: false, chartId: "", memberChartId: "", slotIndex: 0 });
 
+  const [jobDescModal, setJobDescModal] = useState({
+    open: false,
+    userId: 0,
+    name: "",
+    jobDesc: "",
+  });
+
   const [deleteConfirm, setDeleteConfirm] = useState({
     open: false,
     chartId: "",
@@ -241,6 +256,7 @@ const ChartPage = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingJobDesc, setIsUpdatingJobDesc] = useState(false);
 
   /* ---------------- HANDLERS ---------------- */
   const openAddModal = (parentId: string | null = null) => {
@@ -254,6 +270,7 @@ const ChartPage = () => {
       sbuId: sbuSub?.sbuId,
       sbuSubId: selectedSbuSub,
       position: "",
+      jobDesc: "",
       parentId: parentId || "",
       capacity: 1,
       assignUserId: null,
@@ -269,6 +286,7 @@ const ChartPage = () => {
       sbuId: item.sbuId,
       sbuSubId: item.sbuSubId,
       position: item.position,
+      jobDesc: item.jobDesc ?? "",
       parentId: item.parentId || "",
       capacity: item.capacity,
       assignUserId: null,
@@ -286,6 +304,8 @@ const ChartPage = () => {
     try {
       const url = "/chart";
       const method = formMode === "add" ? "POST" : "PUT";
+      const normalizedJobDesc = typeof formData.jobDesc === "string" ? formData.jobDesc.trim() : "";
+      const jobDescPayload = normalizedJobDesc.length > 0 ? normalizedJobDesc : null;
 
       const body =
         formMode === "add"
@@ -296,11 +316,13 @@ const ChartPage = () => {
               sbuSubId: selectedSbuSub ?? formData.sbuSubId,
               position: formData.position,
               capacity: formData.capacity ?? 1,
+              jobDesc: jobDescPayload,
             }
           : {
               chartId: formData.chartId,
               position: formData.position,
               capacity: formData.capacity,
+              jobDesc: jobDescPayload,
             };
 
       const res = await apiFetch(url, {
@@ -415,6 +437,54 @@ const ChartPage = () => {
     }
   };
 
+  const handleOpenJobDesc = (userId: number) => {
+    const emp = employees.find((e) => e.UserId === userId);
+    setJobDescModal({
+      open: true,
+      userId,
+      name: emp?.Name ?? `#${userId}`,
+      jobDesc: emp?.jobDesc ?? "",
+    });
+  };
+
+  const handleSaveJobDesc = async () => {
+    if (!jobDescModal.userId) return;
+    setIsUpdatingJobDesc(true);
+    try {
+      const normalized = jobDescModal.jobDesc.trim();
+      const payload = {
+        userId: jobDescModal.userId,
+        jobDesc: normalized.length > 0 ? normalized : null,
+      };
+
+      const res = await apiFetch("/employee/job-desc", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json?.issues?.[0]?.message || json.errors || json.message || json?.error || "Gagal update job desc.";
+        showToast(msg, "error");
+        return;
+      }
+
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.UserId === jobDescModal.userId ? { ...e, jobDesc: payload.jobDesc } : e
+        )
+      );
+      showToast("Job description berhasil diperbarui.", "success");
+      setJobDescModal({ open: false, userId: 0, name: "", jobDesc: "" });
+    } catch (err) {
+      console.error("Gagal update job desc:", err);
+      showToast("Terjadi kesalahan saat update job desc.", "error");
+    } finally {
+      setIsUpdatingJobDesc(false);
+    }
+  };
+
   /* ---------------- UI render ---------------- */
   const currentSbuSub = sbuSubMap.get(selectedSbuSub ?? 0);
   const currentSbu = currentSbuSub ? sbuMap.get(currentSbuSub.sbuId) : null;
@@ -430,6 +500,12 @@ const ChartPage = () => {
     if (!userId) return null;
     const emp = employees.find((e) => e.UserId === userId);
     return emp ? emp.Name ?? `#${userId}` : `#${userId}`;
+  };
+
+  const getEmployeeJobDesc = (userId: number | null | undefined) => {
+    if (!userId) return null;
+    const emp = employees.find((e) => e.UserId === userId);
+    return emp?.jobDesc ?? null;
   };
 
   // Di dalam ChartPage, sebelum return()
@@ -487,62 +563,92 @@ const ChartPage = () => {
   const NodeCard = ({ node, members }: { node: ChartNode; members: ChartMember[] }) => (
     <div className="inline-block bg-white border border-gray-200 rounded-xl px-4 py-3 text-center shadow-lg shadow-gray-400 text-gray-800" style={{ minWidth: 240 }}>
       <h4 className="font-bold text-lg text-[#272e79]">{node.position}</h4>
+      {node.jobDesc && (
+        <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{node.jobDesc}</p>
+      )}
 
       <div className="mt-3 text-left space-y-2">
         {members.length === 0 && <div className="text-xs text-gray-400 italic">Belum ada slot</div>}
 
-        {members.map((m, idx) => (
-          <div key={m.memberChartId ?? `member-${idx}`} className="flex items-center justify-between gap-2">
-            <div className="text-xs">
-              <div>Slot {idx + 1}</div>
-              <div className="font-medium">
-                {m.userId ? getEmployeeName(m.userId) ?? `User #${m.userId}` : <span className="text-gray-400 italic">Kosong</span>}
-              </div>
-            </div>
+        {members.map((m, idx) => {
+          const employeeUserId = m.userId;
+          const employeeName = m.userId ? getEmployeeName(m.userId) ?? `User #${m.userId}` : null;
+          const employeeJobDesc = m.userId ? getEmployeeJobDesc(m.userId) : null;
 
-            {isAdmin && (
-              <div className="flex gap-1">
-                <button
-                  title="Assign / Ubah anggota"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenAssign(node.chartId, m.memberChartId, idx);
-                  }}
-                  className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded"
-                >
-                  Assign
-                </button>
-                <button
-                  title="Clear slot"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      const res = await apiFetch("/chart-member", {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                        body: JSON.stringify({ memberChartId: m.memberChartId, userId: 0 }),
-                      });
-                      if (res.ok) {
-                        showToast("Slot dikosongkan", "success");
-                        await fetchMembersForChart(node.chartId);
-                      } else {
-                        const j = await res.json();
-                        showToast(j.message || "Gagal clear slot", "error");
-                      }
-                    } catch (err) {
-                      console.error(err);
-                      showToast("Kesalahan saat mengosongkan slot", "error");
-                    }
-                  }}
-                  className="text-xs bg-gray-400 hover:bg-gray-500 text-white px-2 py-1 rounded"
-                >
-                  Clear
-                </button>
+          return (
+            <div key={m.memberChartId ?? `member-${idx}`} className="flex items-center justify-between gap-2">
+              <div className="text-xs">
+                <div>Slot {idx + 1}</div>
+                <div className="font-medium">
+                  {employeeUserId !== null ? (
+                    <span
+                      title={employeeJobDesc ?? undefined}
+                      className={employeeJobDesc ? "cursor-help" : ""}
+                    >
+                      {employeeName}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 italic">Kosong</span>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+
+              {isAdmin && (
+                <div className="flex gap-1">
+                  <button
+                    title="Assign / Ubah anggota"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenAssign(node.chartId, m.memberChartId, idx);
+                    }}
+                    className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded"
+                  >
+                    Assign
+                  </button>
+                  {employeeUserId !== null && (
+                    <button
+                      title="Edit job description"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenJobDesc(employeeUserId);
+                      }}
+                      className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded"
+                    >
+                      JobDesc
+                    </button>
+                  )}
+                  <button
+                    title="Clear slot"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const res = await apiFetch("/chart-member", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({ memberChartId: m.memberChartId, userId: 0 }),
+                        });
+                        if (res.ok) {
+                          showToast("Slot dikosongkan", "success");
+                          await fetchMembersForChart(node.chartId);
+                        } else {
+                          const j = await res.json();
+                          showToast(j.message || "Gagal clear slot", "error");
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        showToast("Kesalahan saat mengosongkan slot", "error");
+                      }
+                    }}
+                    className="text-xs bg-gray-400 hover:bg-gray-500 text-white px-2 py-1 rounded"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {isAdmin && (
@@ -755,6 +861,16 @@ const ChartPage = () => {
                   required
                 />
 
+                <textarea
+                  placeholder="Job Description (opsional)"
+                  value={formData.jobDesc}
+                  onChange={(e) =>
+                    setFormData({ ...formData, jobDesc: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
+                  rows={3}
+                />
+
                 <input
                   type="number"
                   min={1}
@@ -851,6 +967,44 @@ const ChartPage = () => {
                 className="px-4 py-2 bg-rose-400 text-white rounded-lg"
               >
                 Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update job desc modal */}
+      {jobDescModal.open && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-5 md:p-6 rounded-xl shadow-xl w-full max-w-md">
+            <h3 className="font-semibold text-lg mb-3">
+              Job Description - {jobDescModal.name}
+            </h3>
+
+            <textarea
+              value={jobDescModal.jobDesc}
+              onChange={(e) => setJobDescModal({ ...jobDescModal, jobDesc: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
+              rows={5}
+              placeholder="Isi job description..."
+            />
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setJobDescModal({ open: false, userId: 0, name: "", jobDesc: "" })}
+                className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg"
+                disabled={isUpdatingJobDesc}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSaveJobDesc}
+                disabled={isUpdatingJobDesc}
+                className={`px-4 py-2 bg-rose-400 text-white rounded-lg ${
+                  isUpdatingJobDesc ? "opacity-60 cursor-not-allowed" : "hover:bg-rose-500"
+                }`}
+              >
+                {isUpdatingJobDesc ? "Menyimpan..." : "Simpan"}
               </button>
             </div>
           </div>
