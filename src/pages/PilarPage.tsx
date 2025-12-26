@@ -7,7 +7,8 @@ import { apiFetch } from "../lib/api";
 interface pilar {
   id: string;
   pilarName: string;
-  description: string;
+  description: string | null;
+  jobDesc: string | null;
   pic: number | null;
   picName: string | null;
   createdAt: string;
@@ -94,6 +95,7 @@ const PilarPage = () => {
     id: "",
     pilarName: "",
     description: "",
+    jobDesc: "",
     pic: null as number | null,
   });
 
@@ -106,13 +108,14 @@ const PilarPage = () => {
   const { showToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [expandedJobDesc, setExpandedJobDesc] = useState<Record<string, boolean>>({});
 
 
   /* ------------------------- CRUD HANDLER ------------------------- */
 
   const openAddModal = () => {
     setFormMode("add");
-    setFormData({ id: "", pilarName: "", description: "", pic: null });
+    setFormData({ id: "", pilarName: "", description: "", jobDesc: "", pic: null });
     setShowForm(true);
   };
 
@@ -121,7 +124,8 @@ const PilarPage = () => {
     setFormData({
       id: item.id,
       pilarName: item.pilarName,
-      description: item.description,
+      description: item.description ?? "",
+      jobDesc: item.jobDesc ?? "",
       pic: item.pic || null
     });
     setShowForm(true);
@@ -201,11 +205,16 @@ const PilarPage = () => {
     return emp ? emp.Name : `ID ${id}`;
   };
 
+  const toggleJobDesc = (id: string) => {
+    setExpandedJobDesc((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   /* ------------------------- FILTER ------------------------- */
   const filtered = data.filter(
     (item) =>
       (item.pilarName ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (item.description ?? "").toLowerCase().includes(search.toLowerCase())
+      (item.description ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.jobDesc ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -267,7 +276,34 @@ const PilarPage = () => {
                     {item.pilarName}
                   </h2>
 
-                  <p className="text-gray-700 mt-2 truncate">{item.description}</p>
+                  <div className="mt-2">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-400">Deskripsi</p>
+                    <p className="text-gray-700 text-sm line-clamp-2">{item.description || "-"}</p>
+                  </div>
+                  {item.jobDesc && (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Job Description</p>
+                      <p
+                        className={`text-slate-700 text-sm whitespace-pre-line ${
+                          expandedJobDesc[item.id] ? "" : "line-clamp-3"
+                        }`}
+                      >
+                        {item.jobDesc}
+                      </p>
+                      {(item.jobDesc.length > 140 || item.jobDesc.split("\n").length > 3) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleJobDesc(item.id);
+                          }}
+                          className="mt-1 text-xs text-[#272e79] hover:underline"
+                        >
+                          {expandedJobDesc[item.id] ? "Sembunyikan" : "Lihat semua"}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className="mt-4 text-xs text-gray-500 space-y-1">
                     <p>PIC : {getPicName(item.pic)}</p>
@@ -346,6 +382,17 @@ const PilarPage = () => {
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
+                maxLength={255}
+                className="w-full px-3 py-2 rounded-lg h-24 border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
+              />
+
+              <textarea
+                placeholder="Job Description"
+                value={formData.jobDesc}
+                onChange={(e) =>
+                  setFormData({ ...formData, jobDesc: e.target.value })
+                }
+                maxLength={500}
                 className="w-full px-3 py-2 rounded-lg h-24 border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
               />
               <select

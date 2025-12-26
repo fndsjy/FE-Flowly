@@ -30,6 +30,7 @@ interface PilarItem {
   id: number;
   pilarName: string;
   pic?: number;
+  jobDesc?: string | null;
 }
 
 interface SbuItem {
@@ -37,6 +38,7 @@ interface SbuItem {
   sbuName: string;
   sbuPilar: number;
   pic?: number;
+  jobDesc?: string | null;
 }
 
 interface SbuSubItem {
@@ -45,6 +47,7 @@ interface SbuSubItem {
   sbuId: number;
   sbuPilar: number;
   pic?: number;
+  jobDesc?: string | null;
 }
 
 interface EmployeeItem {
@@ -112,15 +115,28 @@ const ChartPage = () => {
         const sbuSubData = (await sbuSubRes.json()).response || [];
 
         const pMap = new Map<number, PilarItem>();
-        pilarData.forEach((p: any) => pMap.set(p.id, { id: p.id, pilarName: p.pilarName, pic: p.pic }));
+        pilarData.forEach((p: any) =>
+          pMap.set(p.id, { id: p.id, pilarName: p.pilarName, pic: p.pic, jobDesc: p.jobDesc ?? null })
+        );
         setPilarMap(pMap);
 
         const sMap = new Map<number, SbuItem>();
-        sbuData.forEach((s: any) => sMap.set(s.id, { id: s.id, sbuName: s.sbuName, sbuPilar: s.sbuPilar, pic: s.pic }));
+        sbuData.forEach((s: any) =>
+          sMap.set(s.id, { id: s.id, sbuName: s.sbuName, sbuPilar: s.sbuPilar, pic: s.pic, jobDesc: s.jobDesc ?? null })
+        );
         setSbuMap(sMap);
 
         const ssMap = new Map<number, SbuSubItem>();
-        sbuSubData.forEach((ss: any) => ssMap.set(ss.id, { id: ss.id, sbuSubName: ss.sbuSubName, sbuId: ss.sbuId, sbuPilar: ss.sbuPilar, pic: ss.pic }));
+        sbuSubData.forEach((ss: any) =>
+          ssMap.set(ss.id, {
+            id: ss.id,
+            sbuSubName: ss.sbuSubName,
+            sbuId: ss.sbuId,
+            sbuPilar: ss.sbuPilar,
+            pic: ss.pic,
+            jobDesc: ss.jobDesc ?? null,
+          })
+        );
         setSbuSubMap(ssMap);
       } catch (err) {
         console.error("Gagal mengambil master data:", err);
@@ -752,6 +768,11 @@ const ChartPage = () => {
                         <span className="font-medium">PIC:</span> {getPicName(currentPilar.pic)}
                       </p>
                     )}
+                    {currentPilar.jobDesc && (
+                      <p className="text-xs mt-2 text-white/90 whitespace-pre-line">
+                        <span className="font-medium"></span> {currentPilar.jobDesc}
+                      </p>
+                    )}
                   </div>
                 )}
                 {currentSbu && (
@@ -762,6 +783,11 @@ const ChartPage = () => {
                         <span className="font-medium">PIC:</span> {getPicName(currentSbu.pic)}
                       </p>
                     )}
+                    {currentSbu.jobDesc && (
+                      <p className="text-xs mt-2 text-white/90 whitespace-pre-line">
+                        <span className="font-medium"></span> {currentSbu.jobDesc}
+                      </p>
+                    )}
                   </div>
                 )}
                 {currentSbuSub && (
@@ -770,6 +796,11 @@ const ChartPage = () => {
                     {currentSbuSub.pic !== undefined && currentSbuSub.pic !== null && (
                       <p className="text-sm mt-1">
                         <span className="font-medium">PIC:</span> {getPicName(currentSbuSub.pic)}
+                      </p>
+                    )}
+                    {currentSbuSub.jobDesc && (
+                      <p className="text-xs mt-2 text-white/90 whitespace-pre-line">
+                        <span className="font-medium"></span> {currentSbuSub.jobDesc}
                       </p>
                     )}
                   </div>
