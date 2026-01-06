@@ -12,6 +12,13 @@ const menuItems = [
     route: "/administrator/users",
     icon: "fa-solid fa-user-group",
   },
+  {
+    id: "jabatan",
+    title: "Jabatan",
+    description: "Manajemen jabatan",
+    route: "/administrator/jabatan",
+    icon: "fa-solid fa-briefcase",
+  },
   // tambah item lainnya nanti di sini
 ];
 
@@ -61,7 +68,7 @@ const AdministratorPage = () => {
         </div>
 
         {/* CARD MENU */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {filteredItems.map((item) => (
             <div
               key={item.id}
