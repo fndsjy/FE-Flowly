@@ -18,6 +18,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import PilarPage from './pages/PilarPage';
 import SBUPage from './pages/SBUPage';
 import SBUSUBPage from './pages/SBUSUBPage';
+import JabatanListPage from './pages/JabatanListPage';
 
 const App = () => {
   return (
@@ -37,6 +38,7 @@ const App = () => {
           <Route path="/me" element={<ChangePasswordPage />} />
           <Route path="/administrator" element={<ProtectedAdminRoute><AdministratorPage /></ProtectedAdminRoute>} />
           <Route path="/administrator/users" element={<ProtectedAdminRoute><UserListPage /></ProtectedAdminRoute>} />
+          <Route path="/administrator/jabatan" element={<ProtectedAdminRoute><JabatanListPage /></ProtectedAdminRoute>} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
