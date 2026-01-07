@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Tree, TreeNode } from "react-organizational-chart";
 import Sidebar from "../components/organisms/Sidebar";
@@ -23,6 +23,7 @@ interface ChartMember {
   memberChartId: string;
   chartId: string;
   userId: number | null;
+  jabatan?: string | null;
   userName?: string | null;
 }
 
@@ -56,6 +57,14 @@ interface EmployeeItem {
   jobDesc?: string | null;
 }
 
+interface JabatanItem {
+  jabatanId: string;
+  jabatanName: string;
+  jabatanLevel: number;
+  jabatanIsActive: boolean;
+  isDeleted: boolean;
+}
+
 const domasColor = "#272e79";
 
 const ChartPage = () => {
@@ -75,10 +84,15 @@ const ChartPage = () => {
 
   const [chartMembers, setChartMembers] = useState<Record<string, ChartMember[]>>({});
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
+  const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
   const [roleLevel, setRoleLevel] = useState<number | null>(null);
   const isAdmin = roleLevel === 1;
   const { showToast } = useToast();
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartContentRef = useRef<HTMLDivElement>(null);
+  const chartScrollRef = useRef<HTMLDivElement>(null);
+  const chartScrollInnerRef = useRef<HTMLDivElement>(null);
+  const isSyncingScrollRef = useRef(false);
   const panStateRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
 
   /* ---------------- FETCH PROFILE ---------------- */
@@ -167,6 +181,27 @@ const ChartPage = () => {
     fetchEmployees();
   }, []);
 
+  /* ---------------- FETCH JABATAN ---------------- */
+  useEffect(() => {
+    const fetchJabatans = async () => {
+      try {
+        const res = await apiFetch("/jabatan", { credentials: "include" });
+        if (!res.ok) {
+          setJabatans([]);
+          return;
+        }
+        const json = await res.json();
+        const list = Array.isArray(json.response) ? json.response : [];
+        setJabatans(list);
+      } catch (err) {
+        console.warn("Gagal mengambil daftar jabatan:", err);
+        setJabatans([]);
+      }
+    };
+
+    fetchJabatans();
+  }, []);
+
   /* ---------------- FETCH MEMBERS ---------------- */
   const fetchMembersForChart = useCallback(async (chartId: string) => {
     try {
@@ -245,6 +280,7 @@ const ChartPage = () => {
     sbuSubId: undefined,
     position: "",
     jobDesc: "",
+    jabatan: null as string | null,
     parentId: "",
     capacity: 1,
     assignUserId: null as number | null,
@@ -287,6 +323,7 @@ const ChartPage = () => {
       sbuSubId: selectedSbuSub,
       position: "",
       jobDesc: "",
+      jabatan: null,
       parentId: parentId || "",
       capacity: 1,
       assignUserId: null,
@@ -295,6 +332,9 @@ const ChartPage = () => {
   };
 
   const openEditModal = (item: ChartNode) => {
+    const existingMembers = chartMembers[item.chartId] || [];
+    const existingJabatan = existingMembers.find((m) => m.jabatan)?.jabatan ?? null;
+
     setFormMode("edit");
     setFormData({
       chartId: item.chartId,
@@ -303,6 +343,7 @@ const ChartPage = () => {
       sbuSubId: item.sbuSubId,
       position: item.position,
       jobDesc: item.jobDesc ?? "",
+      jabatan: existingJabatan,
       parentId: item.parentId || "",
       capacity: item.capacity,
       assignUserId: null,
@@ -322,6 +363,7 @@ const ChartPage = () => {
       const method = formMode === "add" ? "POST" : "PUT";
       const normalizedJobDesc = typeof formData.jobDesc === "string" ? formData.jobDesc.trim() : "";
       const jobDescPayload = normalizedJobDesc.length > 0 ? normalizedJobDesc : null;
+      const jabatanPayload = formData.jabatan ? formData.jabatan : null;
 
       const body =
         formMode === "add"
@@ -333,12 +375,14 @@ const ChartPage = () => {
               position: formData.position,
               capacity: formData.capacity ?? 1,
               jobDesc: jobDescPayload,
+              jabatan: jabatanPayload,
             }
           : {
               chartId: formData.chartId,
               position: formData.position,
               capacity: formData.capacity,
               jobDesc: jobDescPayload,
+              jabatan: jabatanPayload,
             };
 
       const res = await apiFetch(url, {
@@ -524,6 +568,50 @@ const ChartPage = () => {
     return emp?.jobDesc ?? null;
   };
 
+  const jabatanLevelMap = useMemo(() => {
+    const map = new Map<string, number>();
+    jabatans.forEach((item) => {
+      map.set(item.jabatanId, item.jabatanLevel);
+    });
+    return map;
+  }, [jabatans]);
+
+  const jabatanNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    jabatans.forEach((item) => {
+      map.set(item.jabatanId, item.jabatanName);
+    });
+    return map;
+  }, [jabatans]);
+
+  const getChartJabatanLevel = (chartId: string) => {
+    const members = chartMembers[chartId] || [];
+    const jabatanId = members.find((m) => m.jabatan)?.jabatan ?? null;
+    if (!jabatanId) return null;
+    const level = jabatanLevelMap.get(jabatanId);
+    if (level === undefined || level === null) return null;
+    const numericLevel = Number(level);
+    return Number.isNaN(numericLevel) ? null : numericLevel;
+  };
+
+  const getChartJabatanInfo = (chartId: string) => {
+    const members = chartMembers[chartId] || [];
+    const jabatanId = members.find((m) => m.jabatan)?.jabatan ?? null;
+    if (!jabatanId) return { jabatanId: null, jabatanName: null, jabatanLevel: null };
+    const rawLevel = jabatanLevelMap.get(jabatanId);
+    const numericLevel = rawLevel === undefined || rawLevel === null ? null : Number(rawLevel);
+    const jabatanLevel = numericLevel !== null && Number.isNaN(numericLevel) ? null : numericLevel;
+    return {
+      jabatanId,
+      jabatanName: jabatanNameMap.get(jabatanId) ?? jabatanId,
+      jabatanLevel,
+    };
+  };
+
+  const activeJabatans = jabatans.filter(
+    (item) => item.jabatanIsActive && !item.isDeleted
+  );
+
   // Di dalam ChartPage, sebelum return()
   const handleOpenDelete = (chartId: string, name: string) => {
     setDeleteConfirm({ open: true, chartId, name });
@@ -576,12 +664,63 @@ const ChartPage = () => {
     };
   }, []);
 
-  const NodeCard = ({ node, members }: { node: ChartNode; members: ChartMember[] }) => (
-    <div className="inline-block bg-white border border-gray-200 rounded-xl px-4 py-3 text-center shadow-lg shadow-gray-400 text-gray-800" style={{ minWidth: 240 }}>
-      <h4 className="font-bold text-lg text-[#272e79]">{node.position}</h4>
-      {node.jobDesc && (
-        <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{node.jobDesc}</p>
-      )}
+  useLayoutEffect(() => {
+    const container = chartContainerRef.current;
+    const content = chartContentRef.current;
+    const scrollBar = chartScrollRef.current;
+    const scrollInner = chartScrollInnerRef.current;
+    if (!container || !content || !scrollBar || !scrollInner) return;
+
+    const updateWidth = () => {
+      const contentWidth = content.scrollWidth;
+      scrollInner.style.width = `${contentWidth}px`;
+      const hasOverflow = contentWidth > container.clientWidth + 1;
+      scrollBar.style.visibility = hasOverflow ? "visible" : "hidden";
+    };
+
+    const syncScroll = (source: HTMLElement, target: HTMLElement) => {
+      if (isSyncingScrollRef.current) return;
+      isSyncingScrollRef.current = true;
+      target.scrollLeft = source.scrollLeft;
+      requestAnimationFrame(() => {
+        isSyncingScrollRef.current = false;
+      });
+    };
+
+    const handleContainerScroll = () => syncScroll(container, scrollBar);
+    const handleScrollBarScroll = () => syncScroll(scrollBar, container);
+
+    updateWidth();
+    container.addEventListener("scroll", handleContainerScroll);
+    scrollBar.addEventListener("scroll", handleScrollBarScroll);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(updateWidth);
+      observer.observe(content);
+    }
+    window.addEventListener("resize", updateWidth);
+
+    return () => {
+      container.removeEventListener("scroll", handleContainerScroll);
+      scrollBar.removeEventListener("scroll", handleScrollBarScroll);
+      observer?.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
+  }, [data.length]);
+
+  const NodeCard = ({ node, members }: { node: ChartNode; members: ChartMember[] }) => {
+    const jabatanInfo = getChartJabatanInfo(node.chartId);
+
+    return (
+      <div className="inline-block bg-white border border-gray-200 rounded-xl px-4 py-3 text-center shadow-lg shadow-gray-400 text-gray-800" style={{ minWidth: 240 }}>
+        <h4 className="font-bold text-lg text-[#272e79]">{node.position}</h4>
+        <div className="mt-1 text-[11px] text-gray-500">
+          Jabatan: {jabatanInfo.jabatanName ?? "-"} | Level: {jabatanInfo.jabatanLevel ?? "-"}
+        </div>
+        {node.jobDesc && (
+          <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{node.jobDesc}</p>
+        )}
 
       <div className="mt-3 text-left space-y-2">
         {members.length === 0 && <div className="text-xs text-gray-400 italic">Belum ada slot</div>}
@@ -710,30 +849,174 @@ const ChartPage = () => {
           </button>
         </div>
       )}
-    </div>
-  );
+      </div>
+    );
+  };
+
+  const sortByOrderIndex = (a: ChartNode, b: ChartNode) =>
+    (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
+
+  const groupChildrenByLevel = (
+    children: ChartNode[],
+    options: { order?: "asc" | "desc" } = {}
+  ) => {
+    const groups = new Map<number, ChartNode[]>();
+    const unknown: ChartNode[] = [];
+
+    children.forEach((child) => {
+      const level = getChartJabatanLevel(child.chartId);
+      if (level === null || level === undefined) {
+        unknown.push(child);
+        return;
+      }
+      const list = groups.get(level) ?? [];
+      list.push(child);
+      groups.set(level, list);
+    });
+
+    if (unknown.length > 0 && groups.size > 0) {
+      const maxLevel = Math.max(...Array.from(groups.keys()));
+      const list = groups.get(maxLevel) ?? [];
+      list.push(...unknown);
+      groups.set(maxLevel, list);
+      unknown.length = 0;
+    }
+
+    const { order = "desc" } = options;
+    const orderedLevels = Array.from(groups.keys()).sort((a, b) =>
+      order === "asc" ? a - b : b - a
+    );
+    const orderedGroups = orderedLevels.map((level) => {
+      const list = groups.get(level) ?? [];
+      return list.sort(sortByOrderIndex);
+    });
+
+    if (unknown.length > 0) {
+      orderedGroups.push(unknown.sort(sortByOrderIndex));
+    }
+
+    return orderedGroups;
+  };
+
+  const LevelGroup = ({
+    groups,
+    parentChartId,
+    renderNode,
+  }: {
+    groups: ChartNode[][];
+    parentChartId: string;
+    renderNode: (node: ChartNode) => React.ReactNode;
+  }) => {
+    const labelRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+      const labelEl = labelRef.current;
+      if (!labelEl) return;
+      const groupLi = labelEl.closest("li");
+      if (!groupLi) return;
+
+      const updateLineHeight = () => {
+        const groupList = labelEl.nextElementSibling as HTMLUListElement | null;
+        if (!groupList) return;
+        const rows = Array.from(groupList.children).filter((child) =>
+          (child as HTMLElement).classList.contains("chart-level-row")
+        ) as HTMLElement[];
+        if (rows.length <= 1) {
+          groupLi.style.removeProperty("--chart-level-group-height");
+          return;
+        }
+
+        const lastRow = rows[rows.length - 1];
+        const rowList = lastRow.querySelector(":scope > ul") as HTMLElement | null;
+        const rowOffset = rowList ? rowList.offsetTop : 0;
+        const height = Math.max(0, lastRow.offsetTop + rowOffset);
+        groupLi.style.setProperty("--chart-level-group-height", `${height}px`);
+      };
+
+      const frame = requestAnimationFrame(updateLineHeight);
+      let observer: ResizeObserver | null = null;
+      if (typeof ResizeObserver !== "undefined") {
+        observer = new ResizeObserver(() => updateLineHeight());
+        observer.observe(groupLi);
+      }
+
+      return () => {
+        cancelAnimationFrame(frame);
+        observer?.disconnect();
+      };
+    }, [groups]);
+
+    return (
+      <TreeNode
+        key={`level-group-${parentChartId}`}
+        className="chart-level-group"
+        label={<div ref={labelRef} className="chart-level-group-label" />}
+      >
+        {groups.map((group, index) => {
+          const needsSpacer = group.length % 2 === 1 && group.length > 0;
+          const rowNodes: React.ReactNode[] = group.map((child) => renderNode(child));
+
+          if (needsSpacer) {
+            rowNodes.push(
+              <TreeNode
+                key={`level-row-spacer-${parentChartId}-${index}`}
+                className="chart-placeholder-node"
+                label={<div className="chart-placeholder-label" />}
+              />
+            );
+          }
+
+          return (
+            <TreeNode
+              key={`level-row-${parentChartId}-${index}`}
+              className="chart-level-row"
+              label={<div className="chart-level-row-label" />}
+            >
+              {rowNodes}
+            </TreeNode>
+          );
+        })}
+      </TreeNode>
+    );
+  };
+
+  const renderGroupedChildren = (children: ChartNode[], parentChartId: string) => {
+    if (children.length === 0) return null;
+
+    const groups = groupChildrenByLevel(children);
+    if (groups.length <= 1) {
+      return groups[0].map((child) => renderNode(child));
+    }
+    return (
+      <LevelGroup groups={groups} parentChartId={parentChartId} renderNode={renderNode} />
+    );
+  };
 
   const renderNode = (node: ChartNode) => {
     const members = chartMembers[node.chartId] || [];
     const children = data
-      .filter((item) => item.parentId === node.chartId)
-      .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+      .filter((item) => item.parentId === node.chartId);
 
     return (
       <TreeNode
         key={node.chartId}
         label={<NodeCard node={node} members={members} />}
       >
-        {children.map((child) => renderNode(child))}
+        {renderGroupedChildren(children, node.chartId)}
       </TreeNode>
     );
   };
+
+  const rootNodes = data
+    .filter((node) => node.parentId === null)
+    .sort(sortByOrderIndex);
+  const rootGroups = groupChildrenByLevel(rootNodes, { order: "desc" });
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <Sidebar isOpen={isOpen} onToggle={toggleSidebar} />
 
-      <div className={`transition-all duration-300 ${isOpen ? "ml-64" : "ml-16"} flex-1 p-6 md:p-8`}>
+      <div className={`transition-all duration-300 ${isOpen ? "ml-64" : "ml-16"} flex-1 min-w-0 p-6 md:p-8`}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <BackButton />
@@ -809,6 +1092,14 @@ const ChartPage = () => {
             )}
 
             {/* Organizational Chart */}
+            {rootNodes.length > 0 && (
+              <div
+                ref={chartScrollRef}
+                className="sticky top-0 z-10 h-3 overflow-x-auto overflow-y-hidden bg-gradient-to-br from-gray-50 to-blue-50"
+              >
+                <div ref={chartScrollInnerRef} className="h-px" />
+              </div>
+            )}
             <div
               ref={chartContainerRef}
               onMouseDown={handlePanStart}
@@ -817,32 +1108,37 @@ const ChartPage = () => {
               onMouseLeave={handlePanEnd}
               className="p-4 md:p-6 overflow-x-auto overflow-y-hidden cursor-grab"
             >
-              {data.length > 0 ? (
+              {rootNodes.length > 0 ? (
                 <div
-                  className="p-4 rounded-2xl flex flex-nowrap items-start gap-8 justify-start w-12"
+                  ref={chartContentRef}
+                  className="p-4 rounded-2xl flex flex-col items-start gap-10 w-max min-w-[calc(100%+1px)]"
                 >
-                  {data
-                    .filter((node) => node.parentId === null)
-                    .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
-                    .map((rootNode) => {
-                      const members = chartMembers[rootNode.chartId] || [];
-                      const children = data
-                        .filter((item) => item.parentId === rootNode.chartId)
-                        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+                  {rootGroups.map((group, groupIndex) => (
+                    <div
+                      key={`root-row-${groupIndex}`}
+                      className="flex flex-nowrap items-start justify-center gap-8 w-max min-w-full"
+                    >
+                      {group.map((rootNode) => {
+                        const members = chartMembers[rootNode.chartId] || [];
+                        const children = data
+                          .filter((item) => item.parentId === rootNode.chartId)
+                          .sort(sortByOrderIndex);
 
-                      return (
-                        <div key={rootNode.chartId} className="inline-block">
-                          <Tree
-                            lineWidth={"2px"}
-                            lineColor={"#ec5c76"}
-                            lineBorderRadius={"8px"}
-                            label={<NodeCard node={rootNode} members={members} />}
-                          >
-                            {children.map((child) => renderNode(child))}
-                          </Tree>
-                        </div>
-                      );
-                    })}
+                        return (
+                          <div key={rootNode.chartId} className="inline-block">
+                            <Tree
+                              lineWidth={"2px"}
+                              lineColor={"#ec5c76"}
+                              lineBorderRadius={"8px"}
+                              label={<NodeCard node={rootNode} members={members} />}
+                            >
+                              {renderGroupedChildren(children, rootNode.chartId)}
+                            </Tree>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="text-center py-10">
@@ -891,6 +1187,24 @@ const ChartPage = () => {
                   className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
                   required
                 />
+
+                <select
+                  value={formData.jabatan ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      jabatan: e.target.value ? e.target.value : null,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
+                >
+                  <option value="">Pilih Jabatan (opsional)</option>
+                  {activeJabatans.map((jabatan) => (
+                    <option key={jabatan.jabatanId} value={jabatan.jabatanId}>
+                      {jabatan.jabatanName}
+                    </option>
+                  ))}
+                </select>
 
                 <textarea
                   placeholder="Job Description (opsional)"
@@ -1096,3 +1410,4 @@ const ChartPage = () => {
 };
 
 export default ChartPage;
+

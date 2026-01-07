@@ -12,3 +12,49 @@ body {
     background-color: white;
     color: black;
   }
+
+.chart-level-group > ul {
+  flex-direction: column;
+  align-items: center;
+}
+
+.chart-level-group > ul::before {
+  height: var(--chart-level-group-height, var(--tree-line-height));
+}
+
+.chart-level-group-label,
+.chart-level-row-label {
+  width: 0;
+  height: 0;
+}
+
+.chart-level-row {
+  padding: var(--tree-line-height) 0 0 0;
+}
+
+.chart-level-row::before,
+.chart-level-row::after {
+  display: none;
+  border: 0;
+}
+
+.chart-placeholder-node {
+  pointer-events: none;
+}
+
+li.chart-placeholder-node::before,
+li.chart-placeholder-node::after {
+  border: 0 !important;
+}
+
+li:not(:first-of-type):has(+ li.chart-placeholder-node)::after {
+  border-top: 0 !important;
+}
+
+.chart-placeholder-label {
+  display: inline-block;
+  width: 240px;
+  min-width: 240px;
+  height: 1px;
+  visibility: hidden;
+}

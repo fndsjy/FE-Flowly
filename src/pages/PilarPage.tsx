@@ -9,10 +9,18 @@ interface pilar {
   pilarName: string;
   description: string | null;
   jobDesc: string | null;
+  jabatan: string | null;
   pic: number | null;
   picName: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface JabatanItem {
+  jabatanId: string;
+  jabatanName: string;
+  jabatanIsActive: boolean;
+  isDeleted: boolean;
 }
 
 const domasColor = "#272e79";
@@ -25,6 +33,7 @@ const PilarPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [employees, setEmployees] = useState<{ UserId: number, Name: string }[]>([]);
+  const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
   const navigate = useNavigate();
 
   /* ------------------------- ROLE USER ------------------------- */
@@ -82,9 +91,21 @@ const PilarPage = () => {
     setEmployees(list); // format: [{UserId, Name}]
   };
 
+  const fetchJabatans = async () => {
+    const res = await apiFetch("/jabatan");
+    if (!res.ok) {
+      setJabatans([]);
+      return;
+    }
+    const json = await res.json();
+    const list = Array.isArray(json?.response) ? json.response : [];
+    setJabatans(list);
+  };
+
   useEffect(() => {
     fetchData();
     fetchEmployees();
+    fetchJabatans();
   }, []);
 
   /* ------------------------- MODAL / STATE ------------------------- */
@@ -96,6 +117,7 @@ const PilarPage = () => {
     pilarName: "",
     description: "",
     jobDesc: "",
+    jabatan: null as string | null,
     pic: null as number | null,
   });
 
@@ -115,7 +137,7 @@ const PilarPage = () => {
 
   const openAddModal = () => {
     setFormMode("add");
-    setFormData({ id: "", pilarName: "", description: "", jobDesc: "", pic: null });
+    setFormData({ id: "", pilarName: "", description: "", jobDesc: "", jabatan: null, pic: null });
     setShowForm(true);
   };
 
@@ -126,6 +148,7 @@ const PilarPage = () => {
       pilarName: item.pilarName,
       description: item.description ?? "",
       jobDesc: item.jobDesc ?? "",
+      jabatan: item.jabatan ?? null,
       pic: item.pic || null
     });
     setShowForm(true);
@@ -204,6 +227,16 @@ const PilarPage = () => {
     const emp = employees.find((e) => e.UserId === id);
     return emp ? emp.Name : `ID ${id}`;
   };
+
+  const getJabatanName = (id: string | null) => {
+    if (!id) return "-";
+    const jabatan = jabatans.find((item) => item.jabatanId === id);
+    return jabatan ? jabatan.jabatanName : "-";
+  };
+
+  const activeJabatans = jabatans.filter(
+    (item) => item.jabatanIsActive && !item.isDeleted
+  );
 
   const toggleJobDesc = (id: string) => {
     setExpandedJobDesc((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -307,6 +340,7 @@ const PilarPage = () => {
 
                   <div className="mt-4 text-xs text-gray-500 space-y-1">
                     <p>PIC : {getPicName(item.pic)}</p>
+                    <p>Jabatan : {getJabatanName(item.jabatan)}</p>
                   </div>
 
                   {/* <div className="mt-4 text-xs text-gray-500 space-y-1">
@@ -408,6 +442,21 @@ const PilarPage = () => {
                 {employees.map((emp) => (
                   <option key={emp.UserId} value={emp.UserId}>
                     {emp.Name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={formData.jabatan ?? ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, jabatan: e.target.value ? e.target.value : null })
+                }
+                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 
+                          focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none"
+              >
+                <option value="">Pilih Jabatan</option>
+                {activeJabatans.map((jabatan) => (
+                  <option key={jabatan.jabatanId} value={jabatan.jabatanId}>
+                    {jabatan.jabatanName}
                   </option>
                 ))}
               </select>
