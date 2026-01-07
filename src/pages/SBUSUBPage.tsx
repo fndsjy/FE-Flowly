@@ -20,12 +20,20 @@ interface SbuSub {
   sbuPilar: number | null;
   description: string | null;
   jobDesc: string | null;
+  jabatan: string | null;
   pic: number | null;
 }
 
 interface Employee {
   UserId: number;
   Name: string;
+}
+
+interface JabatanItem {
+  jabatanId: string;
+  jabatanName: string;
+  jabatanIsActive: boolean;
+  isDeleted: boolean;
 }
 
 const domasColor = "#272e79";
@@ -39,6 +47,7 @@ const SBUSUBPage = () => {
 
   const [search, setSearch] = useState("");
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
   const [sbus, setSbus] = useState<SBU[]>([]);
 
   const [roleLevel, setRoleLevel] = useState<number | null>(null);
@@ -99,6 +108,17 @@ const SBUSUBPage = () => {
     setEmployees(list);
   };
 
+  const fetchJabatans = async () => {
+    const res = await apiFetch("/jabatan");
+    if (!res.ok) {
+      setJabatans([]);
+      return;
+    }
+    const json = await res.json();
+    const list = Array.isArray(json?.response) ? json.response : [];
+    setJabatans(list);
+  };
+
   const fetchSBUList = async () => {
     const res = await apiFetch("/sbu");
     if (!res.ok) {
@@ -116,6 +136,7 @@ const SBUSUBPage = () => {
 
   useEffect(() => {
     fetchEmployees();
+    fetchJabatans();
     fetchSBUList();
   }, []);
 
@@ -131,6 +152,7 @@ const SBUSUBPage = () => {
     sbuId: Number(sbuId),
     description: "",
     jobDesc: "",
+    jabatan: null as string | null,
     pic: null as number | null,
   });
 
@@ -143,6 +165,7 @@ const SBUSUBPage = () => {
       sbuId: Number(sbuId),
       description: "",
       jobDesc: "",
+      jabatan: null,
       pic: null,
     });
     setShowForm(true);
@@ -156,6 +179,7 @@ const SBUSUBPage = () => {
       sbuSubName: item.sbuSubName,
       description: item.description ?? "",
       jobDesc: item.jobDesc ?? "",
+      jabatan: item.jabatan ?? null,
       pic: item.pic,
       sbuId: item.sbuId,
     });
@@ -253,6 +277,16 @@ const SBUSUBPage = () => {
     const emp = employees.find((e) => e.UserId === id);
     return emp ? emp.Name : "-";
   };
+
+  const getJabatanName = (id: string | null) => {
+    if (!id) return "-";
+    const jabatan = jabatans.find((item) => item.jabatanId === id);
+    return jabatan ? jabatan.jabatanName : "-";
+  };
+
+  const activeJabatans = jabatans.filter(
+    (item) => item.jabatanIsActive && !item.isDeleted
+  );
 
   const toggleJobDesc = (id: number) => {
     setExpandedJobDesc((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -381,6 +415,7 @@ const SBUSUBPage = () => {
                   <div className="mt-4 text-xs text-gray-500 space-y-1">
                     {/* <p>SBU: {getSbuName(item.sbuId)}</p> */}
                     <p>PIC: {getPicName(item.pic)}</p>
+                    <p>Jabatan: {getJabatanName(item.jabatan)}</p>
                   </div>
                 </div>
 
@@ -482,6 +517,23 @@ const SBUSUBPage = () => {
                 {employees.map((emp) => (
                   <option key={emp.UserId} value={emp.UserId}>
                     {emp.Name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={formData.jabatan ?? ""}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    jabatan: e.target.value ? e.target.value : null,
+                  })
+                }
+                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
+              >
+                <option value="">Pilih Jabatan</option>
+                {activeJabatans.map((jabatan) => (
+                  <option key={jabatan.jabatanId} value={jabatan.jabatanId}>
+                    {jabatan.jabatanName}
                   </option>
                 ))}
               </select>
