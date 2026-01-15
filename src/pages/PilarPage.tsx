@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { useAccessSummary } from "../hooks/useAccessSummary";
 
 interface pilar {
   id: string;
@@ -36,31 +37,28 @@ const PilarPage = () => {
   const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
   const navigate = useNavigate();
 
-  /* ------------------------- ROLE USER ------------------------- */
-  const [roleLevel, setRoleLevel] = useState<number | null>(null);
-  const isAdmin = roleLevel === 1;
-
-  useEffect(() => {
-    const getProfile = async () => {
-      try {
-        const res = await apiFetch("/profile", {
-          method: "GET",
-          credentials: "include", // penting agar cookies terbawa
-        });
-
-        const json = await res.json();
-        if (!res.ok) {
-          setRoleLevel(null);
-          return;
-        }
-        setRoleLevel(json?.response?.roleLevel ?? null);
-      } catch (err) {
-        console.error("Gagal mengambil profil:", err);
-      }
-    };
-
-    getProfile();
-  }, []);
+  const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
+  const pilarModuleLevel = moduleAccessMap.get("PILAR");
+  const sbuModuleLevel = moduleAccessMap.get("SBU");
+  const canRead = isAdmin
+    || pilarModuleLevel === "READ"
+    || pilarModuleLevel === "CRUD"
+    || orgScope.pilarRead;
+  const hasGlobalCrud = isAdmin || pilarModuleLevel === "CRUD";
+  const canCreate = hasGlobalCrud || orgScope.pilarCrud || orgAccess.pilarCrud.size > 0;
+  const canCrudItem = (id: string) => {
+    if (hasGlobalCrud) return true;
+    const numericId = Number(id);
+    if (Number.isNaN(numericId)) return false;
+    if (orgAccess.pilarCrud.size > 0) {
+      return orgAccess.pilarCrud.has(numericId);
+    }
+    return orgScope.pilarCrud;
+  };
+  const canReadSbu = isAdmin
+    || sbuModuleLevel === "READ"
+    || sbuModuleLevel === "CRUD"
+    || orgScope.sbuRead;
 
   /* ------------------------- FETCH DATA ------------------------- */
   const fetchData = async () => {
@@ -103,10 +101,17 @@ const PilarPage = () => {
   };
 
   useEffect(() => {
+    if (accessLoading) return;
+    if (!canRead) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     fetchData();
     fetchEmployees();
     fetchJabatans();
-  }, []);
+  }, [accessLoading, canRead]);
 
   /* ------------------------- MODAL / STATE ------------------------- */
 
@@ -243,12 +248,14 @@ const PilarPage = () => {
   };
 
   /* ------------------------- FILTER ------------------------- */
-  const filtered = data.filter(
+  const filtered = canRead
+    ? data.filter(
     (item) =>
       (item.pilarName ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (item.description ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (item.jobDesc ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+    )
+    : [];
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -277,7 +284,7 @@ const PilarPage = () => {
               focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
           />
           {/* BUTTON ADD — ADMIN ONLY */}
-          {isAdmin && (
+          {canCreate && (
             <button
               onClick={openAddModal}
               className="px-4 py-2 bg-[#272e79] hover:bg-white hover:border hover:border-[#272e79] hover:text-[#272e79] text-white rounded-xl shadow"
@@ -300,7 +307,13 @@ const PilarPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.id}
-                onClick={() => navigate(`sbu/${item.id}`)}
+                onClick={() => {
+                  if (!canReadSbu) {
+                    showToast("Tidak ada akses ke SBU.", "error");
+                    return;
+                  }
+                  navigate(`sbu/${item.id}`);
+                }}
                 className="bg-white rounded-2xl p-5 shadow-lg shadow-gray-400
                 hover:shadow-xl hover:border-rose-300 transition duration-300 flex flex-col"
               >
@@ -351,7 +364,7 @@ const PilarPage = () => {
 
                 <div className="flex justify-end items-center">
                   {/* BUTTON ACTIONS — ADMIN ONLY */}
-                  {isAdmin && (
+                  {canCrudItem(item.id) && (
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={(e) => {
@@ -386,7 +399,7 @@ const PilarPage = () => {
 
         {!loading && filtered.length === 0 && (
           <p className="text-gray-500 text-center mt-10">
-            Tidak ada data yang cocok dengan pencarian.
+            {canRead ? "Tidak ada data yang cocok dengan pencarian." : "Tidak ada akses untuk Pilar."}
           </p>
         )}
       </div>

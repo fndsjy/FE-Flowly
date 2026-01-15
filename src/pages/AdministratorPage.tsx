@@ -1,26 +1,29 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
+import { apiFetch } from "../lib/api";
 
 const domasColor = "#272e79";
 
-const menuItems = [
-  {
-    id: "users",
-    title: "User",
-    description: "Manajemen user, role, dan akses",
-    route: "/administrator/users",
-    icon: "fa-solid fa-user-group",
-  },
-  {
-    id: "jabatan",
-    title: "Jabatan",
-    description: "Manajemen jabatan",
-    route: "/administrator/jabatan",
-    icon: "fa-solid fa-briefcase",
-  },
-  // tambah item lainnya nanti di sini
-];
+interface MasterAccessRoleItem {
+  masAccessId: string;
+  resourceType: string;
+  resourceKey: string;
+  displayName: string;
+  route: string | null;
+  parentKey: string | null;
+  orderIndex: number;
+  isActive: boolean;
+  isDeleted: boolean;
+}
+
+interface AdminMenuItem {
+  id: string;
+  title: string;
+  description: string;
+  route: string;
+  icon: string;
+}
 
 const AdministratorPage = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -28,6 +31,49 @@ const AdministratorPage = () => {
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
+  const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    apiFetch("/master-access-role?resourceType=MODULE&parentKey=ADMIN", {
+      method: "GET",
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        const response: MasterAccessRoleItem[] = Array.isArray(data?.response)
+          ? data.response
+          : [];
+        const items = response
+          .filter(
+            (item) =>
+              item.resourceType === "MODULE" &&
+              item.parentKey === "ADMIN" &&
+              item.isActive &&
+              !item.isDeleted &&
+              item.route
+          )
+          .map((item) => ({
+            id: item.resourceKey,
+            title: item.displayName,
+            description: `Modul ${item.displayName}`,
+            route: item.route as string,
+            icon: getAdminModuleIcon(item.resourceKey),
+          }));
+        setMenuItems(items);
+      })
+      .catch(() => {
+        if (isMounted) {
+          setMenuItems([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   /* FILTER DATA via title + description */
   const filteredItems = useMemo(() => {
@@ -37,7 +83,7 @@ const AdministratorPage = () => {
         item.title.toLowerCase().includes(s) ||
         item.description.toLowerCase().includes(s)
     );
-  }, [search]);
+  }, [search, menuItems]);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -103,6 +149,19 @@ const AdministratorPage = () => {
       </div>
     </div>
   );
+};
+
+const getAdminModuleIcon = (resourceKey: string) => {
+  switch (resourceKey) {
+    case "ADMIN_USERS":
+      return "fa-solid fa-user-group";
+    case "ADMIN_JABATAN":
+      return "fa-solid fa-briefcase";
+    case "ADMIN_ACCESS_ROLE":
+      return "fa-solid fa-lock";
+    default:
+      return "fa-solid fa-gear";
+  }
 };
 
 export default AdministratorPage;
