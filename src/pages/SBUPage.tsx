@@ -5,6 +5,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { useAccessSummary } from "../hooks/useAccessSummary";
 
 interface SBU {
   id: number;
@@ -50,31 +51,35 @@ const SBUPage = () => {
   const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
   const [pilarName, setPilarName] = useState("");
 
-  const [roleLevel, setRoleLevel] = useState<number | null>(null);
-  const isAdmin = roleLevel === 1;
-
+  const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
+  const sbuModuleLevel = moduleAccessMap.get("SBU");
+  const sbuSubModuleLevel = moduleAccessMap.get("SBU_SUB");
   const { pilarId } = useParams<{ pilarId: string }>();
+  const canRead = isAdmin
+    || sbuModuleLevel === "READ"
+    || sbuModuleLevel === "CRUD"
+    || orgScope.sbuRead;
+  const hasGlobalCrud = isAdmin || sbuModuleLevel === "CRUD";
+  const canCreate = hasGlobalCrud
+    || (pilarId
+      ? (orgAccess.pilarCrud.size > 0
+        ? orgAccess.pilarCrud.has(Number(pilarId))
+        : orgScope.pilarCrud)
+      : false);
+  const canCrudItem = (id: number) => {
+    if (hasGlobalCrud) return true;
+    if (orgAccess.sbuCrud.size > 0) {
+      return orgAccess.sbuCrud.has(id);
+    }
+    return orgScope.sbuCrud;
+  };
+  const canReadSbuSub = isAdmin
+    || sbuSubModuleLevel === "READ"
+    || sbuSubModuleLevel === "CRUD"
+    || orgScope.sbuSubRead;
 
   const { showToast } = useToast();
   const navigate = useNavigate();
-
-  /* ---------------- GET PROFILE (ROLE) ---------------- */
-  useEffect(() => {
-    const getProfile = async () => {
-      try {
-        const res = await apiFetch("/profile", { credentials: "include" });
-        const json = await res.json();
-        if (!res.ok) {
-          setRoleLevel(null);
-          return;
-        }
-        setRoleLevel(json?.response?.roleLevel ?? null);
-      } catch (err) {
-        console.error("Gagal mengambil profil:", err);
-      }
-    };
-    getProfile();
-  }, []);
 
   /* ---------------- FETCH DATA ---------------- */
   const fetchSBU = async (pilarId: string) => {
@@ -130,19 +135,29 @@ const SBUPage = () => {
   };
 
   useEffect(() => {
+    if (accessLoading || !canRead) return;
     if (pilarId) {
         fetchSBU(pilarId); // ✅ kirim id yang didapat dari URL
     } else {
         showToast("ID pilar tidak ditemukan", "error");
         // opsional: redirect ke /pilar
     }
-  }, [pilarId]);
+  }, [accessLoading, canRead, pilarId]);
 
   useEffect(() => {
+    if (accessLoading) return;
+    if (!canRead) {
+      setData([]);
+      setLoading(false);
+    }
+  }, [accessLoading, canRead]);
+
+  useEffect(() => {
+    if (accessLoading || !canRead) return;
     fetchEmployees();
     fetchPilars();
     fetchJabatans();
-  }, []);
+  }, [accessLoading, canRead]);
 
   /* ---------------- MODAL FORM ---------------- */
   const [showForm, setShowForm] = useState(false);
@@ -303,13 +318,15 @@ const SBUPage = () => {
   };
 
   /* ---------------- FILTERING ---------------- */
-  const filtered = data.filter(
-    (item) =>
-      item.sbuCode.toLowerCase().includes(search.toLowerCase()) ||
-      item.sbuName.toLowerCase().includes(search.toLowerCase()) ||
-      (item.description ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (item.jobDesc ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = canRead
+    ? data.filter(
+      (item) =>
+        item.sbuCode.toLowerCase().includes(search.toLowerCase()) ||
+        item.sbuName.toLowerCase().includes(search.toLowerCase()) ||
+        (item.description ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (item.jobDesc ?? "").toLowerCase().includes(search.toLowerCase())
+    )
+    : [];
 
   /* ---------------- UI ---------------- */
   return (
@@ -343,7 +360,7 @@ const SBUPage = () => {
                   </nav>
                 </div>
             </div>
-          {isAdmin && (
+          {canCreate && (
             <button
               onClick={openAdd}
               className="px-4 py-2 bg-[#272e79] hover:bg-white hover:border hover:border-[#272e79]
@@ -369,14 +386,20 @@ const SBUPage = () => {
           <p className="text-gray-500 animate-pulse">Loading data...</p>
         ) : filtered.length === 0 ? (
           <p className="text-gray-500 text-center mt-10">
-            Tidak ada data ditemukan.
+            {canRead ? "Tidak ada data ditemukan." : "Tidak ada akses untuk SBU."}
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filtered.map((item) => (
               <div
                 key={item.id}
-                onClick={() => navigate(`/pilar/sbu/sbu_sub/${item.id}`)}
+                onClick={() => {
+                  if (!canReadSbuSub) {
+                    showToast("Tidak ada akses ke SBU Sub.", "error");
+                    return;
+                  }
+                  navigate(`/pilar/sbu/sbu_sub/${item.id}`);
+                }}
                 className="bg-white rounded-2xl p-5 shadow-lg hover:shadow-xl 
                 hover:border-rose-300 transition cursor-pointer flex flex-col"
               >
@@ -421,7 +444,7 @@ const SBUPage = () => {
                     </div>
                 </div>
                 
-                {isAdmin && (
+                {canCrudItem(item.id) && (
                   <div className="flex gap-2 mt-4 justify-end">
                     <button
                         onClick={(e) => {

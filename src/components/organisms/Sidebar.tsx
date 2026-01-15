@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSignInAlt, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
 import { apiFetch } from "../../lib/api";
+import { useAccessSummary } from "../../hooks/useAccessSummary";
 
 /* ---------------- USER TYPE ---------------- */
 interface UserProfile {
@@ -19,11 +20,27 @@ interface UserProfile {
   roleLevel: number;
 }
 
+type ResourceType = "MENU" | "MODULE" | "SYSTEM";
+
+interface MasterAccessRoleItem {
+  masAccessId: string;
+  resourceType: ResourceType;
+  resourceKey: string;
+  displayName: string;
+  route: string | null;
+  parentKey: string | null;
+  orderIndex: number;
+  isActive: boolean;
+  isDeleted: boolean;
+}
+
 interface MenuItem {
   id: string;
   label: string;
   icon: React.ReactNode;
   path: string;
+  resourceType: ResourceType;
+  resourceKey: string;
 }
 
 interface SidebarProps {
@@ -33,6 +50,14 @@ interface SidebarProps {
 
 const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const {
+    loading: accessLoading,
+    isAdmin: accessIsAdmin,
+    menuAccessMap,
+    moduleAccessMap,
+    orgScope
+  } = useAccessSummary();
   const navigate = useNavigate();
 
   const location = useLocation();
@@ -56,6 +81,49 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       });
   }, []);
 
+  /* ---------------- FETCH MENU ---------------- */
+  useEffect(() => {
+    let isMounted = true;
+
+    apiFetch("/master-access-role?resourceType=MENU", {
+      method: "GET",
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        const response: MasterAccessRoleItem[] = Array.isArray(data?.response)
+          ? data.response
+          : [];
+        const items = response
+          .filter(
+            (item) =>
+              item.resourceType === "MENU" &&
+              item.isActive &&
+              !item.isDeleted &&
+              item.route
+          )
+          .map((item) => ({
+            id: item.resourceKey,
+            label: item.displayName,
+            icon: getMenuIcon(item.resourceKey),
+            path: item.route as string,
+            resourceType: "MENU" as const,
+            resourceKey: item.resourceKey,
+          }));
+        setMenuItems(items);
+      })
+      .catch(() => {
+        if (isMounted) {
+          setMenuItems([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   /* ---------------- LOGOUT ---------------- */
   const handleLogout = async () => {
     await apiFetch("/logout", {
@@ -67,75 +135,30 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     navigate("/login", { replace: true });
   };
 
-  const menuItems: MenuItem[] = [
-    {
-      id: "toggle",
-      label: "Toggle Sidebar",
-      icon: (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          {isOpen ? (
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          ) : (
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          )}
-        </svg>
-      ),
-      path: "/",
-    },
-    {
-      id: "organization",
-      label: "Organisasi",
-      icon: <OrganizationIcon />,
-      path: "/pilar",
-    },
-    {
-      id: "sop",
-      label: "SOP",
-      icon: <SOPIcon />,
-      path: "/sop",
-    },
-    {
-      id: "A3",
-      label: "A3",
-      icon: <A3Icon />,
-      path: "/A3",
-    },
-    {
-      id: "absensi",
-      label: "Absensi",
-      icon: <AbsensiIcon />,
-      path: "/absensi",
-    },
-    {
-      id: "administrator",
-      label: "Administrator",
-      icon: <AdministratorIcon />,
-      path: "/administrator",
-    },
-    
-  ];
-
   /* ---------------- FILTER MENU BY ROLE ---------------- */
   const visibleMenuItems = menuItems.filter((item) => {
-    // Hide Administrator menu kalau user bukan roleLevel 1
-    if (item.id === "administrator" && user?.roleLevel !== 1) {
+    if (item.resourceType !== "MENU") {
       return false;
+    }
+    const isAdmin = accessIsAdmin || user?.roleLevel === 1;
+    const hasOrgModuleAccess = moduleAccessMap.has("PILAR")
+      || moduleAccessMap.has("SBU")
+      || moduleAccessMap.has("SBU_SUB")
+      || orgScope.pilarRead
+      || orgScope.sbuRead
+      || orgScope.sbuSubRead;
+    if (item.resourceKey === "ORGANISASI") {
+      if (accessLoading) {
+        return false;
+      }
+      return isAdmin
+        || (menuAccessMap.has("ORGANISASI") && hasOrgModuleAccess);
+    }
+    if (item.resourceKey === "ADMIN") {
+      if (accessLoading) {
+        return false;
+      }
+      return isAdmin || menuAccessMap.has("ADMIN");
     }
     return true;
   });
@@ -192,9 +215,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
 
       {/* Menu */}
       <nav className="mt-6 pl-2">
-        {visibleMenuItems
-          .filter((item) => item.id !== "toggle")
-          .map((item) => (
+        {visibleMenuItems.map((item) => (
             <div key={item.id} className="relative group overflow-hidden">
               <Link
                 to={item.path}
@@ -287,6 +308,23 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
 
 /* ---------------- ICONS ---------------- */
 
+const getMenuIcon = (resourceKey: string) => {
+  switch (resourceKey) {
+    case "ORGANISASI":
+      return <OrganizationIcon />;
+    case "SOP":
+      return <SOPIcon />;
+    case "A3":
+      return <A3Icon />;
+    case "ABSENSI":
+      return <AbsensiIcon />;
+    case "ADMIN":
+      return <AdministratorIcon />;
+    default:
+      return <DefaultMenuIcon />;
+  }
+};
+
 const OrganizationIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -331,6 +369,10 @@ const AbsensiIcon = () => (
 
 const AdministratorIcon = () => (
   <i className="fa-solid fa-person h-5 w-4 mx-auto ml-1"></i>
+);
+
+const DefaultMenuIcon = () => (
+  <i className="fa-solid fa-circle h-4 w-4 mx-auto ml-1"></i>
 );
 
 export default Sidebar;

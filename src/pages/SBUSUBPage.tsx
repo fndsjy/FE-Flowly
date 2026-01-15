@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { useAccessSummary } from "../hooks/useAccessSummary";
 
 interface SBU {
   id: number;
@@ -50,30 +51,29 @@ const SBUSUBPage = () => {
   const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
   const [sbus, setSbus] = useState<SBU[]>([]);
 
-  const [roleLevel, setRoleLevel] = useState<number | null>(null);
-  const isAdmin = roleLevel === 1;
-
+  const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
+  const sbuSubModuleLevel = moduleAccessMap.get("SBU_SUB");
   const { sbuId } = useParams<{ sbuId: string }>();
+  const canRead = isAdmin
+    || sbuSubModuleLevel === "READ"
+    || sbuSubModuleLevel === "CRUD"
+    || orgScope.sbuSubRead;
+  const hasGlobalCrud = isAdmin || sbuSubModuleLevel === "CRUD";
+  const canCreate = hasGlobalCrud
+    || (sbuId
+      ? (orgAccess.sbuCrud.size > 0
+        ? orgAccess.sbuCrud.has(Number(sbuId))
+        : orgScope.sbuCrud)
+      : false);
+  const canCrudItem = (id: number) => {
+    if (hasGlobalCrud) return true;
+    if (orgAccess.sbuSubCrud.size > 0) {
+      return orgAccess.sbuSubCrud.has(id);
+    }
+    return orgScope.sbuSubCrud;
+  };
   const { showToast } = useToast();
   const navigate = useNavigate();
-
-  /* ---------------- GET PROFILE (ROLE) ---------------- */
-  useEffect(() => {
-    const getProfile = async () => {
-      try {
-        const res = await apiFetch("/profile", { credentials: "include" });
-        const json = await res.json();
-        if (!res.ok) {
-          setRoleLevel(null);
-          return;
-        }
-        setRoleLevel(json?.response?.roleLevel ?? null);
-      } catch (err) {
-        console.error("Gagal mengambil profil:", err);
-      }
-    };
-    getProfile();
-  }, []);
 
   /* ---------------- FETCH SUB-SBU DATA ---------------- */
   const fetchSbuSub = async (sbuId: string) => {
@@ -131,14 +131,24 @@ const SBUSUBPage = () => {
   };
 
   useEffect(() => {
+    if (accessLoading || !canRead) return;
     if (sbuId) fetchSbuSub(sbuId);
-  }, [sbuId]);
+  }, [accessLoading, canRead, sbuId]);
 
   useEffect(() => {
+    if (accessLoading) return;
+    if (!canRead) {
+      setData([]);
+      setLoading(false);
+    }
+  }, [accessLoading, canRead]);
+
+  useEffect(() => {
+    if (accessLoading || !canRead) return;
     fetchEmployees();
     fetchJabatans();
     fetchSBUList();
-  }, []);
+  }, [accessLoading, canRead]);
 
   /* ---------------- FORM STATE ---------------- */
   const [showForm, setShowForm] = useState(false);
@@ -265,13 +275,15 @@ const SBUSUBPage = () => {
   };
 
   /* ---------------- FILTER ---------------- */
-  const filtered = data.filter(
-    (item) =>
-      item.sbuSubCode.toLowerCase().includes(search.toLowerCase()) ||
-      item.sbuSubName.toLowerCase().includes(search.toLowerCase()) ||
-      (item.description ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (item.jobDesc ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = canRead
+    ? data.filter(
+      (item) =>
+        item.sbuSubCode.toLowerCase().includes(search.toLowerCase()) ||
+        item.sbuSubName.toLowerCase().includes(search.toLowerCase()) ||
+        (item.description ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (item.jobDesc ?? "").toLowerCase().includes(search.toLowerCase())
+    )
+    : [];
 
   const getPicName = (id: number | null) => {
     const emp = employees.find((e) => e.UserId === id);
@@ -341,11 +353,11 @@ const SBUSUBPage = () => {
             </div>
           </div>
 
-          {isAdmin && (
+          {canCreate && (
             <button
               onClick={openAdd}
               className="px-4 py-2 bg-[#272e79] hover:bg-white hover:border hover:border-[#272e79]
-            hover:text-[#272e79] text-white rounded-xl shadow"
+              hover:text-[#272e79] text-white rounded-xl shadow"
             >
               + Tambah Sub
             </button>
@@ -367,7 +379,7 @@ const SBUSUBPage = () => {
           <p className="text-gray-500 animate-pulse">Loading data...</p>
         ) : filtered.length === 0 ? (
           <p className="text-gray-500 text-center mt-10">
-            Tidak ada data ditemukan.
+            {canRead ? "Tidak ada data ditemukan." : "Tidak ada akses untuk SBU Sub."}
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -419,7 +431,7 @@ const SBUSUBPage = () => {
                   </div>
                 </div>
 
-                {isAdmin && (
+                {canCrudItem(item.id) && (
                   <div className="flex gap-2 mt-4 justify-end">
                     <button
                       onClick={(e) => {
