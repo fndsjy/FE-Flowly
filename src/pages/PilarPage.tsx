@@ -40,14 +40,22 @@ const PilarPage = () => {
   const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
   const pilarModuleLevel = moduleAccessMap.get("PILAR");
   const sbuModuleLevel = moduleAccessMap.get("SBU");
-  const canRead = isAdmin
+  const hasPilarModuleRead = isAdmin
     || pilarModuleLevel === "READ"
-    || pilarModuleLevel === "CRUD"
-    || orgScope.pilarRead;
-  const hasGlobalCrud = isAdmin || pilarModuleLevel === "CRUD";
-  const canCreate = hasGlobalCrud || orgScope.pilarCrud || orgAccess.pilarCrud.size > 0;
+    || pilarModuleLevel === "CRUD";
+  const hasPilarModuleCrud = isAdmin || pilarModuleLevel === "CRUD";
+  const hasSbuModuleRead = isAdmin
+    || sbuModuleLevel === "READ"
+    || sbuModuleLevel === "CRUD";
+  const hasPilarOrgRead = isAdmin
+    || orgScope.pilarRead
+    || orgAccess.pilarRead.size > 0
+    || orgAccess.pilarCrud.size > 0;
+  const canRead = hasPilarModuleRead && hasPilarOrgRead;
+  const canCreate = hasPilarModuleCrud;
   const canCrudItem = (id: string) => {
-    if (hasGlobalCrud) return true;
+    if (!hasPilarModuleCrud) return false;
+    if (isAdmin) return true;
     const numericId = Number(id);
     if (Number.isNaN(numericId)) return false;
     if (orgAccess.pilarCrud.size > 0) {
@@ -55,10 +63,8 @@ const PilarPage = () => {
     }
     return orgScope.pilarCrud;
   };
-  const canReadSbu = isAdmin
-    || sbuModuleLevel === "READ"
-    || sbuModuleLevel === "CRUD"
-    || orgScope.sbuRead;
+  const canReadSbu = hasSbuModuleRead
+    && (isAdmin || orgScope.sbuRead || orgAccess.sbuRead.size > 0);
 
   /* ------------------------- FETCH DATA ------------------------- */
   const fetchData = async () => {

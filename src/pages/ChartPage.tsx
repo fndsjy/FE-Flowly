@@ -5,6 +5,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
 import { apiFetch } from "../lib/api";
+import { useAccessSummary } from "../hooks/useAccessSummary";
 
 // Interfaces tetap sama
 interface ChartNode {
@@ -85,8 +86,11 @@ const ChartPage = () => {
   const [chartMembers, setChartMembers] = useState<Record<string, ChartMember[]>>({});
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
-  const [roleLevel, setRoleLevel] = useState<number | null>(null);
-  const isAdmin = roleLevel === 1;
+  const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
+  const chartModuleLevel = moduleAccessMap.get("CHART");
+  const chartMemberModuleLevel = moduleAccessMap.get("CHART_MEMBER");
+  const hasChartModuleCrud = isAdmin || chartModuleLevel === "CRUD";
+  const hasChartMemberModuleCrud = isAdmin || chartMemberModuleLevel === "CRUD";
   const { showToast } = useToast();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartContentRef = useRef<HTMLDivElement>(null);
@@ -94,21 +98,6 @@ const ChartPage = () => {
   const chartScrollInnerRef = useRef<HTMLDivElement>(null);
   const isSyncingScrollRef = useRef(false);
   const panStateRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
-
-  /* ---------------- FETCH PROFILE ---------------- */
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await apiFetch("/profile", { method: "GET", credentials: "include" });
-        if (!res.ok) return;
-        const json = await res.json();
-        setRoleLevel(json.response?.roleLevel ?? null);
-      } catch (err) {
-        console.error("Gagal mengambil profil:", err);
-      }
-    };
-    fetchProfile();
-  }, []);
 
   /* ---------------- FETCH MASTER DATA ---------------- */
   useEffect(() => {
@@ -549,6 +538,32 @@ const ChartPage = () => {
   const currentSbuSub = sbuSubMap.get(selectedSbuSub ?? 0);
   const currentSbu = currentSbuSub ? sbuMap.get(currentSbuSub.sbuId) : null;
   const currentPilar = currentSbu ? pilarMap.get(currentSbu.sbuPilar) : null;
+  const hasOrgCrud = useMemo(() => {
+    if (isAdmin) return true;
+    if (!selectedSbuSub) return false;
+
+    const fallbackNode = data.find((node) => node.sbuSubId === selectedSbuSub);
+    const sbuId = currentSbuSub?.sbuId ?? fallbackNode?.sbuId;
+    const pilarId = currentSbuSub?.sbuPilar ?? fallbackNode?.pilarId;
+    const hasSbuSubCrud = orgAccess.sbuSubCrud.size > 0
+      ? orgAccess.sbuSubCrud.has(selectedSbuSub)
+      : orgScope.sbuSubCrud;
+    const hasSbuCrud = sbuId !== undefined && sbuId !== null
+      ? (orgAccess.sbuCrud.size > 0
+        ? orgAccess.sbuCrud.has(sbuId)
+        : orgScope.sbuCrud)
+      : false;
+    const hasPilarCrud = pilarId !== undefined && pilarId !== null
+      ? (orgAccess.pilarCrud.size > 0
+        ? orgAccess.pilarCrud.has(pilarId)
+        : orgScope.pilarCrud)
+      : false;
+
+    return hasSbuSubCrud || hasSbuCrud || hasPilarCrud;
+  }, [isAdmin, selectedSbuSub, currentSbuSub, data, orgAccess, orgScope]);
+  const canCrudChart = !accessLoading && hasChartModuleCrud && hasOrgCrud;
+  const canCrudChartMember = !accessLoading && hasChartMemberModuleCrud && hasOrgCrud;
+  const canAddRoot = canCrudChart;
 
   const getPicName = (picId: number | null | undefined) => {
     if (!picId) return null;
@@ -748,7 +763,7 @@ const ChartPage = () => {
                 </div>
               </div>
 
-              {isAdmin && (
+              {canCrudChartMember && (
                 <div className="flex gap-1">
                   <button
                     title="Assign / Ubah anggota"
@@ -760,7 +775,7 @@ const ChartPage = () => {
                   >
                     Assign
                   </button>
-                  {employeeUserId !== null && (
+                  {isAdmin && employeeUserId !== null && (
                     <button
                       title="Edit job description"
                       onClick={(e) => {
@@ -806,7 +821,7 @@ const ChartPage = () => {
         })}
       </div>
 
-      {isAdmin && (
+      {canCrudChart && (
         <div className="mt-3 flex justify-center gap-1">
           <button
             onClick={(e) => {
@@ -1025,7 +1040,7 @@ const ChartPage = () => {
             </h1>
           </div>
 
-          {isAdmin && (
+          {canAddRoot && (
             <button
               onClick={() => openAddModal(null)}
               className="px-3 py-2 md:px-4 md:py-2 flex items-center gap-1 md:gap-2 bg-[#272e79] text-white rounded-xl shadow hover:bg-white hover:text-[#272e79] hover:border hover:border-[#272e79] text-sm md:text-base"
@@ -1146,7 +1161,7 @@ const ChartPage = () => {
                     <i className="fa-solid fa-sitemap text-3xl opacity-30"></i>
                   </div>
                   <p className="text-gray-600">Belum ada struktur organisasi.</p>
-                  {isAdmin && (
+                  {canAddRoot && (
                     <button
                       onClick={() => openAddModal(null)}
                       className="mt-3 px-4 py-2 bg-rose-400 text-white rounded-lg text-sm hover:bg-rose-500"

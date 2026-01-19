@@ -54,23 +54,24 @@ const SBUSUBPage = () => {
   const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
   const sbuSubModuleLevel = moduleAccessMap.get("SBU_SUB");
   const { sbuId } = useParams<{ sbuId: string }>();
-  const canRead = isAdmin
+  const hasSbuSubModuleRead = isAdmin
     || sbuSubModuleLevel === "READ"
-    || sbuSubModuleLevel === "CRUD"
-    || orgScope.sbuSubRead;
-  const hasGlobalCrud = isAdmin || sbuSubModuleLevel === "CRUD";
-  const canCreate = hasGlobalCrud
-    || (sbuId
-      ? (orgAccess.sbuCrud.size > 0
-        ? orgAccess.sbuCrud.has(Number(sbuId))
-        : orgScope.sbuCrud)
-      : false);
+    || sbuSubModuleLevel === "CRUD";
+  const hasSbuSubModuleCrud = isAdmin || sbuSubModuleLevel === "CRUD";
+  const hasSbuSubOrgRead = isAdmin
+    || orgScope.sbuSubRead
+    || orgAccess.sbuSubRead.size > 0
+    || orgAccess.sbuSubCrud.size > 0;
+  const canRead = hasSbuSubModuleRead && hasSbuSubOrgRead;
+  const canCreate = hasSbuSubModuleCrud;
   const canCrudItem = (id: number) => {
-    if (hasGlobalCrud) return true;
-    if (orgAccess.sbuSubCrud.size > 0) {
-      return orgAccess.sbuSubCrud.has(id);
-    }
-    return orgScope.sbuSubCrud;
+    if (!hasSbuSubModuleCrud) return false;
+    if (isAdmin) return true;
+    const hasExplicitAccess = orgAccess.sbuSubRead.size > 0 || orgAccess.sbuSubCrud.size > 0;
+    if (!hasExplicitAccess) return true;
+    if (orgAccess.sbuSubCrud.has(id)) return true;
+    if (orgAccess.sbuSubRead.has(id)) return false;
+    return true;
   };
   const { showToast } = useToast();
   const navigate = useNavigate();
