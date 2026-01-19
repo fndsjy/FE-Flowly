@@ -54,9 +54,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   const {
     loading: accessLoading,
     isAdmin: accessIsAdmin,
-    menuAccessMap,
-    moduleAccessMap,
-    orgScope
+    menuAccessMap
   } = useAccessSummary();
   const navigate = useNavigate();
 
@@ -140,27 +138,18 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     if (item.resourceType !== "MENU") {
       return false;
     }
+    if (accessLoading) {
+      return false;
+    }
     const isAdmin = accessIsAdmin || user?.roleLevel === 1;
-    const hasOrgModuleAccess = moduleAccessMap.has("PILAR")
-      || moduleAccessMap.has("SBU")
-      || moduleAccessMap.has("SBU_SUB")
-      || orgScope.pilarRead
-      || orgScope.sbuRead
-      || orgScope.sbuSubRead;
-    if (item.resourceKey === "ORGANISASI") {
-      if (accessLoading) {
-        return false;
-      }
-      return isAdmin
-        || (menuAccessMap.has("ORGANISASI") && hasOrgModuleAccess);
+    if (isAdmin) {
+      return true;
     }
-    if (item.resourceKey === "ADMIN") {
-      if (accessLoading) {
-        return false;
-      }
-      return isAdmin || menuAccessMap.has("ADMIN");
+    const normalizedKey = item.resourceKey.toUpperCase();
+    if (normalizedKey === "ADMIN") {
+      return false;
     }
-    return true;
+    return menuAccessMap.has(normalizedKey);
   });
 
   return (

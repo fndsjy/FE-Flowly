@@ -27,12 +27,14 @@ interface AccessRoleData {
 interface RoleData {
   roleId: string;
   roleName: string;
+  roleLevel: number;
 }
 
 interface UserData {
   userId: string;
   username: string;
   name: string;
+  roleName?: string;
 }
 
 interface EmployeeData {
@@ -107,6 +109,11 @@ const buildAccessKey = (resourceType: ResourceType, resourceKey: string) =>
 const parseAccessKey = (value: string): { resourceType: ResourceType; resourceKey: string } => {
   const [resourceType, ...rest] = value.split("::");
   return { resourceType: resourceType as ResourceType, resourceKey: rest.join("::") };
+};
+
+const normalizeRoleName = (value?: string | null) => {
+  if (!value) return "";
+  return value.trim().toUpperCase();
 };
 
 const AccessRolePage = () => {
@@ -333,7 +340,9 @@ const AccessRolePage = () => {
     return employeeMap.get(selectedSubject.id) ?? selectedSubject.id;
   }, [selectedSubject, roleMap, userMap, employeeMap]);
 
-  const resolveResourceKeyFromAccess = (item: AccessRoleData) => {
+  const resolveResourceKeyFromAccess = (
+    item: AccessRoleData
+  ): { resourceType: ResourceType; resourceKey: string } | null => {
     const resourceType = item.resourceType?.toUpperCase();
     if (!resourceType || !["MENU", "MODULE", "PILAR", "SBU", "SBU_SUB"].includes(resourceType)) {
       return null;
@@ -427,6 +436,8 @@ const AccessRolePage = () => {
         setAccessRoles(list.filter((item: AccessRoleData) => !item.isDeleted));
       }
 
+      let adminRoleNames = new Set<string>();
+
       if (!roleRes.ok) {
         showToast(
           roleJson?.issues?.[0]?.message ||
@@ -437,7 +448,14 @@ const AccessRolePage = () => {
           "error"
         );
       } else {
-        setRoles(Array.isArray(roleJson.response) ? roleJson.response : []);
+        const list = Array.isArray(roleJson.response) ? roleJson.response : [];
+        adminRoleNames = new Set(
+          list
+            .filter((role: RoleData) => role.roleLevel === 1)
+            .map((role: RoleData) => normalizeRoleName(role.roleName))
+            .filter((name: string) => name.length > 0)
+        );
+        setRoles(list.filter((role: RoleData) => role.roleLevel !== 1));
       }
 
       if (!userRes.ok) {
@@ -450,7 +468,16 @@ const AccessRolePage = () => {
           "error"
         );
       } else {
-        setUsers(Array.isArray(userJson.response) ? userJson.response : []);
+        const list = Array.isArray(userJson.response) ? userJson.response : [];
+        const filtered = list.filter((user: UserData) => {
+          const roleName = normalizeRoleName(user.roleName);
+          if (!roleName) return true;
+          if (adminRoleNames.size > 0) {
+            return !adminRoleNames.has(roleName);
+          }
+          return roleName !== "ADMIN";
+        });
+        setUsers(filtered);
       }
 
       if (!employeeRes.ok) {
@@ -556,7 +583,12 @@ const AccessRolePage = () => {
 
   useEffect(() => {
     if (selectedSubject && selectedSubject.type === subjectType) {
-      return;
+      const exists = subjectItems.some(
+        (item) => item.type === selectedSubject.type && item.id === selectedSubject.id
+      );
+      if (exists) {
+        return;
+      }
     }
 
     const first = subjectItems[0];
@@ -682,7 +714,7 @@ const AccessRolePage = () => {
     }
 
     if (updates.length === 0 && deactivations.length === 0 && creations.length === 0) {
-      showToast("Tidak ada perubahan akses.", "info");
+      showToast("Tidak ada perubahan akses.");
       return;
     }
 
@@ -771,8 +803,25 @@ const AccessRolePage = () => {
     }
   };
 
-  const renderOptions = (resourceType: ResourceType, key: string) => {
+  const getModuleSelection = (resourceType: ResourceType) => {
+    if (!["PILAR", "SBU", "SBU_SUB"].includes(resourceType)) {
+      return null;
+    }
+    const moduleKey = buildAccessKey("MODULE", resourceType);
+    return accessSelections[moduleKey] ?? "NONE";
+  };
+
+  const renderOptions = (resourceType: ResourceType, key: string, resourceKey: string) => {
     const value = accessSelections[key] ?? "NONE";
+    const moduleSelection = getModuleSelection(resourceType);
+    const adminKey = resourceKey.trim().toUpperCase();
+    const isAdminMenu = resourceType === "MENU" && adminKey.startsWith("ADMIN");
+    const isAdminModule = resourceType === "MODULE" && adminKey.startsWith("ADMIN_");
+    const isAdminResource = isAdminMenu || isAdminModule;
+    const disableAll = moduleSelection === "NONE";
+    const disableCrud = moduleSelection === "READ";
+    const isUserSubject = selectedSubject?.type === "USER";
+    const moduleLabel = resourceTypeLabels[resourceType];
     const options: Array<{ value: AccessChoice; label: string }> =
       resourceType === "MENU"
         ? [
@@ -787,18 +836,40 @@ const AccessRolePage = () => {
 
     return (
       <div className="flex flex-wrap items-center gap-3">
-        {options.map((option) => (
-          <label key={option.value} className="flex items-center gap-2 text-sm">
+        {options.map((option) => {
+          const isCrudOption = option.value === "CRUD";
+          const disableCrudBySubject = isCrudOption && isUserSubject;
+          const isDisabled =
+            isAdminResource || disableAll || (isCrudOption && (disableCrud || disableCrudBySubject));
+          const reason = isAdminResource
+            ? "Resource Administrator hanya untuk admin."
+            : disableAll
+              ? `Aktifkan module ${moduleLabel} dulu.`
+              : isCrudOption && disableCrud
+                ? "CRUD butuh module CRUD."
+                : disableCrudBySubject
+                  ? "CRUD khusus ROLE/ADMIN."
+                  : undefined;
+          return (
+            <label
+              key={option.value}
+              className={`flex items-center gap-2 text-sm ${
+                isDisabled ? "text-gray-400 cursor-not-allowed" : ""
+              }`}
+              title={reason}
+            >
             <input
               type="radio"
               name={`access-${key}`}
               checked={value === option.value}
+              disabled={isDisabled}
               onChange={() => handleSelectionChange(key, option.value)}
-              className="accent-[#272e79]"
+              className={`accent-[#272e79] ${isDisabled ? "cursor-not-allowed" : ""}`}
             />
             {option.label}
           </label>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -935,6 +1006,10 @@ const AccessRolePage = () => {
                         {items.map((item) => {
                           const key = buildAccessKey(item.resourceType, item.resourceKey);
                           const existing = existingAccessMap[key];
+                          const adminKey = item.resourceKey.trim().toUpperCase();
+                          const isAdminResource =
+                            (item.resourceType === "MENU" && adminKey.startsWith("ADMIN")) ||
+                            (item.resourceType === "MODULE" && adminKey.startsWith("ADMIN_"));
                           return (
                             <div
                               key={key}
@@ -950,8 +1025,8 @@ const AccessRolePage = () => {
                               </div>
 
                               <div className="flex flex-wrap items-center gap-4">
-                                {renderOptions(item.resourceType, key)}
-                                {existing && (
+                                {renderOptions(item.resourceType, key, item.resourceKey)}
+                                {existing && !isAdminResource && (
                                   <button
                                     type="button"
                                     onClick={() =>
