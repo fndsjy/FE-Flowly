@@ -116,6 +116,8 @@ const normalizeRoleName = (value?: string | null) => {
   return value.trim().toUpperCase();
 };
 
+const normalizeKey = (value?: string | null) => (value ?? "").trim().toUpperCase();
+
 const AccessRolePage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
@@ -226,11 +228,14 @@ const AccessRolePage = () => {
     });
   }, [subjectItems, subjectSearch]);
 
+  const hideOrgResources = subjectType === "USER";
+
   const resourceItems = useMemo<ResourceItem[]>(() => {
     const list: ResourceItem[] = [];
 
     const menuList = [...menus]
       .filter((item) => !item.isDeleted)
+      .filter((item) => !hideOrgResources || normalizeKey(item.resourceKey) !== "ORGANISASI")
       .sort((a, b) => a.orderIndex - b.orderIndex);
     for (const menu of menuList) {
       list.push({
@@ -243,6 +248,15 @@ const AccessRolePage = () => {
 
     const moduleList = [...modules]
       .filter((item) => !item.isDeleted)
+      .filter((item) => {
+        if (!hideOrgResources) return true;
+        const key = normalizeKey(item.resourceKey);
+        return key !== "PILAR"
+          && key !== "SBU"
+          && key !== "SBU_SUB"
+          && key !== "CHART"
+          && key !== "CHART_MEMBER";
+      })
       .sort((a, b) => a.orderIndex - b.orderIndex);
     for (const moduleItem of moduleList) {
       list.push({
@@ -253,6 +267,10 @@ const AccessRolePage = () => {
           ? `${moduleItem.resourceKey} | ${moduleItem.parentKey}`
           : moduleItem.resourceKey,
       });
+    }
+
+    if (hideOrgResources) {
+      return list;
     }
 
     const pilarList = [...pilars].sort((a, b) =>
@@ -299,7 +317,7 @@ const AccessRolePage = () => {
     }
 
     return list;
-  }, [menus, modules, pilars, sbus, sbuSubs, pilarMap, sbuMap]);
+  }, [menus, modules, pilars, sbus, sbuSubs, pilarMap, sbuMap, hideOrgResources]);
 
   const filteredResources = useMemo(() => {
     const term = resourceSearch.trim().toLowerCase();
@@ -874,7 +892,9 @@ const AccessRolePage = () => {
     );
   };
 
-  const orderedResourceTypes: ResourceType[] = ["MENU", "MODULE", "PILAR", "SBU", "SBU_SUB"];
+  const orderedResourceTypes: ResourceType[] = hideOrgResources
+    ? ["MENU", "MODULE"]
+    : ["MENU", "MODULE", "PILAR", "SBU", "SBU_SUB"];
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -893,7 +913,9 @@ const AccessRolePage = () => {
                 Manajemen Hak Akses
               </h1>
               <p className="text-sm text-gray-500">
-                Pilih subject, lalu atur akses menu, module, dan organisasi.
+                {hideOrgResources
+                  ? "Pilih subject, lalu atur akses menu dan module."
+                  : "Pilih subject, lalu atur akses menu, module, dan organisasi."}
               </p>
             </div>
           </div>
