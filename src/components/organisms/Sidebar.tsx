@@ -59,6 +59,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   const navigate = useNavigate();
 
   const location = useLocation();
+  const publicMenuKeys = new Set(["PROSEDUR"]);
 
   /* ---------------- FETCH USER PROFILE ---------------- */
   useEffect(() => {
@@ -148,6 +149,9 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     const normalizedKey = item.resourceKey.toUpperCase();
     if (normalizedKey === "ADMIN") {
       return false;
+    }
+    if (publicMenuKeys.has(normalizedKey)) {
+      return true;
     }
     return menuAccessMap.has(normalizedKey);
   });
@@ -301,8 +305,8 @@ const getMenuIcon = (resourceKey: string) => {
   switch (resourceKey) {
     case "ORGANISASI":
       return <OrganizationIcon />;
-    case "SOP":
-      return <SOPIcon />;
+    case "PROSEDUR":
+      return <ProsedurIcon />;
     case "A3":
       return <A3Icon />;
     case "ABSENSI":
@@ -331,7 +335,7 @@ const OrganizationIcon = () => (
   </svg>
 );
 
-const SOPIcon = () => (
+const ProsedurIcon = () => (
   <i className="fa-solid fa-file h-5 w-4 mx-auto ml-1"></i>
 );
 

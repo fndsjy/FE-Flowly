@@ -40,6 +40,7 @@ export type AccessSummary = {
   isAdmin: boolean;
   menuAccess: AccessSummaryItem[];
   moduleAccess: AccessSummaryItem[];
+  focusPilarIds: number[];
   orgScope: OrgScopeSummary;
   orgAccess: OrgAccessSummary;
 };
@@ -66,6 +67,7 @@ const defaultSummary: AccessSummary = {
   isAdmin: false,
   menuAccess: [],
   moduleAccess: [],
+  focusPilarIds: [],
   orgScope: defaultOrgScope,
   orgAccess: defaultOrgAccess,
 };
@@ -100,6 +102,7 @@ export const useAccessSummary = () => {
           moduleAccess: Array.isArray(data.response.moduleAccess)
             ? data.response.moduleAccess
             : [],
+          focusPilarIds: normalizeIdList(data.response.focusPilarIds),
           orgScope: {
             ...defaultOrgScope,
             ...(data.response.orgScope ?? {}),
@@ -175,11 +178,16 @@ export const useAccessSummary = () => {
     };
   }, [summary.orgAccess]);
 
+  const focusPilarIds = useMemo(() => {
+    return new Set(summary.focusPilarIds);
+  }, [summary.focusPilarIds]);
+
   return {
     loading,
     isAdmin: summary.isAdmin,
     menuAccessMap,
     moduleAccessMap,
+    focusPilarIds,
     orgScope: summary.orgScope ?? defaultOrgScope,
     orgAccess,
   };

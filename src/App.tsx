@@ -1,7 +1,7 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import SOPPage from './pages/SOPPage';
+import ProsedurPage from './pages/ProsedurPage';
 import A3Page from './pages/A3Page';
 import AbsensiPage from './pages/AbsensiPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -13,6 +13,7 @@ import ChartPage from './pages/ChartPage';
 import { ToastProvider } from './components/organisms/MessageToast';
 import AdministratorPage from './pages/AdministratorPage';
 import ProtectedAdminRoute from './ProtectedAdminRoute';
+import AuditLogPage from './pages/AuditLogPage';
 import UserListPage from './pages/UserListPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import PilarPage from './pages/PilarPage';
@@ -33,7 +34,7 @@ const App = () => {
           <Route path="/pilar/sbu/:pilarId" element={<SBUPage />} />
           <Route path="/pilar/sbu/sbu_sub/:sbuId" element={<SBUSUBPage />} />
           <Route path="/pilar/sbu/sbu_sub/organisasi/:sbuSubId" element={<ChartPage />} />
-          <Route path="/sop" element={<SOPPage />} />
+          <Route path="/prosedur" element={<ProsedurPage />} />
           <Route path="/a3" element={<A3Page />} />
           <Route path="/absensi" element={<AbsensiPage />} />
           <Route path="/me" element={<ChangePasswordPage />} />
@@ -41,6 +42,7 @@ const App = () => {
           <Route path="/administrator/users" element={<ProtectedAdminRoute><UserListPage /></ProtectedAdminRoute>} />
           <Route path="/administrator/jabatan" element={<ProtectedAdminRoute><JabatanListPage /></ProtectedAdminRoute>} />
           <Route path="/administrator/access-role" element={<ProtectedAdminRoute><AccessRolePage /></ProtectedAdminRoute>} />
+          <Route path="/administrator/audit-log" element={<ProtectedAdminRoute><AuditLogPage /></ProtectedAdminRoute>} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
