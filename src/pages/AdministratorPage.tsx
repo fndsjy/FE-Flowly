@@ -159,6 +159,8 @@ const getAdminModuleIcon = (resourceKey: string) => {
       return "fa-solid fa-briefcase";
     case "ADMIN_ACCESS_ROLE":
       return "fa-solid fa-lock";
+    case "ADMIN_AUDIT_LOG":
+      return "fa-solid fa-clipboard-list";
     default:
       return "fa-solid fa-gear";
   }
