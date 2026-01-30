@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
@@ -45,6 +46,7 @@ const accentColor = "#2563eb";
 const ProsedurPage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
+  const navigate = useNavigate();
 
   const [data, setData] = useState<SbuSub[]>([]);
   const [loading, setLoading] = useState(true);
@@ -266,7 +268,16 @@ const ProsedurPage = () => {
           return (
             <div
               key={item.id}
-              className={`group relative rounded-3xl border p-5 shadow-lg shadow-gray transition duration-300 hover:-translate-y-1 hover:shadow-xl ${
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/prosedur/sop/${item.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigate(`/prosedur/sop/${item.id}`);
+                }
+              }}
+              className={`group relative rounded-3xl border p-5 shadow-lg shadow-gray transition duration-300 hover:-translate-y-1 hover:shadow-xl cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 ${
                 isFocus
                   ? "border-blue-200/80 bg-gradient-to-br from-blue-50/80 via-white to-blue-50/40"
                   : "border-slate-200/80 bg-white"
@@ -326,7 +337,10 @@ const ProsedurPage = () => {
                     {(item.jobDesc.length > 140 || item.jobDesc.split("\n").length > 3) && (
                       <button
                         type="button"
-                        onClick={() => toggleJobDesc(item.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleJobDesc(item.id);
+                        }}
                         className="mt-2 text-xs font-semibold text-blue-700 hover:underline"
                       >
                         {expandedJobDesc[item.id] ? "Sembunyikan" : "Lihat semua"}
@@ -343,6 +357,10 @@ const ProsedurPage = () => {
                     Jabatan:{" "}
                     <strong className="text-slate-700 font-semibold">{getJabatanName(item.jabatan)}</strong>
                   </span>
+                </div>
+                <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-semibold text-blue-700">Lihat SOP</span>
+                  <i className="fa-solid fa-arrow-right text-blue-500"></i>
                 </div>
               </div>
             </div>
