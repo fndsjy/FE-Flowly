@@ -237,27 +237,30 @@ const AuditLogPage = () => {
               Audit Log
             </h1>
           </div>
-          <div className="text-sm text-gray-500">
-            Total {total} aktivitas
-          </div>
         </div>
 
-        <form onSubmit={handleSearch} className="mb-6 flex flex-wrap gap-3">
-          <input
-            type="text"
-            placeholder="Cari module, entity, action, actor..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full md:w-1/2 px-4 py-2 rounded-xl bg-white border-2 border-gray-200
-              focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
-          />
-          <button
-            type="submit"
-            className="rounded-xl bg-[#272e79] px-4 py-2 text-white shadow hover:bg-[#1f255e] transition"
-          >
-            Cari
-          </button>
-        </form>
+        <div className="flex flex-row items-center justify-between">
+          <form onSubmit={handleSearch} className="mb-6 flex flex-wrap gap-3 w-3/4">
+            <input
+              type="text"
+              placeholder="Cari module, entity, action, actor..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full md:w-1/2 px-4 py-2 rounded-xl bg-white border-2 border-gray-200
+                focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-[#272e79] px-4 py-2 text-white shadow hover:bg-[#1f255e] transition"
+            >
+              Cari
+            </button>
+          </form>
+          <div className="text-sm text-gray-500">
+              Total {total} aktivitas
+          </div>
+        </div>
+        
 
         <div className="bg-white rounded-2xl shadow-lg shadow-gray-200 overflow-hidden">
           <div className="grid grid-cols-1 lg:grid-cols-[160px_160px_160px_1fr_140px] gap-4 px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-100">

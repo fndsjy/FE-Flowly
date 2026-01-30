@@ -2,6 +2,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import ProsedurPage from './pages/ProsedurPage';
+import ProcedureSopPage from './pages/ProcedureSopPage';
+import MasterIkPage from './pages/MasterIkPage';
 import A3Page from './pages/A3Page';
 import AbsensiPage from './pages/AbsensiPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -35,6 +37,8 @@ const App = () => {
           <Route path="/pilar/sbu/sbu_sub/:sbuId" element={<SBUSUBPage />} />
           <Route path="/pilar/sbu/sbu_sub/organisasi/:sbuSubId" element={<ChartPage />} />
           <Route path="/prosedur" element={<ProsedurPage />} />
+          <Route path="/prosedur/sop/:sbuSubId" element={<ProcedureSopPage />} />
+          <Route path="/prosedur/master-ik" element={<MasterIkPage />} />
           <Route path="/a3" element={<A3Page />} />
           <Route path="/absensi" element={<AbsensiPage />} />
           <Route path="/me" element={<ChangePasswordPage />} />
