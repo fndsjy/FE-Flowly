@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { openIkPreviewWindow } from "../lib/ik-preview";
 
 type ProcedureSopItem = {
   sopId: string;
@@ -42,6 +43,19 @@ type SbuItem = {
 type PilarItem = {
   id: number;
   pilarName: string;
+};
+
+type SopIkItem = {
+  ikId: string;
+  ikName: string;
+  ikNumber: string;
+  effectiveDate: string;
+  isActive: boolean;
+  isDeleted: boolean;
+  ikContent?: string | null;
+  dibuatOlehName?: string | null;
+  diketahuiOlehName?: string | null;
+  disetujuiOlehName?: string | null;
 };
 
 type SopFormData = {
@@ -119,6 +133,11 @@ const ProcedureSopPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [expandedSopId, setExpandedSopId] = useState<string | null>(null);
+  const [sopIkMap, setSopIkMap] = useState<Record<string, SopIkItem[]>>({});
+  const [sopIkLoadingMap, setSopIkLoadingMap] = useState<Record<string, boolean>>({});
+  const [sopIkSearchMap, setSopIkSearchMap] = useState<Record<string, string>>({});
+  const [sopIkVisibleMap, setSopIkVisibleMap] = useState<Record<string, number>>({});
 
   const [contextLoading, setContextLoading] = useState(true);
   const [sbuSub, setSbuSub] = useState<SbuSubItem | null>(null);
@@ -203,6 +222,46 @@ const ProcedureSopPage = () => {
     }
   };
 
+  const fetchSopIks = async (sopId: string): Promise<SopIkItem[]> => {
+    try {
+      const res = await apiFetch(`/master-ik?sopId=${encodeURIComponent(sopId)}`, {
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(
+          json?.issues?.[0]?.message ||
+            json?.error ||
+            json?.errors ||
+            json?.message ||
+            "Gagal memuat IK",
+          "error"
+        );
+        return [];
+      }
+      const list = Array.isArray(json?.response) ? json.response : [];
+      return list;
+    } catch (err) {
+      console.error("Error fetching IK:", err);
+      showToast("Gagal memuat IK", "error");
+      return [];
+    }
+  };
+
+  const toggleIkList = async (sopId: string) => {
+    if (expandedSopId === sopId) {
+      setExpandedSopId(null);
+      return;
+    }
+    setExpandedSopId(sopId);
+    setSopIkSearchMap((prev) => ({ ...prev, [sopId]: "" }));
+    setSopIkVisibleMap((prev) => ({ ...prev, [sopId]: 5 }));
+    setSopIkLoadingMap((prev) => ({ ...prev, [sopId]: true }));
+    const list = await fetchSopIks(sopId);
+    setSopIkMap((prev) => ({ ...prev, [sopId]: list }));
+    setSopIkLoadingMap((prev) => ({ ...prev, [sopId]: false }));
+  };
+
   const fetchContext = async () => {
     if (!sbuSubIdNumber) {
       setContextLoading(false);
@@ -265,6 +324,14 @@ const ProcedureSopPage = () => {
 
   useEffect(() => {
     fetchContext();
+  }, [sbuSubIdNumber]);
+
+  useEffect(() => {
+    setExpandedSopId(null);
+    setSopIkMap({});
+    setSopIkLoadingMap({});
+    setSopIkSearchMap({});
+    setSopIkVisibleMap({});
   }, [sbuSubIdNumber]);
 
   const activeCount = useMemo(() => {
@@ -664,6 +731,19 @@ const ProcedureSopPage = () => {
               const statusClass = item.isActive
                 ? "bg-emerald-100 text-emerald-700"
                 : "bg-slate-200 text-slate-600";
+              const ikSearchTerm = (sopIkSearchMap[item.sopId] ?? "").trim().toLowerCase();
+              const ikVisibleCount = sopIkVisibleMap[item.sopId] ?? 5;
+              const ikRawList = sopIkMap[item.sopId] ?? [];
+              const ikFilteredList = !ikSearchTerm
+                ? ikRawList
+                : ikRawList.filter((ik) => {
+                    return (
+                      ik.ikName.toLowerCase().includes(ikSearchTerm) ||
+                      ik.ikNumber.toLowerCase().includes(ikSearchTerm)
+                    );
+                  });
+              const ikVisibleList = ikFilteredList.slice(0, ikVisibleCount);
+              const ikHasMore = ikFilteredList.length > ikVisibleList.length;
               return (
                 <div
                   key={item.sopId}
@@ -720,6 +800,13 @@ const ProcedureSopPage = () => {
                     <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-slate-500">
                       {/* <span>SOP ID: {item.sopId}</span> */}
                       <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleIkList(item.sopId)}
+                          className="px-3 py-1 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
+                        >
+                          {expandedSopId === item.sopId ? "Tutup IK" : "Lihat IK"}
+                        </button>
                         {canOpenFile && (
                           <a
                             href={fileUrl}
@@ -756,6 +843,118 @@ const ProcedureSopPage = () => {
                         )}
                       </div>
                     </div>
+
+                    {expandedSopId === item.sopId && (
+                      <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                              Daftar IK
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {ikFilteredList.length} IK ditemukan
+                            </p>
+                          </div>
+                          <input
+                            type="text"
+                            value={sopIkSearchMap[item.sopId] ?? ""}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setSopIkSearchMap((prev) => ({ ...prev, [item.sopId]: value }));
+                              setSopIkVisibleMap((prev) => ({ ...prev, [item.sopId]: 5 }));
+                            }}
+                            className="w-full md:w-56 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+                            placeholder="Cari IK..."
+                          />
+                        </div>
+                        {sopIkLoadingMap[item.sopId] ? (
+                          <p className="text-sm text-slate-500">Memuat IK...</p>
+                        ) : ikFilteredList.length === 0 ? (
+                          <p className="text-sm text-slate-500">
+                            {ikRawList.length === 0
+                              ? "Belum ada IK terkait."
+                              : "IK tidak ditemukan."}
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {ikVisibleList.map((ik) => {
+                              const ikStatusClass = ik.isActive
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-200 text-slate-600";
+                              return (
+                                <div
+                                  key={ik.ikId}
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+                                >
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-700">
+                                      {ik.ikName}
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                      {ik.ikNumber} - {formatDate(ik.effectiveDate)}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        try {
+                                          openIkPreviewWindow({
+                                            ikName: ik.ikName,
+                                            ikNumber: ik.ikNumber,
+                                            effectiveDate: ik.effectiveDate,
+                                            ikContent: ik.ikContent ?? "",
+                                            sopName: item.sopName,
+                                            departmentName:
+                                              sbuSub?.sbuSubName ??
+                                              (item.sbuSubId
+                                                ? `SBU Sub ${item.sbuSubId}`
+                                                : undefined),
+                                            dibuatOlehLabel: ik.dibuatOlehName ?? undefined,
+                                            diketahuiOlehLabel: ik.diketahuiOlehName ?? undefined,
+                                            disetujuiOlehLabel: ik.disetujuiOlehName ?? undefined,
+                                          });
+                                        } catch (error) {
+                                          console.error("Popup blocked:", error);
+                                          showToast(
+                                            "Preview diblokir browser. Izinkan pop-up untuk melihat.",
+                                            "error"
+                                          );
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 rounded-full border border-slate-200 text-[11px] text-slate-600 hover:bg-slate-100 transition"
+                                    >
+                                      Preview
+                                    </button>
+                                    <span
+                                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${ikStatusClass}`}
+                                    >
+                                      {ik.isActive ? "Aktif" : "Nonaktif"}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {ikHasMore && (
+                              <div className="flex justify-center pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSopIkVisibleMap((prev) => ({
+                                      ...prev,
+                                      [item.sopId]: (prev[item.sopId] ?? 5) + 5,
+                                    }))
+                                  }
+                                  className="px-3 py-1 rounded-full border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition"
+                                >
+                                  Tampilkan lebih banyak
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

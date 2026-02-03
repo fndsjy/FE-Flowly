@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { openIkPreviewWindow } from "../lib/ik-preview";
 
 type MasterIkItem = {
   ikId: string;
@@ -11,6 +12,15 @@ type MasterIkItem = {
   ikNumber: string;
   effectiveDate: string;
   ikContent: string | null;
+  dibuatOleh: number | null;
+  diketahuiOleh: number | null;
+  disetujuiOleh: number | null;
+  sops?: Array<{
+    sopId: string;
+    sopName: string;
+    sbuSubId: number;
+    sbuSubName: string | null;
+  }>;
   isActive: boolean;
   isDeleted: boolean;
   createdAt: string;
@@ -23,7 +33,24 @@ type IkFormData = {
   ikNumber: string;
   effectiveDate: string;
   ikContent: string;
+  dibuatOleh: number | null;
+  diketahuiOleh: number | null;
+  disetujuiOleh: number | null;
   isActive: boolean;
+};
+
+type Employee = {
+  UserId: number;
+  Name: string | null;
+};
+
+type ProcedureSopOption = {
+  sopId: string;
+  sopName: string;
+  sopNumber: string;
+  sbuSubId: number;
+  isActive: boolean;
+  isDeleted: boolean;
 };
 
 const domasColor = "#272e79";
@@ -68,6 +95,11 @@ const MasterIkPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [sopOptions, setSopOptions] = useState<ProcedureSopOption[]>([]);
+  const [sopOptionsLoading, setSopOptionsLoading] = useState(false);
+  const [sopSearch, setSopSearch] = useState("");
+  const [selectedSopIds, setSelectedSopIds] = useState<string[]>([]);
 
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
@@ -79,6 +111,9 @@ const MasterIkPage = () => {
     ikNumber: "",
     effectiveDate: "",
     ikContent: "",
+    dibuatOleh: null,
+    diketahuiOleh: null,
+    disetujuiOleh: null,
     isActive: true,
   });
 
@@ -136,8 +171,77 @@ const MasterIkPage = () => {
     }
   };
 
+  const fetchEmployees = async () => {
+    try {
+      const res = await apiFetch("/employee", { credentials: "include" });
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(
+          json?.issues?.[0]?.message ||
+            json?.error ||
+            json?.errors ||
+            json?.message ||
+            "Gagal memuat data employee",
+          "error"
+        );
+        setEmployees([]);
+        return;
+      }
+      const list = Array.isArray(json?.response) ? json.response : [];
+      setEmployees(list);
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+      showToast("Gagal memuat data employee", "error");
+      setEmployees([]);
+    }
+  };
+
+  const fetchSopOptions = async () => {
+    setSopOptionsLoading(true);
+    try {
+      const res = await apiFetch("/procedure-sop", { credentials: "include" });
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(
+          json?.issues?.[0]?.message ||
+            json?.error ||
+            json?.errors ||
+            json?.message ||
+            "Gagal memuat data SOP",
+          "error"
+        );
+        setSopOptions([]);
+        return;
+      }
+      const list = Array.isArray(json?.response) ? json.response : [];
+      const normalized = list
+        .filter((item: ProcedureSopOption) => !item.isDeleted)
+        .map((item: ProcedureSopOption) => ({
+          sopId: item.sopId,
+          sopName: item.sopName,
+          sopNumber: item.sopNumber,
+          sbuSubId: item.sbuSubId,
+          isActive: item.isActive,
+          isDeleted: item.isDeleted,
+        }))
+        .sort((a: ProcedureSopOption, b: ProcedureSopOption) =>
+          a.sopName.localeCompare(b.sopName)
+        );
+      setSopOptions(normalized);
+    } catch (err) {
+      console.error("Error fetching SOP options:", err);
+      showToast("Gagal memuat data SOP", "error");
+      setSopOptions([]);
+    } finally {
+      setSopOptionsLoading(false);
+    }
+  };
+
+
   useEffect(() => {
     fetchMasterIk();
+    fetchEmployees();
+    fetchSopOptions();
   }, []);
 
   const activeCount = useMemo(() => {
@@ -167,6 +271,27 @@ const MasterIkPage = () => {
     });
   }, [iks, search, canCrud, statusFilter]);
 
+  const filteredSopOptions = useMemo(() => {
+    const term = sopSearch.trim().toLowerCase();
+    if (!term) return sopOptions;
+    return sopOptions.filter((item) => {
+      return (
+        item.sopName.toLowerCase().includes(term) ||
+        item.sopNumber.toLowerCase().includes(term) ||
+        String(item.sbuSubId).includes(term)
+      );
+    });
+  }, [sopOptions, sopSearch]);
+
+  const toggleSopSelection = (sopId: string) => {
+    setSelectedSopIds((prev) => {
+      if (prev.includes(sopId)) {
+        return prev.filter((id) => id !== sopId);
+      }
+      return [...prev, sopId];
+    });
+  };
+
   const openAdd = () => {
     setFormMode("add");
     setFormData({
@@ -175,8 +300,13 @@ const MasterIkPage = () => {
       ikNumber: "",
       effectiveDate: toDateInputValue(new Date().toISOString()),
       ikContent: "",
+      dibuatOleh: null,
+      diketahuiOleh: null,
+      disetujuiOleh: null,
       isActive: true,
     });
+    setSelectedSopIds([]);
+    setSopSearch("");
     setShowForm(true);
   };
 
@@ -188,8 +318,16 @@ const MasterIkPage = () => {
       ikNumber: item.ikNumber,
       effectiveDate: toDateInputValue(item.effectiveDate),
       ikContent: item.ikContent ?? "",
+      dibuatOleh: item.dibuatOleh ?? null,
+      diketahuiOleh: item.diketahuiOleh ?? null,
+      disetujuiOleh: item.disetujuiOleh ?? null,
       isActive: item.isActive,
     });
+    const presetSopIds = Array.isArray(item.sops)
+      ? item.sops.map((sop) => sop.sopId)
+      : [];
+    setSelectedSopIds(presetSopIds);
+    setSopSearch("");
     setShowForm(true);
   };
 
@@ -238,6 +376,10 @@ const MasterIkPage = () => {
           ikNumber: formData.ikNumber.trim(),
           effectiveDate: formData.effectiveDate,
           ikContent: content ? content : null,
+          dibuatOleh: formData.dibuatOleh,
+          diketahuiOleh: formData.diketahuiOleh,
+          disetujuiOleh: formData.disetujuiOleh,
+          sopIds: selectedSopIds,
         };
 
         const res = await apiFetch("/master-ik", {
@@ -271,7 +413,11 @@ const MasterIkPage = () => {
         ikName: formData.ikName.trim(),
         ikNumber: formData.ikNumber.trim(),
         ikContent: content ? content : null,
+        dibuatOleh: formData.dibuatOleh,
+        diketahuiOleh: formData.diketahuiOleh,
+        disetujuiOleh: formData.disetujuiOleh,
         isActive: formData.isActive,
+        sopIds: selectedSopIds,
       };
 
       const res = await apiFetch("/master-ik", {
@@ -337,22 +483,91 @@ const MasterIkPage = () => {
     }
   };
 
+  const getEmployeeOptionLabel = (employee: Employee) => {
+    const name = employee.Name?.trim();
+    return name ? `${name} (${employee.UserId})` : `ID ${employee.UserId}`;
+  };
+
+  const getEmployeeDisplayName = (employeeId: number | null | undefined) => {
+    if (!employeeId) return "-";
+    const employee = employees.find((item) => item.UserId === employeeId);
+    if (!employee) return `ID ${employeeId}`;
+    return employee.Name?.trim() || `ID ${employee.UserId}`;
+  };
+
+  const formatApprovalName = (employeeId: number | null | undefined) => {
+    const label = getEmployeeDisplayName(employeeId);
+    return label === "-" ? "________________" : label;
+  };
+
+  const resolveSopPreviewInfo = (item: MasterIkItem) => {
+    const sops = Array.isArray(item.sops) ? item.sops : [];
+    if (sops.length === 0) {
+      return { sopName: "-", departmentName: "-" };
+    }
+    if (sops.length === 1) {
+      const sop = sops[0];
+      return {
+        sopName: sop.sopName || "-",
+        departmentName: sop.sbuSubName ?? `SBU Sub ${sop.sbuSubId}`,
+      };
+    }
+    return {
+      sopName: `Beberapa SOP (${sops.length})`,
+      departmentName: "Beberapa Departemen",
+    };
+  };
+
   const openPreview = (item: MasterIkItem) => {
+    const previewInfo = resolveSopPreviewInfo(item);
+    const sopNames =
+      item.sops?.map((sop) => sop.sopName || `SOP ${sop.sopId}`) ?? [];
+    const departmentNames =
+      item.sops?.map((sop) => sop.sbuSubName ?? `SBU Sub ${sop.sbuSubId}`) ?? [];
+    try {
+      openIkPreviewWindow({
+        ikName: item.ikName,
+        ikNumber: item.ikNumber,
+        effectiveDate: item.effectiveDate,
+        ikContent: item.ikContent ?? "",
+        dibuatOlehLabel: formatApprovalName(item.dibuatOleh),
+        diketahuiOlehLabel: formatApprovalName(item.diketahuiOleh),
+        disetujuiOlehLabel: formatApprovalName(item.disetujuiOleh),
+        sopName: previewInfo.sopName,
+        departmentName: previewInfo.departmentName,
+        sopNames,
+        departmentNames,
+      });
+      return;
+    } catch (err) {
+      console.error("Failed to open IK preview:", err);
+      const message =
+        err instanceof Error && err.message === "Popup blocked"
+          ? "Preview diblokir browser. Izinkan pop-up untuk melihat."
+          : "Gagal membuka preview IK";
+      showToast(message, "error");
+      return;
+    }
+
     const baseUrl = new URL(
       import.meta.env.BASE_URL ?? "/",
       window.location.origin
     ).toString();
     const logoUrl = `${baseUrl}images/masa-depan-dimatamu.png`;
-    const safeTitle = escapeHtml(item.ikName);
-    const safeNumber = escapeHtml(item.ikNumber);
+    const ikTitle = escapeHtml(item.ikName);
+    const ikNumber = escapeHtml(item.ikNumber);
     const effectiveDate = escapeHtml(formatDate(item.effectiveDate));
+    const dibuatOlehLabel = escapeHtml(formatApprovalName(item.dibuatOleh));
+    const diketahuiOlehLabel = escapeHtml(formatApprovalName(item.diketahuiOleh));
+    const disetujuiOlehLabel = escapeHtml(formatApprovalName(item.disetujuiOleh));
+    const { sopName, departmentName } = resolveSopPreviewInfo(item);
     const rawContent = item.ikContent ?? "";
 
     const html = `<!doctype html>
 <html lang="id">
   <head>
     <meta charset="utf-8" />
-    <title>${safeNumber} - ${safeTitle}</title>
+    <title>${ikNumber} - ${ikTitle}</title>
     <style>
       @page {
         size: A4;
@@ -410,10 +625,17 @@ const MasterIkPage = () => {
       .logo-cell {
         width: 28%;
         text-align: center;
+        padding: 6px;
+        vertical-align: middle;
       }
       .logo-cell img {
-        max-width: 120px;
+        display: block;
+        width: 100%;
         height: auto;
+        max-width: 100%;
+        max-height: 90px;
+        margin: 0 auto;
+        object-fit: contain;
       }
       .logo-tagline {
         font-size: 9px;
@@ -475,6 +697,11 @@ const MasterIkPage = () => {
       .content li {
         margin-bottom: 4px;
       }
+      .content li.continued {
+        list-style: none;
+        margin-left: -22px;
+        padding-left: 22px;
+      }
       .content ol {
         list-style-type: decimal;
       }
@@ -513,7 +740,7 @@ const MasterIkPage = () => {
           </colgroup>
           <tr>
             <td class="logo-cell">
-              <img src="${logoUrl}" alt="DOMAS" width="180" height="auto" />
+              <img src="${logoUrl}" alt="DOMAS" />
             </td>
             <td colspan="2">
               <table class="info-table">
@@ -553,15 +780,15 @@ const MasterIkPage = () => {
           <tr>
             <td>
               <div>Dibuat :</div>
-              <div class="approval-name">(________________)</div>
+              <div class="approval-name">(${dibuatOlehLabel})</div>
             </td>
             <td>
               <div>Diketahui :</div>
-              <div class="approval-name">(________________)</div>
+              <div class="approval-name">(${diketahuiOlehLabel})</div>
             </td>
             <td>
               <div>Disetujui :</div>
-              <div class="approval-name">(________________)</div>
+              <div class="approval-name">(${disetujuiOlehLabel})</div>
             </td>
           </tr>
         </table>
@@ -573,10 +800,11 @@ const MasterIkPage = () => {
     </template>
     <script>
       (function () {
-        const title = ${JSON.stringify(item.ikName)};
-        const number = ${JSON.stringify(item.ikNumber)};
+        const ikTitle = ${JSON.stringify(item.ikName)};
+        const ikNumber = ${JSON.stringify(item.ikNumber)};
+        const sopTitle = ${JSON.stringify(sopName)};
+        const department = ${JSON.stringify(departmentName)};
         const effectiveDate = ${JSON.stringify(formatDate(item.effectiveDate))};
-        const department = "-";
         const rawContent = ${JSON.stringify(rawContent)};
 
         const escapeHtml = (value) =>
@@ -641,29 +869,51 @@ const MasterIkPage = () => {
         const template = document.getElementById("page-template");
         let pageIndex = 0;
 
+        const toPixels = (value) => {
+          if (!value) return 0;
+          if (value.endsWith("px")) return parseFloat(value) || 0;
+          const probe = document.createElement("div");
+          probe.style.position = "absolute";
+          probe.style.visibility = "hidden";
+          probe.style.width = value;
+          document.body.appendChild(probe);
+          const size = probe.getBoundingClientRect().width;
+          document.body.removeChild(probe);
+          return size || 0;
+        };
+
         const createPage = () => {
           pageIndex += 1;
           const page = template.content.firstElementChild.cloneNode(true);
-          page.querySelector("[data-doc-number]").textContent = number || "-";
-          page.querySelector("[data-doc-title]").textContent = title || "-";
+          page.querySelector("[data-doc-number]").textContent = ikNumber || "-";
+          page.querySelector("[data-doc-title]").textContent = sopTitle || "-";
           page.querySelector("[data-effective-date]").textContent = effectiveDate || "-";
           page.querySelector("[data-department]").textContent = department || "-";
           page.querySelector("[data-page-number]").textContent = String(pageIndex);
-          page.querySelector("[data-title]").textContent = title || "-";
-          page.querySelector("[data-number]").textContent = number || "-";
+          page.querySelector("[data-title]").textContent = ikTitle || "-";
+          page.querySelector("[data-number]").textContent = ikNumber || "-";
           pagesEl.appendChild(page);
 
           const contentEl = page.querySelector(".page-content");
           const pageStyles = window.getComputedStyle(page);
-          const paddingBottom = parseFloat(pageStyles.paddingBottom) || 0;
-          const maxHeight = page.clientHeight - contentEl.offsetTop - paddingBottom;
+          const paddingBottom = toPixels(pageStyles.paddingBottom);
+          const pageRect = page.getBoundingClientRect();
+          const contentRect = contentEl.getBoundingClientRect();
+          const maxHeight = Math.max(
+            0,
+            pageRect.bottom - contentRect.top - paddingBottom
+          );
+          contentEl.dataset.maxHeight = String(maxHeight);
           contentEl.style.maxHeight = maxHeight + "px";
           contentEl.style.overflow = "hidden";
           return { page, contentEl };
         };
 
+        const getMaxHeight = (contentEl) =>
+          Number(contentEl.dataset.maxHeight || 0);
+
         const overflows = (contentEl) =>
-          contentEl.scrollHeight - contentEl.clientHeight > 1;
+          contentEl.scrollHeight - getMaxHeight(contentEl) > 0.5;
 
         let current = createPage();
 
@@ -673,8 +923,12 @@ const MasterIkPage = () => {
           current.contentEl.appendChild(p);
           if (overflows(current.contentEl)) {
             current.contentEl.removeChild(p);
-            current = createPage();
-            current.contentEl.appendChild(p);
+            if (current.contentEl.childElementCount > 0) {
+              current = createPage();
+              current.contentEl.appendChild(p);
+            } else {
+              current.contentEl.appendChild(p);
+            }
           }
         };
 
@@ -695,16 +949,27 @@ const MasterIkPage = () => {
               const li = document.createElement("li");
               li.textContent = items[index];
               list.appendChild(li);
+
               if (overflows(current.contentEl)) {
                 list.removeChild(li);
+
                 if (list.childElementCount === 0) {
                   current.contentEl.removeChild(list);
+                  if (current.contentEl.childElementCount > 0) {
+                    current = createPage();
+                    break;
+                  }
+                  current.contentEl.appendChild(list);
+                  list.appendChild(li);
+                  index += 1;
                   current = createPage();
                   break;
                 }
+
                 current = createPage();
                 break;
               }
+
               index += 1;
             }
           }
@@ -981,8 +1246,14 @@ const MasterIkPage = () => {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6">
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => setShowForm(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
@@ -1048,6 +1319,83 @@ const MasterIkPage = () => {
               </div>
             </div>
 
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Dibuat oleh
+                </label>
+                <select
+                  value={formData.dibuatOleh ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      dibuatOleh: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+                >
+                  <option value="">
+                    {employees.length ? "Pilih employee" : "Tidak ada data employee"}
+                  </option>
+                  {employees.map((emp) => (
+                    <option key={emp.UserId} value={emp.UserId}>
+                      {getEmployeeOptionLabel(emp)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Diketahui oleh
+                </label>
+                <select
+                  value={formData.diketahuiOleh ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      diketahuiOleh: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+                >
+                  <option value="">
+                    {employees.length ? "Pilih employee" : "Tidak ada data employee"}
+                  </option>
+                  {employees.map((emp) => (
+                    <option key={emp.UserId} value={emp.UserId}>
+                      {getEmployeeOptionLabel(emp)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Disetujui oleh
+                </label>
+                <select
+                  value={formData.disetujuiOleh ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      disetujuiOleh: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+                >
+                  <option value="">
+                    {employees.length ? "Pilih employee" : "Tidak ada data employee"}
+                  </option>
+                  {employees.map((emp) => (
+                    <option key={emp.UserId} value={emp.UserId}>
+                      {getEmployeeOptionLabel(emp)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {formMode === "edit" && (
               <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
@@ -1084,6 +1432,88 @@ const MasterIkPage = () => {
                 </p>
               </div>
             )}
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    SOP Terkait
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    Pilih SOP yang memakai IK ini (opsional).
+                  </p>
+                </div>
+                <span className="text-xs text-slate-500">
+                  {selectedSopIds.length} SOP terpilih
+                </span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                <input
+                  type="text"
+                  value={sopSearch}
+                  onChange={(e) => setSopSearch(e.target.value)}
+                  placeholder="Cari SOP berdasarkan nama atau nomor..."
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setSelectedSopIds([])}
+                  disabled={selectedSopIds.length === 0}
+                  className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
+                    selectedSopIds.length === 0
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : "bg-slate-900 text-white hover:bg-slate-800"
+                  }`}
+                >
+                  Reset
+                </button>
+              </div>
+
+              <div className="mt-3 max-h-52 overflow-auto space-y-2 pr-1">
+                {sopOptionsLoading ? (
+                  <p className="text-sm text-slate-500">Memuat SOP...</p>
+                ) : filteredSopOptions.length === 0 ? (
+                  <p className="text-sm text-slate-500">Tidak ada SOP yang bisa dipilih.</p>
+                ) : (
+                  filteredSopOptions.map((sop) => {
+                    const isSelected = selectedSopIds.includes(sop.sopId);
+                    const isDisabled = !sop.isActive && !isSelected;
+                    return (
+                      <label
+                        key={sop.sopId}
+                        className={`flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 transition ${
+                          isDisabled
+                            ? "opacity-60 cursor-not-allowed"
+                            : "cursor-pointer hover:border-blue-200"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4"
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={() => toggleSopSelection(sop.sopId)}
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">
+                            {sop.sopName}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {sop.sopNumber} - SBU Sub {sop.sbuSubId}
+                          </p>
+                          {!sop.isActive && (
+                            <span className="mt-1 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                              Nonaktif
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
 
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">
@@ -1122,8 +1552,14 @@ const MasterIkPage = () => {
       )}
 
       {deleteConfirm.open && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6">
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => setDeleteConfirm({ open: false, ikId: "", ikName: "" })}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="text-center">
               <img
                 src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
