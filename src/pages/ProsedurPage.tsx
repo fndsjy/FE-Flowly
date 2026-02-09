@@ -75,12 +75,15 @@ const ProsedurPage = () => {
     setLoading(true);
     try {
       const res = await apiFetch("/sbu-sub-public", { credentials: "include" });
+      const json = await res.json();
       if (!res.ok) {
         setData([]);
-        showToast("Gagal memuat data SBU Sub.", "error");
+        showToast(
+          json?.error || json?.errors || json?.issues?.[0]?.message,
+          "error"
+        );
         return;
       }
-      const json = await res.json();
       const list = Array.isArray(json?.response) ? json.response : [];
       setData(list);
     } catch (err) {

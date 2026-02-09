@@ -282,7 +282,7 @@ const SBUPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json?.error || "Gagal menghapus", "error");
+        showToast(json?.error || json?.errors || json?.issues?.[0]?.message || "Gagal menghapus", "error");
         setIsDeleting(false);
         return;
       }

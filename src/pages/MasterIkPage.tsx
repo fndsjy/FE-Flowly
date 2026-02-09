@@ -556,7 +556,6 @@ const MasterIkPage = () => {
     const logoUrl = `${baseUrl}images/masa-depan-dimatamu.png`;
     const ikTitle = escapeHtml(item.ikName);
     const ikNumber = escapeHtml(item.ikNumber);
-    const effectiveDate = escapeHtml(formatDate(item.effectiveDate));
     const dibuatOlehLabel = escapeHtml(formatApprovalName(item.dibuatOleh));
     const diketahuiOlehLabel = escapeHtml(formatApprovalName(item.diketahuiOleh));
     const disetujuiOlehLabel = escapeHtml(formatApprovalName(item.disetujuiOleh));
@@ -1000,8 +999,9 @@ const MasterIkPage = () => {
         showToast("Popup diblokir. Izinkan pop-up untuk melihat PDF.", "error");
         return;
       }
-      previewWindow.opener = null;
-      previewWindow.addEventListener("beforeunload", () => {
+      const safeWindow = previewWindow as Window;
+      safeWindow.opener = null;
+      safeWindow.addEventListener("beforeunload", () => {
         URL.revokeObjectURL(url);
       });
     } catch (err) {
