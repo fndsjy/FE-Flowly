@@ -59,7 +59,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   const navigate = useNavigate();
 
   const location = useLocation();
-  const publicMenuKeys = new Set(["PROSEDUR"]);
+  const publicMenuKeys = new Set(["PROSEDUR", "FISHBONE"]);
 
   /* ---------------- FETCH USER PROFILE ---------------- */
   useEffect(() => {
@@ -313,6 +313,8 @@ const getMenuIcon = (resourceKey: string) => {
       return <AbsensiIcon />;
     case "ADMIN":
       return <AdministratorIcon />;
+    case "FISHBONE":
+      return <FishBoneIcon />;
     default:
       return <DefaultMenuIcon />;
   }
@@ -337,6 +339,10 @@ const OrganizationIcon = () => (
 
 const ProsedurIcon = () => (
   <i className="fa-solid fa-file h-5 w-4 mx-auto ml-1"></i>
+);
+
+const FishBoneIcon = () => (
+  <i className="fa-solid fa-fish fa-rotate-180 h-5 w-4 mx-auto ml-1"></i>
 );
 
 const A3Icon = () => (

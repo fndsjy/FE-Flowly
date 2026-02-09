@@ -23,6 +23,7 @@ import SBUPage from './pages/SBUPage';
 import SBUSUBPage from './pages/SBUSUBPage';
 import JabatanListPage from './pages/JabatanListPage';
 import AccessRolePage from './pages/AccessRolePage';
+import FishbonePage from './pages/FishbonePage';
 
 const App = () => {
   return (
@@ -47,6 +48,7 @@ const App = () => {
           <Route path="/administrator/jabatan" element={<ProtectedAdminRoute><JabatanListPage /></ProtectedAdminRoute>} />
           <Route path="/administrator/access-role" element={<ProtectedAdminRoute><AccessRolePage /></ProtectedAdminRoute>} />
           <Route path="/administrator/audit-log" element={<ProtectedAdminRoute><AuditLogPage /></ProtectedAdminRoute>} />
+          <Route path="/fishbone" element={<FishbonePage />} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
