@@ -266,12 +266,6 @@ const FishbonePage = () => {
 
   const selectedFishbone = fishboneMap.get(selectedFishboneId) ?? null;
 
-  const [visibleCategoryCodes, setVisibleCategoryCodes] = useState<string[]>([]);
-  const visibleCategorySet = useMemo(
-    () => new Set(visibleCategoryCodes),
-    [visibleCategoryCodes]
-  );
-
   const activeCategoryOptions = useMemo(() => {
     return categories.filter((item) => item.isActive && !item.isDeleted);
   }, [categories]);
@@ -296,25 +290,6 @@ const FishbonePage = () => {
     );
     return [...ordered, ...extras];
   }, [categoryToggleOptions]);
-
-  const defaultVisibleCategoryCodes = useMemo(() => {
-    const activeSixM = categories
-      .filter(
-        (item) =>
-          item.isActive &&
-          !item.isDeleted &&
-          SIXM_CODES.has(item.categoryCode)
-      )
-      .map((item) => item.categoryCode);
-
-    if (activeSixM.length > 0) {
-      return activeSixM;
-    }
-
-    return categories
-      .filter((item) => item.isActive && !item.isDeleted)
-      .map((item) => item.categoryCode);
-  }, [categories]);
 
   const selectableCauseOptions = useMemo(() => {
     return activeCauseOptions.filter((item) => item.isActive);
@@ -494,12 +469,6 @@ const FishbonePage = () => {
     fetchItems(selectedFishboneId);
   }, [selectedFishboneId]);
 
-  useEffect(() => {
-    if (defaultVisibleCategoryCodes.length === 0) return;
-    setVisibleCategoryCodes((prev) =>
-      prev.length > 0 ? prev : defaultVisibleCategoryCodes
-    );
-  }, [defaultVisibleCategoryCodes]);
   const filteredFishbones = useMemo(() => {
     const term = fishboneSearch.trim().toLowerCase();
     return fishbones.filter((item) => {
@@ -545,80 +514,142 @@ const FishbonePage = () => {
     });
   }, [items, itemSearch, itemStatusFilter]);
 
-  const visibleItems = useMemo(() => {
-    if (visibleCategorySet.size === 0) return [];
-    return filteredItems.filter((item) =>
-      visibleCategorySet.has(item.categoryCode)
-    );
-  }, [filteredItems, visibleCategorySet]);
+  const previewItems = useMemo(() => {
+    return items.filter((item) => item.isActive && !item.isDeleted);
+  }, [items]);
 
   const itemsByCategory = useMemo(() => {
     const map = new Map<string, FishboneItem[]>();
-    for (const item of visibleItems) {
+    for (const item of filteredItems) {
       if (!map.has(item.categoryCode)) {
         map.set(item.categoryCode, []);
       }
       map.get(item.categoryCode)?.push(item);
     }
     return map;
-  }, [visibleItems]);
+  }, [filteredItems]);
 
-  const topRowCategories = useMemo(() => {
+  const previewItemsByCategory = useMemo(() => {
+    const map = new Map<string, FishboneItem[]>();
+    for (const item of previewItems) {
+      if (!map.has(item.categoryCode)) {
+        map.set(item.categoryCode, []);
+      }
+      map.get(item.categoryCode)?.push(item);
+    }
+    return map;
+  }, [previewItems]);
+
+  const topPanelCategories = useMemo(() => {
     return TOP_CATEGORY_CODES
       .map((code) => categoryMap.get(code))
       .filter(
         (item): item is FishboneCategory => {
           if (!item) return false;
-          return visibleCategorySet.has(item.categoryCode);
+          return !item.isDeleted;
         }
       );
-  }, [categoryMap, visibleCategorySet]);
+  }, [categoryMap]);
 
-  const bottomRowCategories = useMemo(() => {
+  const bottomPanelCategories = useMemo(() => {
     return BOTTOM_CATEGORY_CODES
       .map((code) => categoryMap.get(code))
       .filter(
         (item): item is FishboneCategory => {
           if (!item) return false;
-          return visibleCategorySet.has(item.categoryCode);
+          return !item.isDeleted;
         }
       );
-  }, [categoryMap, visibleCategorySet]);
+  }, [categoryMap]);
 
-  const otherVisibleCategories = useMemo(() => {
-    if (visibleCategorySet.size === 0) return [];
-    return Array.from(visibleCategorySet)
-      .filter((code) => !SIXM_CODES.has(code))
+  const otherPanelCategories = useMemo(() => {
+    return categories.filter(
+      (item) => !item.isDeleted && !SIXM_CODES.has(item.categoryCode)
+    );
+  }, [categories]);
+
+  const topPreviewCategories = useMemo(() => {
+    return TOP_CATEGORY_CODES
       .map((code) => categoryMap.get(code))
-      .filter((item): item is FishboneCategory => Boolean(item));
-  }, [categoryMap, visibleCategorySet]);
+      .filter(
+        (item): item is FishboneCategory => {
+          if (!item) return false;
+          return item.isActive && !item.isDeleted;
+        }
+      );
+  }, [categoryMap]);
 
-  const topDisplayCategories = useMemo(() => {
-    return topRowCategories.filter(
+  const bottomPreviewCategories = useMemo(() => {
+    return BOTTOM_CATEGORY_CODES
+      .map((code) => categoryMap.get(code))
+      .filter(
+        (item): item is FishboneCategory => {
+          if (!item) return false;
+          return item.isActive && !item.isDeleted;
+        }
+      );
+  }, [categoryMap]);
+
+  const otherPreviewCategories = useMemo(() => {
+    return categories.filter(
+      (item) =>
+        item.isActive && !item.isDeleted && !SIXM_CODES.has(item.categoryCode)
+    );
+  }, [categories]);
+
+  const topPanelDisplayCategories = useMemo(() => {
+    return topPanelCategories.filter(
       (category) => (itemsByCategory.get(category.categoryCode)?.length ?? 0) > 0
     );
-  }, [itemsByCategory, topRowCategories]);
+  }, [itemsByCategory, topPanelCategories]);
 
-  const bottomDisplayCategories = useMemo(() => {
-    return bottomRowCategories.filter(
+  const bottomPanelDisplayCategories = useMemo(() => {
+    return bottomPanelCategories.filter(
       (category) => (itemsByCategory.get(category.categoryCode)?.length ?? 0) > 0
     );
-  }, [bottomRowCategories, itemsByCategory]);
+  }, [bottomPanelCategories, itemsByCategory]);
 
-  const otherDisplayCategories = useMemo(() => {
-    return otherVisibleCategories.filter(
+  const otherPanelDisplayCategories = useMemo(() => {
+    return otherPanelCategories.filter(
       (category) => (itemsByCategory.get(category.categoryCode)?.length ?? 0) > 0
     );
-  }, [itemsByCategory, otherVisibleCategories]);
+  }, [itemsByCategory, otherPanelCategories]);
+
+  const topPreviewDisplayCategories = useMemo(() => {
+    return topPreviewCategories.filter(
+      (category) =>
+        (previewItemsByCategory.get(category.categoryCode)?.length ?? 0) > 0
+    );
+  }, [previewItemsByCategory, topPreviewCategories]);
+
+  const bottomPreviewDisplayCategories = useMemo(() => {
+    return bottomPreviewCategories.filter(
+      (category) =>
+        (previewItemsByCategory.get(category.categoryCode)?.length ?? 0) > 0
+    );
+  }, [bottomPreviewCategories, previewItemsByCategory]);
+
+  const otherPreviewDisplayCategories = useMemo(() => {
+    return otherPreviewCategories.filter(
+      (category) =>
+        (previewItemsByCategory.get(category.categoryCode)?.length ?? 0) > 0
+    );
+  }, [otherPreviewCategories, previewItemsByCategory]);
 
   const displayCategoryCodes = useMemo(
     () =>
       new Set(
-        [...topDisplayCategories, ...bottomDisplayCategories, ...otherDisplayCategories].map(
-          (category) => category.categoryCode
-        )
+        [
+          ...topPreviewDisplayCategories,
+          ...bottomPreviewDisplayCategories,
+          ...otherPreviewDisplayCategories,
+        ].map((category) => category.categoryCode)
       ),
-    [topDisplayCategories, bottomDisplayCategories, otherDisplayCategories]
+    [
+      topPreviewDisplayCategories,
+      bottomPreviewDisplayCategories,
+      otherPreviewDisplayCategories,
+    ]
   );
 
   const filteredCategories = useMemo(() => {
@@ -1108,14 +1139,6 @@ const FishbonePage = () => {
     />
   );
 
-  const toggleCategoryVisibility = (code: string) => {
-    setVisibleCategoryCodes((prev) =>
-      prev.includes(code)
-        ? prev.filter((item) => item !== code)
-        : [...prev, code]
-    );
-  };
-
   const renderCategoryPanel = (
     category: FishboneCategory,
     position: "top" | "bottom" | "other"
@@ -1358,7 +1381,7 @@ const FishbonePage = () => {
   };
 
   const renderPreviewCategory = (category: FishboneCategory) => {
-    const categoryItems = itemsByCategory.get(category.categoryCode) ?? [];
+    const categoryItems = previewItemsByCategory.get(category.categoryCode) ?? [];
     const rawOffset = previewCategoryOffsets[category.categoryCode] ?? 0;
     const offset = Math.abs(rawOffset) < 0.5 ? 0 : rawOffset;
 
@@ -1484,12 +1507,19 @@ const FishbonePage = () => {
         const midCenterY = (minCenterY + maxCenterY) / 2;
         const topGroup = positions.filter((pos) => pos.centerY <= midCenterY);
         const bottomGroup = positions.filter((pos) => pos.centerY > midCenterY);
-        const spineY =
-          topGroup.length > 0 && bottomGroup.length > 0
-            ? (Math.max(...topGroup.map((pos) => pos.rectBottom)) +
-                Math.min(...bottomGroup.map((pos) => pos.rectTop))) /
-              2
-            : targetY;
+        let spineY = targetY;
+        if (topGroup.length > 0 && bottomGroup.length > 0) {
+          spineY =
+            (Math.max(...topGroup.map((pos) => pos.rectBottom)) +
+              Math.min(...bottomGroup.map((pos) => pos.rectTop))) /
+            2;
+        } else if (topGroup.length > 0) {
+          spineY = Math.max(...topGroup.map((pos) => pos.rectBottom)) + PREVIEW_LINE_GAP;
+        } else if (bottomGroup.length > 0) {
+          spineY =
+            Math.min(...bottomGroup.map((pos) => pos.rectTop)) - PREVIEW_LINE_GAP;
+        }
+        spineY = Math.min(Math.max(spineY, 12), containerRect.height - 12);
 
         const topSorted = [...topGroup].sort((a, b) => a.centerX - b.centerX);
         const bottomSorted = [...bottomGroup].sort((a, b) => a.centerX - b.centerX);
@@ -1714,30 +1744,30 @@ const FishbonePage = () => {
                 </svg>
               )}
 
-              {visibleCategoryCodes.length === 0 ? (
+              {topPreviewDisplayCategories.length === 0 &&
+              bottomPreviewDisplayCategories.length === 0 &&
+              otherPreviewDisplayCategories.length === 0 ? (
                 <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                  {isPreviewOnly
-                    ? "Belum ada kategori aktif untuk ditampilkan."
-                    : "Pilih kategori untuk menampilkan fishbone."}
+                  Belum ada masalah & solusi. Tambahkan data agar fishbone muncul.
                 </div>
               ) : (
                 <div className="relative z-10 mt-6 grid grid-cols-[1fr_auto] items-center gap-8">
                   <div className="flex flex-col gap-8">
                     <div className="flex flex-wrap items-end justify-center gap-6">
-                      {topDisplayCategories.map((category) =>
+                      {topPreviewDisplayCategories.map((category) =>
                         renderPreviewCategory(category)
                       )}
                     </div>
 
                     <div className="flex flex-wrap items-start justify-center gap-6">
-                      {bottomDisplayCategories.map((category) =>
+                      {bottomPreviewDisplayCategories.map((category) =>
                         renderPreviewCategory(category)
                       )}
                     </div>
 
-                    {otherDisplayCategories.length > 0 && (
+                    {otherPreviewDisplayCategories.length > 0 && (
                       <div className="flex flex-wrap justify-center gap-4">
-                        {otherDisplayCategories.map((category) =>
+                        {otherPreviewDisplayCategories.map((category) =>
                           renderPreviewCategory(category)
                         )}
                       </div>
@@ -2060,59 +2090,29 @@ const FishbonePage = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-slate-800">Kategori 6M</h3>
                   <p className="text-sm text-slate-500">
-                    Pilih kategori yang ingin ditampilkan pada diagram fishbone. Atas:
-                    Man/Material/Machine, bawah: Method/Management/Environment.
+                    Semua kategori ditampilkan otomatis pada diagram fishbone. Kategori
+                    tanpa data tidak ditampilkan.
                   </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setVisibleCategoryCodes(defaultVisibleCategoryCodes)}
-                    className="px-3 py-1.5 rounded-full bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
-                  >
-                    Pilih semua
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVisibleCategoryCodes([])}
-                    className="px-3 py-1.5 rounded-full border border-slate-200 text-xs font-semibold text-slate-600 hover:border-teal-300"
-                  >
-                    Reset
-                  </button>
                 </div>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {orderedCategoryToggleOptions.map((category) => {
-                  const isSelected = visibleCategorySet.has(category.categoryCode);
-                  const isActive = category.isActive;
-                  return (
-                    <button
-                      key={category.categoryCode}
-                      type="button"
-                      onClick={() => toggleCategoryVisibility(category.categoryCode)}
-                      disabled={!isActive}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-full border text-xs font-semibold transition ${
-                        isSelected
-                          ? "bg-teal-600 text-white border-teal-600 shadow-sm"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-teal-300"
-                      } ${!isActive ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <span className="text-[10px] uppercase tracking-widest">
-                        {category.categoryCode}
-                      </span>
-                      <span className="text-xs">{category.categoryName}</span>
-                    </button>
-                  );
-                })}
+                {orderedCategoryToggleOptions.map((category) => (
+                  <span
+                    key={category.categoryCode}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-full border text-xs font-semibold ${
+                      category.isActive
+                        ? "bg-teal-600 text-white border-teal-600 shadow-sm"
+                        : "bg-slate-100 text-slate-400 border-slate-200"
+                    }`}
+                  >
+                    <span className="text-[10px] uppercase tracking-widest">
+                      {category.categoryCode}
+                    </span>
+                    <span className="text-xs">{category.categoryName}</span>
+                  </span>
+                ))}
               </div>
-
-              {visibleCategoryCodes.length === 0 && (
-                <p className="mt-3 text-xs text-slate-400">
-                  Belum ada kategori yang dipilih. Pilih kategori untuk menampilkan
-                  masalah & solusi.
-                </p>
-              )}
             </section>
 
             <section className="rounded-3xl border border-slate-200/70 bg-white p-4">
@@ -2157,7 +2157,7 @@ const FishbonePage = () => {
                 </select>
               </div>
               <div className="mt-3 text-xs text-slate-500">
-                Menampilkan {visibleItems.length} masalah & solusi dari {items.length} data.
+                Menampilkan {filteredItems.length} masalah & solusi dari {items.length} data.
               </div>
             </section>
           </div>
@@ -2296,51 +2296,47 @@ const FishbonePage = () => {
                     </p>
                   )}
 
-                  {visibleCategoryCodes.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-8">
-                      Pilih kategori untuk menampilkan fishbone.
-                    </p>
-                  ) : topDisplayCategories.length === 0 &&
-                    bottomDisplayCategories.length === 0 &&
-                    otherDisplayCategories.length === 0 ? (
+                  {topPanelDisplayCategories.length === 0 &&
+                    bottomPanelDisplayCategories.length === 0 &&
+                    otherPanelDisplayCategories.length === 0 ? (
                     <p className="text-sm text-slate-500 text-center py-8">
                       Belum ada masalah & solusi. Tambahkan data agar fishbone muncul.
                     </p>
                   ) : (
                     <>
-                      {topDisplayCategories.length > 0 && (
+                      {topPanelDisplayCategories.length > 0 && (
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
                             Atas: Man, Material, Machine
                           </p>
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            {topDisplayCategories.map((category) =>
+                            {topPanelDisplayCategories.map((category) =>
                               renderCategoryPanel(category, "top")
                             )}
                           </div>
                         </div>
                       )}
 
-                      {bottomDisplayCategories.length > 0 && (
+                      {bottomPanelDisplayCategories.length > 0 && (
                         <div className="mt-8">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
                             Bawah: Method, Management, Environment
                           </p>
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            {bottomDisplayCategories.map((category) =>
+                            {bottomPanelDisplayCategories.map((category) =>
                               renderCategoryPanel(category, "bottom")
                             )}
                           </div>
                         </div>
                       )}
 
-                      {otherDisplayCategories.length > 0 && (
+                      {otherPanelDisplayCategories.length > 0 && (
                         <div className="mt-8">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
                             Kategori Lainnya
                           </p>
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            {otherDisplayCategories.map((category) =>
+                            {otherPanelDisplayCategories.map((category) =>
                               renderCategoryPanel(category, "other")
                             )}
                           </div>
