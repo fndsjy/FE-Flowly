@@ -124,6 +124,10 @@ const SIXM_CODES = new Set<string>([...TOP_CATEGORY_CODES, ...BOTTOM_CATEGORY_CO
 const PREVIEW_CANVAS_WIDTH = 1600;
 const PREVIEW_ITEM_BOX_MAX_WIDTH = 150;
 const PREVIEW_ITEM_BOX_MIN_WIDTH = 80;
+const PREVIEW_LINE_GAP = 12;
+const PREVIEW_SPINE_PADDING = 16;
+const PREVIEW_SOURCE_GAP = 0;
+const PREVIEW_CATEGORY_LINE_GAP = 0;
 
 const FishbonePage = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -217,8 +221,25 @@ const FishbonePage = () => {
   const previewCategoryRefs = useRef(new Map<string, HTMLDivElement>());
   const [previewSize, setPreviewSize] = useState({ width: PREVIEW_CANVAS_WIDTH, height: 560 });
   const [previewLines, setPreviewLines] = useState<
-    Array<{ x1: number; y1: number; x2: number; y2: number }>
+    Array<{ x: number; y1: number; y2: number }>
   >([]);
+  const [previewSpine, setPreviewSpine] = useState<{
+    x1: number;
+    x2: number;
+    y: number;
+  } | null>(null);
+  const [previewSourceLink, setPreviewSourceLink] = useState<{
+    joinX: number;
+    spineY: number;
+    targetY: number;
+    endX: number;
+  } | null>(null);
+  const [previewSourceOffset, setPreviewSourceOffset] = useState(0);
+  const previewSourceOffsetRef = useRef(0);
+  const [previewCategoryOffsets, setPreviewCategoryOffsets] = useState<
+    Record<string, number>
+  >({});
+  const previewCategoryOffsetsRef = useRef<Record<string, number>>({});
   const isPreviewPanning = useRef(false);
   const previewPanStartX = useRef(0);
   const previewPanScrollLeft = useRef(0);
@@ -546,8 +567,10 @@ const FishbonePage = () => {
     return TOP_CATEGORY_CODES
       .map((code) => categoryMap.get(code))
       .filter(
-        (item): item is FishboneCategory =>
-          Boolean(item) && visibleCategorySet.has(item.categoryCode)
+        (item): item is FishboneCategory => {
+          if (!item) return false;
+          return visibleCategorySet.has(item.categoryCode);
+        }
       );
   }, [categoryMap, visibleCategorySet]);
 
@@ -555,8 +578,10 @@ const FishbonePage = () => {
     return BOTTOM_CATEGORY_CODES
       .map((code) => categoryMap.get(code))
       .filter(
-        (item): item is FishboneCategory =>
-          Boolean(item) && visibleCategorySet.has(item.categoryCode)
+        (item): item is FishboneCategory => {
+          if (!item) return false;
+          return visibleCategorySet.has(item.categoryCode);
+        }
       );
   }, [categoryMap, visibleCategorySet]);
 
@@ -1334,12 +1359,15 @@ const FishbonePage = () => {
 
   const renderPreviewCategory = (category: FishboneCategory) => {
     const categoryItems = itemsByCategory.get(category.categoryCode) ?? [];
+    const rawOffset = previewCategoryOffsets[category.categoryCode] ?? 0;
+    const offset = Math.abs(rawOffset) < 0.5 ? 0 : rawOffset;
 
     return (
       <div
         key={category.categoryCode}
         ref={setPreviewCategoryRef(category.categoryCode)}
         className="w-fit max-w-full min-w-[220px] rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-sm"
+        style={offset ? { transform: `translateX(${offset}px)` } : undefined}
       >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -1406,23 +1434,135 @@ const FishbonePage = () => {
         if (!container || !source) return;
         const containerRect = container.getBoundingClientRect();
         const sourceRect = source.getBoundingClientRect();
-        const targetX = sourceRect.left + sourceRect.width / 2 - containerRect.left;
         const targetY = sourceRect.top + sourceRect.height / 2 - containerRect.top;
+        const sourceLeft = sourceRect.left - containerRect.left;
+        const sourceEndX = sourceLeft - PREVIEW_SOURCE_GAP;
+        const anchorLeft = sourceLeft - PREVIEW_LINE_GAP;
         setPreviewSize({ width: containerRect.width, height: containerRect.height });
 
-        const nextLines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+        const positions: Array<{
+          code: string;
+          centerX: number;
+          centerY: number;
+          rectTop: number;
+          rectBottom: number;
+        }> = [];
         previewCategoryRefs.current.forEach((node, code) => {
           if (!node || !node.isConnected || !displayCategoryCodes.has(code)) {
             previewCategoryRefs.current.delete(code);
             return;
           }
           const rect = node.getBoundingClientRect();
-          nextLines.push({
-            x1: rect.left + rect.width / 2 - containerRect.left,
-            y1: rect.top + rect.height / 2 - containerRect.top,
-            x2: targetX,
-            y2: targetY,
+          const currentOffset = previewCategoryOffsetsRef.current[code] ?? 0;
+          positions.push({
+            code,
+            centerX: rect.left + rect.width / 2 - containerRect.left - currentOffset,
+            centerY: rect.top + rect.height / 2 - containerRect.top,
+            rectTop: rect.top - containerRect.top,
+            rectBottom: rect.bottom - containerRect.top,
           });
+        });
+
+        if (positions.length === 0) {
+          setPreviewSpine(null);
+          setPreviewSourceLink(null);
+          setPreviewLines([]);
+          if (Object.keys(previewCategoryOffsetsRef.current).length > 0) {
+            previewCategoryOffsetsRef.current = {};
+            setPreviewCategoryOffsets({});
+          }
+          if (previewSourceOffsetRef.current !== 0) {
+            previewSourceOffsetRef.current = 0;
+            setPreviewSourceOffset(0);
+          }
+          return;
+        }
+
+        const centerYs = positions.map((pos) => pos.centerY);
+        const minCenterY = Math.min(...centerYs);
+        const maxCenterY = Math.max(...centerYs);
+        const midCenterY = (minCenterY + maxCenterY) / 2;
+        const topGroup = positions.filter((pos) => pos.centerY <= midCenterY);
+        const bottomGroup = positions.filter((pos) => pos.centerY > midCenterY);
+        const spineY =
+          topGroup.length > 0 && bottomGroup.length > 0
+            ? (Math.max(...topGroup.map((pos) => pos.rectBottom)) +
+                Math.min(...bottomGroup.map((pos) => pos.rectTop))) /
+              2
+            : targetY;
+
+        const topSorted = [...topGroup].sort((a, b) => a.centerX - b.centerX);
+        const bottomSorted = [...bottomGroup].sort((a, b) => a.centerX - b.centerX);
+        const anchorXs = [...topSorted.map((pos) => pos.centerX), anchorLeft].sort(
+          (a, b) => a - b
+        );
+        const midpoints =
+          anchorXs.length > 1
+            ? anchorXs
+                .slice(0, -1)
+                .map((value, index) => (value + anchorXs[index + 1]) / 2)
+            : [];
+        const linePositions = [
+          ...topSorted.map((pos) => ({ ...pos, lineX: pos.centerX })),
+          ...bottomSorted.map((pos, index) => ({
+            ...pos,
+            lineX: midpoints[Math.min(index, midpoints.length - 1)] ?? pos.centerX,
+          })),
+        ];
+
+        const nextLines: Array<{ x: number; y1: number; y2: number }> = [];
+        const nextOffsets: Record<string, number> = {};
+        let minX = Number.POSITIVE_INFINITY;
+        linePositions.forEach((pos) => {
+          const isAboveSpine = pos.centerY < spineY;
+          let startY = isAboveSpine
+            ? pos.rectBottom + PREVIEW_CATEGORY_LINE_GAP
+            : pos.rectTop - PREVIEW_CATEGORY_LINE_GAP;
+          if (isAboveSpine && startY > spineY - 4) startY = spineY - 4;
+          if (!isAboveSpine && startY < spineY + 4) startY = spineY + 4;
+          const rawOffset = pos.lineX - pos.centerX;
+          const offset = Math.abs(rawOffset) < 0.5 ? 0 : rawOffset;
+          nextOffsets[pos.code] = offset;
+          nextLines.push({
+            x: pos.lineX,
+            y1: startY,
+            y2: spineY,
+          });
+          minX = Math.min(minX, pos.lineX);
+        });
+
+        const spineStartX = Number.isFinite(minX)
+          ? Math.max(0, minX - PREVIEW_SPINE_PADDING)
+          : anchorLeft;
+        setPreviewSpine({ x1: spineStartX, x2: anchorLeft, y: spineY });
+        const previousOffsets = previewCategoryOffsetsRef.current;
+        const offsetKeys = new Set([
+          ...Object.keys(previousOffsets),
+          ...Object.keys(nextOffsets),
+        ]);
+        let offsetsChanged = false;
+        for (const key of offsetKeys) {
+          const prev = previousOffsets[key] ?? 0;
+          const next = nextOffsets[key] ?? 0;
+          if (Math.abs(prev - next) > 0.5) {
+            offsetsChanged = true;
+            break;
+          }
+        }
+        if (offsetsChanged) {
+          previewCategoryOffsetsRef.current = nextOffsets;
+          setPreviewCategoryOffsets(nextOffsets);
+        }
+        const nextOffset = previewSourceOffsetRef.current + (spineY - targetY);
+        if (Math.abs(nextOffset - previewSourceOffsetRef.current) > 0.5) {
+          previewSourceOffsetRef.current = nextOffset;
+          setPreviewSourceOffset(nextOffset);
+        }
+        setPreviewSourceLink({
+          joinX: anchorLeft,
+          spineY,
+          targetY: spineY,
+          endX: sourceEndX,
         });
         setPreviewLines(nextLines);
       });
@@ -1500,23 +1640,74 @@ const FishbonePage = () => {
                 </p>
               </div>
 
-              {previewLines.length > 0 && (
+              {(previewLines.length > 0 || previewSpine || previewSourceLink) && (
                 <svg
-                  className="absolute inset-0 z-0 pointer-events-none"
+                  className="absolute inset-0 z-20 pointer-events-none"
                   width="100%"
                   height="100%"
                   viewBox={`0 0 ${previewSize.width} ${previewSize.height}`}
                   preserveAspectRatio="none"
                 >
+                  <defs>
+                    <marker
+                      id="fishbone-arrow"
+                      markerWidth="7"
+                      markerHeight="7"
+                      refX="6"
+                      refY="3.5"
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path d="M0,0 L7,3.5 L0,7 Z" fill="#94a3b8" />
+                    </marker>
+                  </defs>
+                  {previewSpine && (
+                    <line
+                      x1={previewSpine.x1}
+                      y1={previewSpine.y}
+                      x2={previewSpine.x2}
+                      y2={previewSpine.y}
+                      stroke="#64748b"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+                  {previewSourceLink && previewSourceLink.spineY !== previewSourceLink.targetY && (
+                    <line
+                      x1={previewSourceLink.joinX}
+                      y1={previewSourceLink.spineY}
+                      x2={previewSourceLink.joinX}
+                      y2={previewSourceLink.targetY}
+                      stroke="#64748b"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+                  {previewSourceLink && (
+                    <line
+                      x1={previewSourceLink.joinX}
+                      y1={previewSourceLink.targetY}
+                      x2={previewSourceLink.endX}
+                      y2={previewSourceLink.targetY}
+                      stroke="#64748b"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      markerEnd="url(#fishbone-arrow)"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
                   {previewLines.map((line, index) => (
                     <line
-                      key={`${line.x1}-${line.y1}-${index}`}
-                      x1={line.x1}
+                      key={`${line.x}-${line.y1}-${index}`}
+                      x1={line.x}
                       y1={line.y1}
-                      x2={line.x2}
+                      x2={line.x}
                       y2={line.y2}
-                      stroke="#e2e8f0"
-                      strokeWidth="1"
+                      stroke="#64748b"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
                       vectorEffect="non-scaling-stroke"
                     />
                   ))}
@@ -1554,10 +1745,15 @@ const FishbonePage = () => {
                   </div>
 
                   <div className="flex items-center justify-end self-center pr-2">
-                    <div
-                      ref={previewSourceRef}
-                      className="w-fit max-w-[360px] rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm"
-                    >
+                      <div
+                        ref={previewSourceRef}
+                        className="w-fit max-w-[360px] rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm"
+                        style={
+                          previewSourceOffset
+                            ? { transform: `translateY(${previewSourceOffset}px)` }
+                            : undefined
+                        }
+                      >
                       <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
                         Sumber Masalah
                       </p>
