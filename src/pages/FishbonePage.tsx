@@ -63,7 +63,7 @@ type FishboneCategory = {
   categoryCode: string;
   categoryName: string;
   categoryDesc: string | null;
-  isActive: boolean;
+  isActive: boolean; 
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;

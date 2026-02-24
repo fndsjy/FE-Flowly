@@ -14,7 +14,7 @@ import ChartPage from './pages/ChartPage';
 // 🔹 Import ToastProvider
 import { ToastProvider } from './components/organisms/MessageToast';
 import AdministratorPage from './pages/AdministratorPage';
-import ProtectedAdminRoute from './ProtectedAdminRoute';
+import ProtectedRoute from './ProtectedRoute';
 import AuditLogPage from './pages/AuditLogPage';
 import UserListPage from './pages/UserListPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
@@ -24,31 +24,33 @@ import SBUSUBPage from './pages/SBUSUBPage';
 import JabatanListPage from './pages/JabatanListPage';
 import AccessRolePage from './pages/AccessRolePage';
 import FishbonePage from './pages/FishbonePage';
+import NotificationTemplatePage from './pages/NotificationTemplatePage';
 
 const App = () => {
   return (
     <ToastProvider>
       <BrowserRouter basename='/oms/'>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/pilar" element={<PilarPage />} />
-          <Route path="/pilar/sbu/:pilarId" element={<SBUPage />} />
-          <Route path="/pilar/sbu/sbu_sub/:sbuId" element={<SBUSUBPage />} />
-          <Route path="/pilar/sbu/sbu_sub/organisasi/:sbuSubId" element={<ChartPage />} />
-          <Route path="/prosedur" element={<ProsedurPage />} />
-          <Route path="/prosedur/sop/:sbuSubId" element={<ProcedureSopPage />} />
-          <Route path="/prosedur/master-ik" element={<MasterIkPage />} />
-          <Route path="/a3" element={<A3Page />} />
-          <Route path="/absensi" element={<AbsensiPage />} />
-          <Route path="/me" element={<ChangePasswordPage />} />
-          <Route path="/administrator" element={<ProtectedAdminRoute><AdministratorPage /></ProtectedAdminRoute>} />
-          <Route path="/administrator/users" element={<ProtectedAdminRoute><UserListPage /></ProtectedAdminRoute>} />
-          <Route path="/administrator/jabatan" element={<ProtectedAdminRoute><JabatanListPage /></ProtectedAdminRoute>} />
-          <Route path="/administrator/access-role" element={<ProtectedAdminRoute><AccessRolePage /></ProtectedAdminRoute>} />
-          <Route path="/administrator/audit-log" element={<ProtectedAdminRoute><AuditLogPage /></ProtectedAdminRoute>} />
-          <Route path="/fishbone" element={<FishbonePage />} />
+          <Route path="/pilar" element={<ProtectedRoute menuKey="ORGANISASI"><PilarPage /></ProtectedRoute>} />
+          <Route path="/pilar/sbu/:pilarId" element={<ProtectedRoute menuKey="ORGANISASI"><SBUPage /></ProtectedRoute>} />
+          <Route path="/pilar/sbu/sbu_sub/:sbuId" element={<ProtectedRoute menuKey="ORGANISASI"><SBUSUBPage /></ProtectedRoute>} />
+          <Route path="/pilar/sbu/sbu_sub/organisasi/:sbuSubId" element={<ProtectedRoute menuKey="ORGANISASI"><ChartPage /></ProtectedRoute>} />
+          <Route path="/prosedur" element={<ProtectedRoute menuKey="PROSEDUR"><ProsedurPage /></ProtectedRoute>} />
+          <Route path="/prosedur/sop/:sbuSubId" element={<ProtectedRoute menuKey="PROSEDUR"><ProcedureSopPage /></ProtectedRoute>} />
+          <Route path="/prosedur/master-ik" element={<ProtectedRoute menuKey="PROSEDUR"><MasterIkPage /></ProtectedRoute>} />
+          <Route path="/a3" element={<ProtectedRoute menuKey="A3"><A3Page /></ProtectedRoute>} />
+          <Route path="/absensi" element={<ProtectedRoute menuKey="ABSENSI"><AbsensiPage /></ProtectedRoute>} />
+          <Route path="/me" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
+          <Route path="/administrator" element={<ProtectedRoute adminOnly><AdministratorPage /></ProtectedRoute>} />
+          <Route path="/administrator/users" element={<ProtectedRoute adminOnly><UserListPage /></ProtectedRoute>} />
+          <Route path="/administrator/jabatan" element={<ProtectedRoute adminOnly><JabatanListPage /></ProtectedRoute>} />
+          <Route path="/administrator/access-role" element={<ProtectedRoute adminOnly><AccessRolePage /></ProtectedRoute>} />
+          <Route path="/administrator/audit-log" element={<ProtectedRoute adminOnly><AuditLogPage /></ProtectedRoute>} />
+          <Route path="/administrator/notification-template" element={<ProtectedRoute adminOnly><NotificationTemplatePage /></ProtectedRoute>} />
+          <Route path="/fishbone" element={<ProtectedRoute adminOnly><FishbonePage /></ProtectedRoute>} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
