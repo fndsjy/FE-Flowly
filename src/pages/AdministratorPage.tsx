@@ -25,6 +25,16 @@ interface AdminMenuItem {
   icon: string;
 }
 
+const DEFAULT_ADMIN_ITEMS: AdminMenuItem[] = [
+  {
+    id: "ADMIN_NOTIFICATION_TEMPLATE",
+    title: "Template Notifikasi",
+    description: "Modul Template Notifikasi",
+    route: "/administrator/notification-template",
+    icon: "fa-solid fa-envelope-open-text",
+  },
+];
+
 const AdministratorPage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
@@ -62,11 +72,16 @@ const AdministratorPage = () => {
             route: item.route as string,
             icon: getAdminModuleIcon(item.resourceKey),
           }));
-        setMenuItems(items);
+        const existingIds = new Set(items.map((item) => item.id));
+        const merged = [
+          ...items,
+          ...DEFAULT_ADMIN_ITEMS.filter((item) => !existingIds.has(item.id)),
+        ];
+        setMenuItems(merged);
       })
       .catch(() => {
         if (isMounted) {
-          setMenuItems([]);
+          setMenuItems(DEFAULT_ADMIN_ITEMS);
         }
       });
 
@@ -161,6 +176,8 @@ const getAdminModuleIcon = (resourceKey: string) => {
       return "fa-solid fa-lock";
     case "ADMIN_AUDIT_LOG":
       return "fa-solid fa-clipboard-list";
+    case "ADMIN_NOTIFICATION_TEMPLATE":
+      return "fa-solid fa-envelope-open-text";
     default:
       return "fa-solid fa-gear";
   }
