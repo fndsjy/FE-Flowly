@@ -17,6 +17,16 @@ type SbuSub = {
   pic?: number | null;
 };
 
+type Sbu = {
+  id: number;
+  sbuCode: string;
+  sbuName: string;
+  sbuPilar: number;
+  description?: string | null;
+  jobDesc?: string | null;
+  pic?: number | null;
+};
+
 type Employee = {
   UserId: number;
   Name: string;
@@ -45,6 +55,7 @@ type CaseHeader = {
   locationDesc: string | null;
   notes: string | null;
   status: string;
+  visibility?: string | null;
   requesterId: string | null;
   requesterEmployeeId: number | null;
   originSbuSubId: number | null;
@@ -61,6 +72,7 @@ type CaseDepartment = {
   decisionStatus: string;
   decisionAt: string | null;
   decisionBy: string | null;
+  decisionNotes: string | null;
   assigneeEmployeeId: number | null;
   assignedAt: string | null;
   assignedBy: string | null;
@@ -162,10 +174,17 @@ const CASE_TYPES = [
   { value: "PROJECT", label: "Project" },
 ];
 
+const CASE_VISIBILITIES = [
+  { value: "PRIVATE", label: "Private" },
+  { value: "PUBLIC", label: "Public" },
+];
+
 const CASE_STATUSES = ["NEW", "PENDING", "IN_PROGRESS", "DONE", "CANCEL"];
 const DECISION_STATUSES = ["PENDING", "ACCEPT", "REJECT"];
 const WORK_STATUSES = ["NEW", "PENDING", "IN_PROGRESS", "DONE", "CANCEL"];
 const MEDIA_TYPES = ["PHOTO", "VIDEO"];
+
+const CASE_STATUS_FILTERS = CASE_STATUSES.filter((status) => status !== "NEW");
 
 const safeJson = async (res: Response) => {
   try {
@@ -245,6 +264,17 @@ const toDateInputValue = (value: string | null) => {
 const formatDateOnly = (value: string | null) => {
   const formatted = toDateInputValue(value);
   return formatted || "-";
+};
+
+const normalizeCaseStatus = (value: string | null | undefined) => {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized === "NEW") return "PENDING";
+  return normalized;
+};
+
+const getCaseStatusLabel = (value: string | null | undefined) => {
+  const normalized = normalizeCaseStatus(value);
+  return normalized.length > 0 ? normalized : "-";
 };
 
 const isDateEarlier = (
@@ -425,8 +455,12 @@ const A3Page = () => {
   const [caseSearch, setCaseSearch] = useState("");
   const [caseTypeFilter, setCaseTypeFilter] = useState<string>("all");
   const [caseStatusFilter, setCaseStatusFilter] = useState<string>("all");
+  const [caseRoleFilter, setCaseRoleFilter] = useState<
+    "all" | "mine" | "decision" | "assigned"
+  >("all");
   const [selectedCaseId, setSelectedCaseId] = useState("");
 
+  const [sbus, setSbus] = useState<Sbu[]>([]);
   const [sbuSubs, setSbuSubs] = useState<SbuSub[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(true);
@@ -492,19 +526,21 @@ const A3Page = () => {
   const isPreviewPanning = useRef(false);
   const previewPanStartX = useRef(0);
   const previewPanScrollLeft = useRef(0);
+  const decisionNoteRefs = useRef(new Map<string, HTMLTextAreaElement>());
 
   const [showCaseForm, setShowCaseForm] = useState(false);
   const [caseFormMode, setCaseFormMode] = useState<"add" | "edit">("add");
   const [caseSubmitting, setCaseSubmitting] = useState(false);
-  const [caseForm, setCaseForm] = useState({
-    caseId: "",
-    caseType: "PROBLEM",
-    caseTitle: "",
-    backgroundItems: [""],
-    currentConditionItems: [""],
-    projectDesc: "",
-    projectObjective: "",
-    locationDesc: "",
+    const [caseForm, setCaseForm] = useState({
+      caseId: "",
+      caseType: "PROBLEM",
+      caseTitle: "",
+      visibility: "PRIVATE",
+      backgroundItems: [""],
+      currentConditionItems: [""],
+      projectDesc: "",
+      projectObjective: "",
+      locationDesc: "",
     notes: "",
     originSbuSubId: "" as number | "",
     departmentSbuSubIds: [] as number[],
@@ -523,6 +559,7 @@ const A3Page = () => {
       string,
       {
         assigneeEmployeeId: number | "";
+        decisionNotes: string;
         workStatus: string;
         startDate: string;
         targetDate: string;
@@ -531,6 +568,9 @@ const A3Page = () => {
       }
     >
   >({});
+  const [decisionNoteErrors, setDecisionNoteErrors] = useState<Record<string, boolean>>(
+    {}
+  );
 
   const [attachmentForm, setAttachmentForm] = useState({
     mediaType: "PHOTO",
@@ -583,6 +623,10 @@ const A3Page = () => {
   });
   const [itemCauseSearch, setItemCauseSearch] = useState("");
 
+  const sbuMap = useMemo(() => {
+    return new Map(sbus.map((item) => [item.id, item]));
+  }, [sbus]);
+
   const sbuSubMap = useMemo(() => {
     return new Map(sbuSubs.map((item) => [item.id, item]));
   }, [sbuSubs]);
@@ -596,6 +640,7 @@ const A3Page = () => {
   }, [cases]);
 
   const selectedCase = caseMap.get(selectedCaseId) ?? null;
+  const isProblemCase = selectedCase?.caseType === "PROBLEM";
   const selectedBackgroundItems = useMemo(
     () => toNumberedItems(selectedCase?.background),
     [selectedCase?.background]
@@ -615,12 +660,72 @@ const A3Page = () => {
     return Number.isFinite(parsed) ? parsed : null;
   }, [profile]);
 
-  const canAddDepartment = useMemo(() => {
+  const accessibleFishboneSbuSubIds = useMemo(() => {
+    if (canCrudCase || employeeId === null) {
+      return new Set<number>();
+    }
+    const allowed = new Set<number>();
+    for (const dept of departments) {
+      if (dept.assigneeEmployeeId === employeeId) {
+        allowed.add(dept.sbuSubId);
+      }
+      const sbuSub = sbuSubMap.get(dept.sbuSubId);
+      if (sbuSub?.pic === employeeId) {
+        allowed.add(dept.sbuSubId);
+      }
+    }
+    return allowed;
+  }, [canCrudCase, departments, employeeId, sbuSubMap]);
+
+  const canManageAnyFishbone = useMemo(() => {
     if (canCrudCase) return true;
-    if (!selectedCase) return false;
-    if (employeeId === null) return false;
-    return selectedCase.requesterEmployeeId === employeeId;
-  }, [canCrudCase, selectedCase, employeeId]);
+    return accessibleFishboneSbuSubIds.size > 0;
+  }, [canCrudCase, accessibleFishboneSbuSubIds]);
+
+  const visibleCaseFishbones = useMemo(() => {
+    if (canCrudCase) return caseFishbones;
+    if (accessibleFishboneSbuSubIds.size === 0) return [];
+    return caseFishbones.filter((item) =>
+      accessibleFishboneSbuSubIds.has(item.sbuSubId)
+    );
+  }, [caseFishbones, canCrudCase, accessibleFishboneSbuSubIds]);
+
+  const accessibleFishboneDepartments = useMemo(() => {
+    if (canCrudCase) return departments;
+    if (accessibleFishboneSbuSubIds.size === 0) return [];
+    return departments.filter((dept) =>
+      accessibleFishboneSbuSubIds.has(dept.sbuSubId)
+    );
+  }, [canCrudCase, departments, accessibleFishboneSbuSubIds]);
+
+  const canCreateFishbone = useMemo(() => {
+    return canManageAnyFishbone && accessibleFishboneDepartments.length > 0;
+  }, [canManageAnyFishbone, accessibleFishboneDepartments]);
+
+    const canAddDepartment = useMemo(() => {
+      if (canCrudCase) return true;
+      if (!selectedCase) return false;
+      if (employeeId === null) return false;
+      if (selectedCase.requesterEmployeeId === employeeId) return true;
+    return departments.some((dept) => {
+      if (dept.assigneeEmployeeId === employeeId) return true;
+      const sbuSub = sbuSubMap.get(dept.sbuSubId);
+      return sbuSub?.pic === employeeId;
+    });
+    }, [canCrudCase, selectedCase, employeeId, departments, sbuSubMap]);
+
+  const focusDecisionNotes = (deptId: string) => {
+    const el = decisionNoteRefs.current.get(deptId);
+    if (!el) return;
+    el.focus();
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const canManageFishboneBySbuSub = (sbuSubId?: number | null) => {
+    if (!sbuSubId) return false;
+    if (canCrudCase) return true;
+    return accessibleFishboneSbuSubIds.has(sbuSubId);
+  };
 
   const normalizeWorkStatus = (value: string | null) => {
     const normalized = (value ?? "").trim().toUpperCase();
@@ -670,13 +775,101 @@ const A3Page = () => {
     [myDelegations]
   );
 
+  const caseAccessMap = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        isRequester: boolean;
+        isAssignee: boolean;
+        pendingDecision: boolean;
+      }
+    >();
+
+    for (const item of cases) {
+      map.set(item.caseId, {
+        isRequester:
+          employeeId !== null && item.requesterEmployeeId === employeeId,
+        isAssignee: false,
+        pendingDecision: false,
+      });
+    }
+
+    if (employeeId === null) {
+      return map;
+    }
+
+    for (const dept of caseDepartmentOverview) {
+      const existing = map.get(dept.caseId) ?? {
+        isRequester: false,
+        isAssignee: false,
+        pendingDecision: false,
+      };
+
+      if (dept.assigneeEmployeeId === employeeId) {
+        existing.isAssignee = true;
+      }
+
+      const sbuSub = sbuSubMap.get(dept.sbuSubId);
+      const isPic = sbuSub?.pic === employeeId;
+      if (isPic) {
+        const decisionStatus = (dept.decisionStatus ?? "").toUpperCase();
+        if (decisionStatus === "PENDING") {
+          existing.pendingDecision = true;
+        }
+      }
+
+      map.set(dept.caseId, existing);
+    }
+
+    return map;
+  }, [cases, caseDepartmentOverview, employeeId, sbuSubMap]);
+
+  const caseRoleCounts = useMemo(() => {
+    const counts = {
+      all: cases.length,
+      mine: 0,
+      decision: 0,
+      assigned: 0,
+    };
+
+    for (const item of cases) {
+      const meta = caseAccessMap.get(item.caseId);
+      if (meta?.isRequester) counts.mine += 1;
+      if (meta?.pendingDecision) counts.decision += 1;
+      if (meta?.isAssignee) counts.assigned += 1;
+    }
+
+    return counts;
+  }, [cases, caseAccessMap]);
+
+  const caseRoleOptions = useMemo(
+    () => [
+      { value: "all", label: "Semua", count: caseRoleCounts.all },
+      { value: "mine", label: "Case Saya", count: caseRoleCounts.mine },
+      { value: "decision", label: "Perlu Keputusan", count: caseRoleCounts.decision },
+      { value: "assigned", label: "Tugas Saya", count: caseRoleCounts.assigned },
+    ],
+    [caseRoleCounts]
+  );
+
   const filteredCases = useMemo(() => {
     const term = caseSearch.trim().toLowerCase();
     return cases.filter((item) => {
       if (caseTypeFilter !== "all" && item.caseType !== caseTypeFilter) {
         return false;
       }
-      if (caseStatusFilter !== "all" && item.status !== caseStatusFilter) {
+      const normalizedStatus = normalizeCaseStatus(item.status);
+      if (caseStatusFilter !== "all" && normalizedStatus !== caseStatusFilter) {
+        return false;
+      }
+      const meta = caseAccessMap.get(item.caseId);
+      if (caseRoleFilter === "mine" && !meta?.isRequester) {
+        return false;
+      }
+      if (caseRoleFilter === "decision" && !meta?.pendingDecision) {
+        return false;
+      }
+      if (caseRoleFilter === "assigned" && !meta?.isAssignee) {
         return false;
       }
       if (term.length === 0) return true;
@@ -688,14 +881,24 @@ const A3Page = () => {
         (item.projectDesc ?? "").toLowerCase().includes(term)
       );
     });
-  }, [cases, caseSearch, caseStatusFilter, caseTypeFilter]);
+  }, [cases, caseSearch, caseStatusFilter, caseTypeFilter, caseRoleFilter, caseAccessMap]);
+
+  const hasCaseFilters = useMemo(() => {
+    return (
+      caseSearch.trim().length > 0 ||
+      caseTypeFilter !== "all" ||
+      caseStatusFilter !== "all" ||
+      caseRoleFilter !== "all"
+    );
+  }, [caseSearch, caseTypeFilter, caseStatusFilter, caseRoleFilter]);
 
   const selectedCaseFishbone = useMemo(() => {
     return (
-      caseFishbones.find((item) => item.caseFishboneId === selectedCaseFishboneId) ??
-      null
+      visibleCaseFishbones.find(
+        (item) => item.caseFishboneId === selectedCaseFishboneId
+      ) ?? null
     );
-  }, [caseFishbones, selectedCaseFishboneId]);
+  }, [visibleCaseFishbones, selectedCaseFishboneId]);
 
   const activeCaseFishboneCauses = useMemo(() => {
     return caseFishboneCauses.filter((item) => !item.isDeleted);
@@ -808,6 +1011,49 @@ const A3Page = () => {
     return `${sbuSub.sbuSubName} (${sbuSub.sbuSubCode})`;
   };
 
+  const groupedSbuSubs = useMemo(() => {
+    if (sbuSubs.length === 0) return [];
+    const sortedSubs = [...sbuSubs].sort((a, b) =>
+      a.sbuSubName.localeCompare(b.sbuSubName)
+    );
+    const groups = new Map<
+      string,
+      { key: string; sbuId: number | null; sbuLabel: string; items: SbuSub[] }
+    >();
+
+    for (const item of sortedSubs) {
+      const key =
+        item.sbuId !== null && item.sbuId !== undefined
+          ? String(item.sbuId)
+          : "unknown";
+      const sbu =
+        item.sbuId !== null && item.sbuId !== undefined
+          ? sbuMap.get(item.sbuId)
+          : null;
+      const label =
+        item.sbuId !== null && item.sbuId !== undefined
+          ? sbu
+            ? `${sbu.sbuName} (${sbu.sbuCode})`
+            : `SBU ID ${item.sbuId}`
+          : "SBU Tidak diketahui";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          sbuId: item.sbuId ?? null,
+          sbuLabel: label,
+          items: [],
+        });
+      }
+      groups.get(key)!.items.push(item);
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.key === "unknown") return 1;
+      if (b.key === "unknown") return -1;
+      return a.sbuLabel.localeCompare(b.sbuLabel);
+    });
+  }, [sbuSubs, sbuMap]);
+
   const getEmployeeLabel = (id: number | null | undefined) => {
     if (!id) return "-";
     const employee = employeeMap.get(id);
@@ -868,6 +1114,23 @@ const A3Page = () => {
       setCases([]);
     } finally {
       setCasesLoading(false);
+    }
+  };
+
+  const fetchSbus = async () => {
+    try {
+      const res = await apiFetch("/sbu-public", { credentials: "include" });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        showToast(getErrorMessage(json), "error");
+        setSbus([]);
+        return;
+      }
+      const list = Array.isArray(json?.response) ? json.response : [];
+      setSbus(list);
+    } catch (error) {
+      showToast("Gagal memuat data SBU", "error");
+      setSbus([]);
     }
   };
 
@@ -1040,6 +1303,7 @@ const A3Page = () => {
   useEffect(() => {
     fetchProfile();
     fetchCases();
+    fetchSbus();
     fetchSbuSubs();
     fetchEmployees();
     fetchFishboneCategories();
@@ -1062,28 +1326,44 @@ const A3Page = () => {
       setAttachments([]);
       setCaseFishbones([]);
       setSelectedCaseFishboneId("");
+      setCaseFishboneCauses([]);
+      setCaseFishboneItems([]);
+      setShowCaseFishboneForm(false);
+      setShowCaseFishboneCauseForm(false);
+      setShowCaseFishboneItemForm(false);
       return;
     }
     fetchDepartments(selectedCaseId);
     fetchAttachments(selectedCaseId);
-    fetchCaseFishbones(selectedCaseId);
-  }, [selectedCaseId]);
+    if (isProblemCase) {
+      fetchCaseFishbones(selectedCaseId);
+    } else {
+      setCaseFishbones([]);
+      setSelectedCaseFishboneId("");
+      setCaseFishboneCauses([]);
+      setCaseFishboneItems([]);
+      setShowCaseFishboneForm(false);
+      setShowCaseFishboneCauseForm(false);
+      setShowCaseFishboneItemForm(false);
+    }
+  }, [selectedCaseId, isProblemCase]);
 
   useEffect(() => {
-    if (!selectedCaseFishboneId) {
+    if (!isProblemCase || !selectedCaseFishboneId) {
       setCaseFishboneCauses([]);
       setCaseFishboneItems([]);
       return;
     }
     fetchCaseFishboneCauses(selectedCaseFishboneId);
     fetchCaseFishboneItems(selectedCaseFishboneId);
-  }, [selectedCaseFishboneId]);
+  }, [selectedCaseFishboneId, isProblemCase]);
 
   useEffect(() => {
     const nextForms: Record<
       string,
       {
         assigneeEmployeeId: number | "";
+        decisionNotes: string;
         workStatus: string;
         startDate: string;
         targetDate: string;
@@ -1095,6 +1375,7 @@ const A3Page = () => {
       const normalizedStatus = normalizeWorkStatus(dept.workStatus);
       nextForms[dept.caseDepartmentId] = {
         assigneeEmployeeId: dept.assigneeEmployeeId ?? "",
+        decisionNotes: dept.decisionNotes ?? "",
         workStatus: dept.workStatus ?? "",
         startDate: toDateInputValue(dept.startDate),
         targetDate: toDateInputValue(dept.targetDate),
@@ -1106,23 +1387,26 @@ const A3Page = () => {
   }, [departments]);
 
   useEffect(() => {
-    if (caseFishbones.length === 0) {
+    if (!isProblemCase || visibleCaseFishbones.length === 0) {
       setSelectedCaseFishboneId("");
       return;
     }
     if (
       !selectedCaseFishboneId ||
-      !caseFishbones.some((item) => item.caseFishboneId === selectedCaseFishboneId)
+      !visibleCaseFishbones.some(
+        (item) => item.caseFishboneId === selectedCaseFishboneId
+      )
     ) {
-      setSelectedCaseFishboneId(caseFishbones[0].caseFishboneId);
+      setSelectedCaseFishboneId(visibleCaseFishbones[0].caseFishboneId);
     }
-  }, [caseFishbones, selectedCaseFishboneId]);
+  }, [visibleCaseFishbones, selectedCaseFishboneId, isProblemCase]);
   const openCaseCreate = () => {
     setCaseFormMode("add");
     setCaseForm({
       caseId: "",
       caseType: "PROBLEM",
       caseTitle: "",
+      visibility: "PRIVATE",
       backgroundItems: [""],
       currentConditionItems: [""],
       projectDesc: "",
@@ -1136,24 +1420,7 @@ const A3Page = () => {
     setShowCaseForm(true);
   };
 
-  const openCaseEdit = () => {
-    if (!selectedCase) return;
-    setCaseFormMode("edit");
-    setCaseForm({
-      caseId: selectedCase.caseId,
-      caseType: selectedCase.caseType,
-      caseTitle: selectedCase.caseTitle,
-      backgroundItems: toEditableNumberedItems(selectedCase.background),
-      currentConditionItems: toEditableNumberedItems(selectedCase.currentCondition),
-      projectDesc: selectedCase.projectDesc ?? "",
-      projectObjective: selectedCase.projectObjective ?? "",
-      locationDesc: selectedCase.locationDesc ?? "",
-      notes: selectedCase.notes ?? "",
-      originSbuSubId: selectedCase.originSbuSubId ?? "",
-      departmentSbuSubIds: departments.map((dept) => dept.sbuSubId),
-    });
-    setShowCaseForm(true);
-  };
+  // Edit case disabled for all roles.
 
   const handleCaseSubmit = async () => {
     if (!caseForm.caseTitle.trim()) {
@@ -1193,11 +1460,12 @@ const A3Page = () => {
         caseForm.caseType === "PROBLEM"
           ? serializeNumberedItems(caseForm.currentConditionItems)
           : "";
-      const payload: Record<string, unknown> = {
-        caseType: caseForm.caseType,
-        caseTitle: caseForm.caseTitle,
-        background: backgroundText || null,
-        currentCondition: currentConditionText || null,
+        const payload: Record<string, unknown> = {
+          caseType: caseForm.caseType,
+          caseTitle: caseForm.caseTitle,
+          visibility: String(caseForm.visibility).toUpperCase(),
+          background: backgroundText || null,
+          currentCondition: currentConditionText || null,
         projectDesc: caseForm.caseType === "PROJECT" ? caseForm.projectDesc : null,
         projectObjective:
           caseForm.caseType === "PROJECT" ? caseForm.projectObjective : null,
@@ -1325,18 +1593,41 @@ const A3Page = () => {
   };
 
   const handleDecisionUpdate = async (deptId: string, decisionStatus: string) => {
+    const form = departmentWorkForms[deptId];
+    const department = departments.find(
+      (item) => item.caseDepartmentId === deptId
+    );
+    const decisionNotes = (
+      form?.decisionNotes ??
+      department?.decisionNotes ??
+      ""
+    ).trim();
+    if (decisionStatus !== "REJECT") {
+      setDecisionNoteErrors((prev) => ({ ...prev, [deptId]: false }));
+    }
+    if (decisionStatus === "REJECT" && decisionNotes.length === 0) {
+      setDecisionNoteErrors((prev) => ({ ...prev, [deptId]: true }));
+      showToast("Komentar wajib diisi sebelum REJECT", "error");
+      focusDecisionNotes(deptId);
+      return;
+    }
     try {
       const res = await apiFetch("/case-department", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ caseDepartmentId: deptId, decisionStatus }),
+        body: JSON.stringify({
+          caseDepartmentId: deptId,
+          decisionStatus,
+          decisionNotes: decisionNotes.length > 0 ? decisionNotes : null,
+        }),
       });
       const json = await safeJson(res);
       if (!res.ok) {
         showToast(getErrorMessage(json), "error");
         return;
       }
+      setDecisionNoteErrors((prev) => ({ ...prev, [deptId]: false }));
       showToast("Keputusan departemen diperbarui", "success");
         if (selectedCaseId) {
           fetchDepartments(selectedCaseId);
@@ -1345,6 +1636,51 @@ const A3Page = () => {
         }
     } catch (error) {
       showToast("Gagal memperbarui keputusan", "error");
+    }
+  };
+
+  const handleDecisionNotesSave = async (deptId: string) => {
+    const form = departmentWorkForms[deptId];
+    const department = departments.find(
+      (item) => item.caseDepartmentId === deptId
+    );
+    const decisionNotes = (
+      form?.decisionNotes ??
+      department?.decisionNotes ??
+      ""
+    ).trim();
+    const decisionStatus = (department?.decisionStatus ?? "").toUpperCase();
+
+    if (decisionStatus === "REJECT" && decisionNotes.length === 0) {
+      setDecisionNoteErrors((prev) => ({ ...prev, [deptId]: true }));
+      showToast("Komentar wajib diisi sebelum REJECT", "error");
+      focusDecisionNotes(deptId);
+      return;
+    }
+    try {
+      const res = await apiFetch("/case-department", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          caseDepartmentId: deptId,
+          decisionNotes: decisionNotes.length > 0 ? decisionNotes : null,
+        }),
+      });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        showToast(getErrorMessage(json), "error");
+        return;
+      }
+      setDecisionNoteErrors((prev) => ({ ...prev, [deptId]: false }));
+      showToast("Komentar keputusan diperbarui", "success");
+      if (selectedCaseId) {
+        fetchDepartments(selectedCaseId);
+        fetchCases();
+        fetchCaseDepartmentOverview();
+      }
+    } catch (error) {
+      showToast("Gagal memperbarui komentar keputusan", "error");
     }
   };
 
@@ -1524,9 +1860,15 @@ const A3Page = () => {
 
   const openCaseFishboneCreate = () => {
     if (!selectedCaseId) return;
+    if (!canManageAnyFishbone) {
+      showToast("Tidak ada akses untuk membuat fishbone", "error");
+      return;
+    }
     setCaseFishboneFormMode("add");
     const defaultSbuSubId =
-      departments.length > 0 ? departments[0].sbuSubId : "";
+      accessibleFishboneDepartments.length > 0
+        ? accessibleFishboneDepartments[0].sbuSubId
+        : "";
     setCaseFishboneForm({
       caseFishboneId: "",
       caseId: selectedCaseId,
@@ -1539,6 +1881,10 @@ const A3Page = () => {
   };
 
   const openCaseFishboneEdit = (fishbone: CaseFishbone) => {
+    if (!canManageFishboneBySbuSub(fishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk mengubah fishbone ini", "error");
+      return;
+    }
     setCaseFishboneFormMode("edit");
     setCaseFishboneForm({
       caseFishboneId: fishbone.caseFishboneId,
@@ -1607,6 +1953,13 @@ const A3Page = () => {
   };
 
   const handleCaseFishboneDelete = async (caseFishboneId: string) => {
+    const fishbone = caseFishbones.find(
+      (item) => item.caseFishboneId === caseFishboneId
+    );
+    if (fishbone && !canManageFishboneBySbuSub(fishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk menghapus fishbone ini", "error");
+      return;
+    }
     if (!confirm("Hapus fishbone ini?")) return;
     try {
       const res = await apiFetch("/case-fishbone", {
@@ -1631,6 +1984,10 @@ const A3Page = () => {
 
   const openCaseFishboneCauseCreate = () => {
     if (!selectedCaseFishboneId) return;
+    if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk menambah sumber masalah", "error");
+      return;
+    }
     setCaseFishboneCauseFormMode("add");
     setCaseFishboneCauseForm({
       caseFishboneCauseId: "",
@@ -1643,6 +2000,10 @@ const A3Page = () => {
   };
 
   const openCaseFishboneCauseEdit = (cause: CaseFishboneCause) => {
+    if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk mengubah sumber masalah", "error");
+      return;
+    }
     setCaseFishboneCauseFormMode("edit");
     setCaseFishboneCauseForm({
       caseFishboneCauseId: cause.caseFishboneCauseId,
@@ -1706,6 +2067,10 @@ const A3Page = () => {
   };
 
   const handleCaseFishboneCauseDelete = async (caseFishboneCauseId: string) => {
+    if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk menghapus sumber masalah", "error");
+      return;
+    }
     if (!confirm("Hapus sumber masalah ini?")) return;
     try {
       const res = await apiFetch("/case-fishbone-cause", {
@@ -1731,6 +2096,10 @@ const A3Page = () => {
 
   const openCaseFishboneItemCreate = () => {
     if (!selectedCaseFishboneId) return;
+    if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk menambah item fishbone", "error");
+      return;
+    }
     setCaseFishboneItemFormMode("add");
     setCaseFishboneItemForm({
       caseFishboneItemId: "",
@@ -1746,6 +2115,10 @@ const A3Page = () => {
   };
 
   const openCaseFishboneItemEdit = (item: CaseFishboneItem) => {
+    if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk mengubah item fishbone", "error");
+      return;
+    }
     setCaseFishboneItemFormMode("edit");
     setCaseFishboneItemForm({
       caseFishboneItemId: item.caseFishboneItemId,
@@ -1823,6 +2196,10 @@ const A3Page = () => {
   };
 
   const handleCaseFishboneItemDelete = async (caseFishboneItemId: string) => {
+    if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk menghapus item fishbone", "error");
+      return;
+    }
     if (!confirm("Hapus item fishbone ini?")) return;
     try {
       const res = await apiFetch("/case-fishbone-item", {
@@ -2519,18 +2896,41 @@ const A3Page = () => {
                       </option>
                     ))}
                   </select>
-                  <select
-                    value={caseStatusFilter}
-                    onChange={(event) => setCaseStatusFilter(event.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
-                  >
-                    <option value="all">Semua Status</option>
-                    {CASE_STATUSES.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      value={caseStatusFilter}
+                      onChange={(event) => setCaseStatusFilter(event.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
+                    >
+                      <option value="all">Semua Status</option>
+                      {CASE_STATUS_FILTERS.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {caseRoleOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() =>
+                        setCaseRoleFilter(
+                          option.value as "all" | "mine" | "decision" | "assigned"
+                        )
+                      }
+                      className={`rounded-lg border px-3 py-2 text-left text-xs ${
+                        caseRoleFilter === option.value
+                          ? "border-rose-300 bg-rose-50 text-rose-700"
+                          : "border-slate-200 text-slate-600 hover:border-rose-200"
+                      }`}
+                    >
+                      <span className="block font-semibold">{option.label}</span>
+                      <span className="block text-[11px] text-slate-500">
+                        {option.count} case
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -2538,36 +2938,64 @@ const A3Page = () => {
                 {casesLoading ? (
                   <p className="text-sm text-slate-500">Memuat case...</p>
                 ) : filteredCases.length === 0 ? (
-                  <p className="text-sm text-slate-500">Belum ada case.</p>
+                  <p className="text-sm text-slate-500">
+                    {hasCaseFilters
+                      ? "Tidak ada case yang sesuai filter."
+                      : "Belum ada case."}
+                  </p>
                 ) : (
-                  filteredCases.map((item) => (
-                    <button
-                      key={item.caseId}
-                      onClick={() => setSelectedCaseId(item.caseId)}
-                      className={`w-full text-left rounded-xl border px-4 py-3 transition ${
-                        item.caseId === selectedCaseId
-                          ? "border-rose-300 bg-rose-50"
-                          : "border-slate-200 hover:border-rose-200"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                            {item.caseType}
-                          </p>
-                          <p className="text-sm font-semibold text-slate-800 line-clamp-2">
-                            {item.caseTitle}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-1">
-                            {item.caseId}
-                          </p>
-                        </div>
-                        <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">
-                          {item.status}
-                        </span>
-                      </div>
-                    </button>
-                  ))
+                  filteredCases.map((item) => {
+                    const meta = caseAccessMap.get(item.caseId);
+                    return (
+                      <button
+                        key={item.caseId}
+                        onClick={() => setSelectedCaseId(item.caseId)}
+                        className={`w-full text-left rounded-xl border px-4 py-3 transition ${
+                          item.caseId === selectedCaseId
+                            ? "border-rose-300 bg-rose-50"
+                            : "border-slate-200 hover:border-rose-200"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                              {item.caseType}
+                            </p>
+                            <p className="text-sm font-semibold text-slate-800 line-clamp-2">
+                              {item.caseTitle}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {item.caseId}
+                            </p>
+                            {(meta?.isRequester ||
+                              meta?.pendingDecision ||
+                              meta?.isAssignee) && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {meta?.isRequester && (
+                                  <span className="px-2 py-0.5 rounded-full border border-teal-200 bg-teal-50 text-[10px] text-teal-700">
+                                    Case Saya
+                                  </span>
+                                )}
+                                {meta?.pendingDecision && (
+                                  <span className="px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-[10px] text-amber-700">
+                                    Perlu Keputusan
+                                  </span>
+                                )}
+                                {meta?.isAssignee && (
+                                  <span className="px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-[10px] text-blue-700">
+                                    Tugas Saya
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            </div>
+                            <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                              {getCaseStatusLabel(item.status)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
                 )}
               </div>
             </div>
@@ -2590,26 +3018,20 @@ const A3Page = () => {
                         <h2 className="text-2xl font-bold text-slate-800">
                           {selectedCase.caseTitle}
                         </h2>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                          <span>ID: {selectedCase.caseId}</span>
-                          <span>Status: {selectedCase.status}</span>
-                          <span>Asal: {getSbuSubLabel(selectedCase.originSbuSubId)}</span>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                            <span>ID: {selectedCase.caseId}</span>
+                            <span>Status: {getCaseStatusLabel(selectedCase.status)}</span>
+                            <span>Asal: {getSbuSubLabel(selectedCase.originSbuSubId)}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={openCaseEdit}
-                          className="px-3 py-2 rounded-lg border border-rose-300 text-rose-500 hover:bg-rose-50"
-                        >
-                          Edit Case
-                        </button>
-                        <button
-                          onClick={fetchCases}
-                          className="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-                        >
-                          Refresh
-                        </button>
-                      </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={fetchCases}
+                            className="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                          >
+                            Refresh
+                          </button>
+                        </div>
                     </div>
 
                     <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
@@ -2683,17 +3105,28 @@ const A3Page = () => {
                         </>
                       )}
 
-                      <div className="rounded-xl border border-slate-200 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                          Lokasi
-                        </p>
-                        <p className="mt-2">{selectedCase.locationDesc || "-"}</p>
-                      </div>
-                      <div className="rounded-xl border border-slate-200 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                          Catatan
-                        </p>
-                        <p className="mt-2">{selectedCase.notes || "-"}</p>
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                            Lokasi
+                          </p>
+                          <p className="mt-2">{selectedCase.locationDesc || "-"}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                            Visibilitas
+                          </p>
+                          <p className="mt-2">
+                            {String(selectedCase.visibility ?? "PRIVATE").toUpperCase() ===
+                            "PUBLIC"
+                              ? "Public"
+                              : "Private"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                            Catatan
+                          </p>
+                          <p className="mt-2">{selectedCase.notes || "-"}</p>
                       </div>
                     </div>
                   </div>
@@ -2760,6 +3193,14 @@ const A3Page = () => {
                           const canEditWork =
                             (canCrudCase || isPic || isAssignee) &&
                             isDecisionAccepted;
+                          const decisionNotesValue = (
+                            form?.decisionNotes ??
+                            dept.decisionNotes ??
+                            ""
+                          ).trim();
+                          const hasDecisionNoteError = !!decisionNoteErrors[
+                            dept.caseDepartmentId
+                          ];
                           const normalizedWorkStatus = normalizeWorkStatus(
                             form?.workStatus ?? dept.workStatus
                           );
@@ -2799,10 +3240,19 @@ const A3Page = () => {
                                             status
                                           )
                                         }
+                                        title={
+                                          status === "REJECT" && decisionNotesValue.length === 0
+                                            ? "Isi komentar untuk REJECT"
+                                            : undefined
+                                        }
                                         className={`px-2.5 py-1 rounded-full text-xs border ${
                                           dept.decisionStatus === status
                                             ? "bg-rose-400 text-white border-rose-400"
                                             : "border-slate-200 text-slate-600 hover:border-rose-300"
+                                        } ${
+                                          status === "REJECT" && decisionNotesValue.length === 0
+                                            ? "opacity-60"
+                                            : ""
                                         }`}
                                       >
                                         {status}
@@ -2828,6 +3278,78 @@ const A3Page = () => {
                                     : "Tentukan keputusan (ACCEPT/REJECT) sebelum mengisi PIC dan progress."}
                                 </div>
                               )}
+
+                              <div className="space-y-2">
+                                <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                  Komentar Keputusan
+                                </label>
+                                {canEditDecision ? (
+                                  <>
+                                    <textarea
+                                      ref={(el) => {
+                                        if (el) {
+                                          decisionNoteRefs.current.set(
+                                            dept.caseDepartmentId,
+                                            el
+                                          );
+                                        } else {
+                                          decisionNoteRefs.current.delete(
+                                            dept.caseDepartmentId
+                                          );
+                                        }
+                                      }}
+                                      value={form?.decisionNotes ?? ""}
+                                      onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        setDepartmentWorkForms((prev) => ({
+                                          ...prev,
+                                          [dept.caseDepartmentId]: {
+                                            ...(prev[dept.caseDepartmentId] ?? form),
+                                            decisionNotes: nextValue,
+                                          },
+                                        }));
+                                        if (hasDecisionNoteError && nextValue.trim()) {
+                                          setDecisionNoteErrors((prev) => ({
+                                            ...prev,
+                                            [dept.caseDepartmentId]: false,
+                                          }));
+                                        }
+                                      }}
+                                      maxLength={500}
+                                      placeholder="Tulis alasan/komentar keputusan..."
+                                      className={`w-full px-3 py-2 rounded-lg border text-sm h-24 ${
+                                        hasDecisionNoteError
+                                          ? "border-rose-300 bg-rose-50/30"
+                                          : "border-slate-200"
+                                      }`}
+                                    />
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span
+                                        className={
+                                          hasDecisionNoteError
+                                            ? "text-rose-500"
+                                            : "text-slate-500"
+                                        }
+                                      >
+                                        Wajib diisi sebelum REJECT. Simpan komentar dulu, lalu pilih status.
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDecisionNotesSave(dept.caseDepartmentId)
+                                        }
+                                        className="text-teal-600 hover:underline"
+                                      >
+                                        Simpan komentar
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600 whitespace-pre-wrap">
+                                    {dept.decisionNotes?.trim() || "-"}
+                                  </div>
+                                )}
+                              </div>
 
                               {isDecisionAccepted && (
                                 <>
@@ -2905,6 +3427,7 @@ const A3Page = () => {
                                           const next = {
                                             ...(current ?? {
                                               assigneeEmployeeId: "",
+                                              decisionNotes: "",
                                               workStatus: "",
                                               startDate: "",
                                               targetDate: "",
@@ -3241,6 +3764,7 @@ const A3Page = () => {
                       </div>
                     </div>
                   </div>
+                  {isProblemCase && canManageAnyFishbone && (
                   <div className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -3251,22 +3775,24 @@ const A3Page = () => {
                           Buat akar masalah berdasarkan case terpilih.
                         </p>
                       </div>
-                      <button
-                        onClick={openCaseFishboneCreate}
-                        className="px-3 py-2 rounded-lg bg-rose-400 text-white text-sm"
-                      >
-                        Tambah Fishbone
-                      </button>
+                      {canCreateFishbone && (
+                        <button
+                          onClick={openCaseFishboneCreate}
+                          className="px-3 py-2 rounded-lg bg-rose-400 text-white text-sm"
+                        >
+                          Tambah Fishbone
+                        </button>
+                      )}
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
                       <div className="space-y-3">
                         {caseFishbonesLoading ? (
                           <p className="text-sm text-slate-500">Memuat fishbone...</p>
-                        ) : caseFishbones.length === 0 ? (
+                        ) : visibleCaseFishbones.length === 0 ? (
                           <p className="text-sm text-slate-500">Belum ada fishbone.</p>
                         ) : (
-                          caseFishbones.map((item) => (
+                          visibleCaseFishbones.map((item) => (
                             <button
                               key={item.caseFishboneId}
                               onClick={() => setSelectedCaseFishboneId(item.caseFishboneId)}
@@ -3318,20 +3844,26 @@ const A3Page = () => {
                                     {selectedCaseFishbone.fishboneDesc || "-"}
                                   </p>
                                 </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => openCaseFishboneEdit(selectedCaseFishbone)}
-                                    className="px-3 py-2 rounded-lg border border-rose-300 text-rose-500 text-sm"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleCaseFishboneDelete(selectedCaseFishbone.caseFishboneId)}
-                                    className="px-3 py-2 rounded-lg bg-rose-100 text-rose-600 text-sm"
-                                  >
-                                    Hapus
-                                  </button>
-                                </div>
+                                {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => openCaseFishboneEdit(selectedCaseFishbone)}
+                                      className="px-3 py-2 rounded-lg border border-rose-300 text-rose-500 text-sm"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        handleCaseFishboneDelete(
+                                          selectedCaseFishbone.caseFishboneId
+                                        )
+                                      }
+                                      className="px-3 py-2 rounded-lg bg-rose-100 text-rose-600 text-sm"
+                                    >
+                                      Hapus
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -3341,12 +3873,14 @@ const A3Page = () => {
                                   <h4 className="text-sm font-semibold text-slate-800">
                                     Sumber Masalah
                                   </h4>
-                                  <button
-                                    onClick={openCaseFishboneCauseCreate}
-                                    className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
-                                  >
-                                    Tambah
-                                  </button>
+                                  {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                    <button
+                                      onClick={openCaseFishboneCauseCreate}
+                                      className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
+                                    >
+                                      Tambah
+                                    </button>
+                                  )}
                                 </div>
                                 {caseFishboneCausesLoading ? (
                                   <p className="text-xs text-slate-500">Memuat...</p>
@@ -3368,20 +3902,26 @@ const A3Page = () => {
                                               {item.isActive ? "Aktif" : "Nonaktif"}
                                             </p>
                                           </div>
-                                          <div className="flex gap-2 text-xs">
-                                            <button
-                                              onClick={() => openCaseFishboneCauseEdit(item)}
-                                              className="text-rose-500 hover:underline"
-                                            >
-                                              Edit
-                                            </button>
-                                            <button
-                                              onClick={() => handleCaseFishboneCauseDelete(item.caseFishboneCauseId)}
-                                              className="text-slate-400 hover:underline"
-                                            >
-                                              Hapus
-                                            </button>
-                                          </div>
+                                          {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                            <div className="flex gap-2 text-xs">
+                                              <button
+                                                onClick={() => openCaseFishboneCauseEdit(item)}
+                                                className="text-rose-500 hover:underline"
+                                              >
+                                                Edit
+                                              </button>
+                                              <button
+                                                onClick={() =>
+                                                  handleCaseFishboneCauseDelete(
+                                                    item.caseFishboneCauseId
+                                                  )
+                                                }
+                                                className="text-slate-400 hover:underline"
+                                              >
+                                                Hapus
+                                              </button>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     ))}
@@ -3394,12 +3934,14 @@ const A3Page = () => {
                                   <h4 className="text-sm font-semibold text-slate-800">
                                     Masalah & Solusi
                                   </h4>
-                                  <button
-                                    onClick={openCaseFishboneItemCreate}
-                                    className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
-                                  >
-                                    Tambah
-                                  </button>
+                                  {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                    <button
+                                      onClick={openCaseFishboneItemCreate}
+                                      className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
+                                    >
+                                      Tambah
+                                    </button>
+                                  )}
                                 </div>
                                 {caseFishboneItemsLoading ? (
                                   <p className="text-xs text-slate-500">Memuat...</p>
@@ -3430,22 +3972,26 @@ const A3Page = () => {
                                                 .join(", ") || "-"}
                                             </p>
                                           </div>
-                                          <div className="flex gap-2 text-xs">
-                                            <button
-                                              onClick={() => openCaseFishboneItemEdit(item)}
-                                              className="text-rose-500 hover:underline"
-                                            >
-                                              Edit
-                                            </button>
-                                            <button
-                                              onClick={() =>
-                                                handleCaseFishboneItemDelete(item.caseFishboneItemId)
-                                              }
-                                              className="text-slate-400 hover:underline"
-                                            >
-                                              Hapus
-                                            </button>
-                                          </div>
+                                          {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                            <div className="flex gap-2 text-xs">
+                                              <button
+                                                onClick={() => openCaseFishboneItemEdit(item)}
+                                                className="text-rose-500 hover:underline"
+                                              >
+                                                Edit
+                                              </button>
+                                              <button
+                                                onClick={() =>
+                                                  handleCaseFishboneItemDelete(
+                                                    item.caseFishboneItemId
+                                                  )
+                                                }
+                                                className="text-slate-400 hover:underline"
+                                              >
+                                                Hapus
+                                              </button>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     ))}
@@ -3455,10 +4001,11 @@ const A3Page = () => {
                             </div>
                           </>
                         )}
-                        {previewSection}
+                        {isProblemCase && previewSection}
                       </div>
                     </div>
                   </div>
+                  )}
                 </>
               )}
             </div>
@@ -3527,15 +4074,28 @@ const A3Page = () => {
                   </option>
                 ))}
               </select>
-              <input
-                type="text"
-                placeholder="Judul case"
-                value={caseForm.caseTitle}
-                onChange={(event) =>
-                  setCaseForm({ ...caseForm, caseTitle: event.target.value })
-                }
-                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
-              />
+                <input
+                  type="text"
+                  placeholder="Judul case"
+                  value={caseForm.caseTitle}
+                  onChange={(event) =>
+                    setCaseForm({ ...caseForm, caseTitle: event.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
+                />
+                <select
+                  value={caseForm.visibility}
+                  onChange={(event) =>
+                    setCaseForm({ ...caseForm, visibility: event.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
+                >
+                  {CASE_VISIBILITIES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
 
               {caseForm.caseType === "PROBLEM" && (
                 <>
@@ -3622,44 +4182,55 @@ const A3Page = () => {
 
               {caseFormMode === "add" && (
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-400">
-                    Departemen Tujuan
-                  </label>
-                  <div className="mt-2 space-y-2 max-h-48 overflow-auto rounded-lg border-2 border-gray-200 p-3">
-                    {sbuSubs.length === 0 ? (
-                      <p className="text-xs text-slate-400">Belum ada data SBU Sub.</p>
-                    ) : (
-                      sbuSubs.map((item) => {
-                        const checked = caseForm.departmentSbuSubIds.includes(item.id);
-                        return (
-                          <label
-                            key={item.id}
-                            className="flex items-start gap-2 text-sm text-slate-700"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(event) => {
-                                const isChecked = event.target.checked;
-                                setCaseForm((prev) => ({
-                                  ...prev,
-                                  departmentSbuSubIds: isChecked
-                                    ? [...prev.departmentSbuSubIds, item.id]
-                                    : prev.departmentSbuSubIds.filter((id) => id !== item.id),
-                                }));
-                              }}
-                            />
-                            <span>
-                              {item.sbuSubName} ({item.sbuSubCode})
-                            </span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Pilih satu atau lebih departemen tujuan.
-                  </p>
+                    <label className="text-xs uppercase tracking-wide text-slate-400">
+                      Departemen Tujuan
+                    </label>
+                    <div className="mt-2 space-y-2 max-h-48 overflow-auto rounded-lg border-2 border-gray-200 p-3">
+                      {groupedSbuSubs.length === 0 ? (
+                        <p className="text-xs text-slate-400">Belum ada data SBU Sub.</p>
+                      ) : (
+                        groupedSbuSubs.map((group) => (
+                          <div key={group.key} className="space-y-2">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              {group.sbuLabel}
+                            </div>
+                            <div className="space-y-2 pl-3">
+                              {group.items.map((item) => {
+                                const checked = caseForm.departmentSbuSubIds.includes(item.id);
+                                return (
+                                  <label
+                                    key={item.id}
+                                    className="flex items-start gap-2 text-sm text-slate-700"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(event) => {
+                                        const isChecked = event.target.checked;
+                                        setCaseForm((prev) => ({
+                                          ...prev,
+                                          departmentSbuSubIds: isChecked
+                                            ? [...prev.departmentSbuSubIds, item.id]
+                                            : prev.departmentSbuSubIds.filter(
+                                                (id) => id !== item.id
+                                              ),
+                                        }));
+                                      }}
+                                    />
+                                    <span>
+                                      {item.sbuSubName} ({item.sbuSubCode})
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Pilih satu atau lebih departemen tujuan.
+                    </p>
                 </div>
               )}
 
@@ -3796,7 +4367,7 @@ const A3Page = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               >
                 <option value="">Pilih Departemen</option>
-                {departments.map((dept) => (
+                {accessibleFishboneDepartments.map((dept) => (
                   <option key={dept.caseDepartmentId} value={dept.sbuSubId}>
                     {getSbuSubLabel(dept.sbuSubId)}
                   </option>
