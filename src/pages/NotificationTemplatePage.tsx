@@ -24,7 +24,7 @@ type NotificationTemplateForm = {
   caseNotificationTemplateId: string;
   templateName: string;
   channel: string;
-  role: "PIC" | "ASSIGNEE";
+  role: "PIC" | "ASSIGNEE" | "REQUESTER";
   action: string;
   caseType: string;
   messageTemplate: string;
@@ -37,7 +37,7 @@ type TemplateField = {
   hint: string;
 };
 
-const NOTIFICATION_ROLES = ["PIC", "ASSIGNEE"] as const;
+const NOTIFICATION_ROLES = ["PIC", "ASSIGNEE", "REQUESTER"] as const;
 const NOTIFICATION_CHANNELS = ["WHATSAPP"] as const;
 const CASE_TYPE_OPTIONS = [
   { value: "PROBLEM", label: "Case" },
@@ -45,11 +45,15 @@ const CASE_TYPE_OPTIONS = [
 ] as const;
 const NOTIFICATION_ACTION_OPTIONS = [
   { value: "NEW_CASE", label: "User -> PIC (Case baru)", role: "PIC" },
+  { value: "ADD_DEPARTMENT", label: "User -> PIC (Tambah departemen)", role: "PIC" },
   { value: "ASSIGN_TASK", label: "PIC -> Assignee (Assign tugas)", role: "ASSIGNEE" },
+  { value: "DECISION", label: "PIC -> Requester (Keputusan departemen)", role: "REQUESTER" },
 ] as const;
-const ACTION_ROLE_MAP = new Map<string, "PIC" | "ASSIGNEE">([
+const ACTION_ROLE_MAP = new Map<string, "PIC" | "ASSIGNEE" | "REQUESTER">([
   ["NEW_CASE", "PIC"],
+  ["ADD_DEPARTMENT", "PIC"],
   ["ASSIGN_TASK", "ASSIGNEE"],
+  ["DECISION", "REQUESTER"],
 ]);
 const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
   { key: "{caseId}", label: "ID case", hint: "ID unik case" },
@@ -68,6 +72,21 @@ const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
     key: "{caseTypeLabel}",
     label: "Label tipe case",
     hint: "case atau project",
+  },
+  {
+    key: "{originSbuSubId}",
+    label: "ID departemen asal",
+    hint: "ID SBU sub asal (pembuat case)",
+  },
+  {
+    key: "{originSbuSubName}",
+    label: "Nama departemen asal",
+    hint: "Nama SBU sub asal (pembuat case)",
+  },
+  {
+    key: "{originSbuSubCode}",
+    label: "Kode departemen asal",
+    hint: "Kode SBU sub asal (pembuat case)",
   },
   { key: "{sbuSubId}", label: "ID SBU sub", hint: "ID SBU sub target" },
   {
@@ -102,6 +121,16 @@ const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
     hint: "Nama pembuat case (NEW_CASE)",
   },
   {
+    key: "{adderUserId}",
+    label: "User ID penambah departemen",
+    hint: "UserId yang menambahkan departemen ke case",
+  },
+  {
+    key: "{adderName}",
+    label: "Nama penambah departemen",
+    hint: "Nama yang menambahkan departemen ke case",
+  },
+  {
     key: "{assignerUserId}",
     label: "User ID pemberi tugas",
     hint: "UserId PIC yang assign (ASSIGN_TASK)",
@@ -122,6 +151,26 @@ const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
     hint: "Kode SBU sub PIC pengirim tugas",
   },
   {
+    key: "{decisionStatus}",
+    label: "Status keputusan",
+    hint: "ACCEPT atau REJECT",
+  },
+  {
+    key: "{decisionNotes}",
+    label: "Alasan keputusan",
+    hint: "Catatan keputusan PIC",
+  },
+  {
+    key: "{decisionByUserId}",
+    label: "User ID pemberi keputusan",
+    hint: "UserId PIC yang memutuskan",
+  },
+  {
+    key: "{decisionByName}",
+    label: "Nama pemberi keputusan",
+    hint: "Nama PIC yang memutuskan",
+  },
+  {
     key: "{senderUserId}",
     label: "User ID pengirim",
     hint: "Otomatis requester/PIC sesuai action",
@@ -131,8 +180,12 @@ const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
     label: "Nama pengirim",
     hint: "Otomatis requester/PIC sesuai action",
   },
-  { key: "{role}", label: "Role penerima", hint: "PIC atau ASSIGNEE" },
-  { key: "{action}", label: "Aksi", hint: "NEW_CASE atau ASSIGN_TASK" },
+  { key: "{role}", label: "Role penerima", hint: "PIC, ASSIGNEE, atau REQUESTER" },
+  {
+    key: "{action}",
+    label: "Aksi",
+    hint: "NEW_CASE, ADD_DEPARTMENT, ASSIGN_TASK, atau DECISION",
+  },
 ];
 
 const safeJson = async (res: Response) => {
@@ -178,7 +231,7 @@ const getActionLabel = (value: string | null | undefined) => {
 
 const resolveRoleForAction = (
   action: string,
-  fallback: "PIC" | "ASSIGNEE"
+  fallback: "PIC" | "ASSIGNEE" | "REQUESTER"
 ) => ACTION_ROLE_MAP.get(action) ?? fallback;
 
 const isRoleLocked = (action: string) => ACTION_ROLE_MAP.has(action);
@@ -292,7 +345,11 @@ const NotificationTemplatePage = () => {
   const openNotificationTemplateEdit = (item: CaseNotificationTemplate) => {
     const action = item.action ?? "";
     const normalizedRole =
-      item.role?.toUpperCase() === "ASSIGNEE" ? "ASSIGNEE" : "PIC";
+      item.role?.toUpperCase() === "ASSIGNEE"
+        ? "ASSIGNEE"
+        : item.role?.toUpperCase() === "REQUESTER"
+        ? "REQUESTER"
+        : "PIC";
     setNotificationTemplateFormMode("edit");
     setNotificationTemplateForm({
       caseNotificationTemplateId: item.caseNotificationTemplateId,
@@ -630,7 +687,10 @@ const NotificationTemplatePage = () => {
                     onChange={(event) =>
                       setNotificationTemplateForm((prev) => ({
                         ...prev,
-                        role: event.target.value as "PIC" | "ASSIGNEE",
+                        role: event.target.value as
+                          | "PIC"
+                          | "ASSIGNEE"
+                          | "REQUESTER",
                       }))
                     }
                     disabled={isRoleLocked(notificationTemplateForm.action)}
