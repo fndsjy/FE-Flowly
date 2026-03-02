@@ -13,7 +13,7 @@ type UserProfile = {
   roleLevel?: number;
 };
 
-const PUBLIC_MENU_KEYS = new Set(["PROSEDUR"]);
+const PUBLIC_MENU_KEYS = new Set(["PROSEDUR", "FISHBONE"]);
 
 const ProtectedRoute = ({ children, menuKey, adminOnly = false }: Props) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);

@@ -59,7 +59,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   const navigate = useNavigate();
 
   const location = useLocation();
-  const publicMenuKeys = new Set(["PROSEDUR"]);
+  const publicMenuKeys = new Set(["PROSEDUR", "FISHBONE"]);
 
   /* ---------------- FETCH USER PROFILE ---------------- */
   useEffect(() => {

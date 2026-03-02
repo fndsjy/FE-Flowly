@@ -103,6 +103,8 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   SBU_SUB: "SBU Sub",
 };
 
+const hiddenAccessKeys = new Set(["PROSEDUR", "FISHBONE", "A3", "ABSENSI", "ADMIN"]);
+
 const buildAccessKey = (resourceType: ResourceType, resourceKey: string) =>
   `${resourceType}::${resourceKey}`;
 
@@ -232,9 +234,11 @@ const AccessRolePage = () => {
 
   const resourceItems = useMemo<ResourceItem[]>(() => {
     const list: ResourceItem[] = [];
+    const shouldHide = (value?: string | null) => hiddenAccessKeys.has(normalizeKey(value));
 
     const menuList = [...menus]
       .filter((item) => !item.isDeleted)
+      .filter((item) => !shouldHide(item.resourceKey))
       .filter((item) => !hideOrgResources || normalizeKey(item.resourceKey) !== "ORGANISASI")
       .sort((a, b) => a.orderIndex - b.orderIndex);
     for (const menu of menuList) {
@@ -248,6 +252,7 @@ const AccessRolePage = () => {
 
     const moduleList = [...modules]
       .filter((item) => !item.isDeleted)
+      .filter((item) => !shouldHide(item.resourceKey) && !shouldHide(item.parentKey))
       .filter((item) => {
         if (!hideOrgResources) return true;
         const key = normalizeKey(item.resourceKey);

@@ -50,7 +50,7 @@ const App = () => {
           <Route path="/administrator/access-role" element={<ProtectedRoute adminOnly><AccessRolePage /></ProtectedRoute>} />
           <Route path="/administrator/audit-log" element={<ProtectedRoute adminOnly><AuditLogPage /></ProtectedRoute>} />
           <Route path="/administrator/notification-template" element={<ProtectedRoute adminOnly><NotificationTemplatePage /></ProtectedRoute>} />
-          <Route path="/fishbone" element={<ProtectedRoute adminOnly><FishbonePage /></ProtectedRoute>} />
+          <Route path="/fishbone" element={<ProtectedRoute menuKey="FISHBONE"><FishbonePage /></ProtectedRoute>} />
           <Route path="/*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
