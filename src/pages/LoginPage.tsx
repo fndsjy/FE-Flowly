@@ -66,7 +66,7 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="overflow-hidden h-screen bg-gray-900 flex items-center justify-center px-6">
+    <div className="relative overflow-hidden min-h-screen bg-gray-900 flex items-center justify-center px-6">
       <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-10 items-center">
 
         <div className="absolute -top-0 left-20 w-[700px] h-[800px] rounded-full bg-white blur-[120px] opacity-40 pointer-events-none"></div>

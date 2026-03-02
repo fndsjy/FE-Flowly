@@ -1373,7 +1373,7 @@ const ChartPage = () => {
 
       {/* Delete Confirm */}
       {deleteConfirm.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md text-center">
             {/* Icon */}
             <img

@@ -59,6 +59,9 @@ type CaseHeader = {
   requesterId: string | null;
   requesterEmployeeId: number | null;
   originSbuSubId: number | null;
+  feedbackApprovedAt?: string | null;
+  feedbackApprovedBy?: string | null;
+  feedbackApprovedByEmployeeId?: number | null;
   isActive: boolean;
   isDeleted: boolean;
   createdAt: string;
@@ -167,6 +170,54 @@ type FishboneCategory = {
   updatedAt: string;
 };
 
+type CasePdcaItemApi = {
+  casePdcaItemId: string;
+  caseId: string;
+  itemNo: number;
+  planText: string | null;
+  doText: string | null;
+  doStartDate: string | null;
+  doEndDate: string | null;
+  checkText: string | null;
+  checkStartDate: string | null;
+  checkEndDate: string | null;
+  checkBy: string | null;
+  checkComment: string | null;
+  actText: string | null;
+  actStartDate: string | null;
+  actEndDate: string | null;
+  isActive: boolean;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CasePdcaItem = {
+  casePdcaItemId?: string;
+  caseId?: string;
+  itemNo?: number;
+  planText: string;
+  doText: string;
+  doStartDate: string;
+  doEndDate: string;
+  checkText: string;
+  checkStartDate: string;
+  checkEndDate: string;
+  checkBy: string;
+  checkComment: string;
+  actText: string;
+  actStartDate: string;
+  actEndDate: string;
+};
+
+type CaseFeedbackComment = {
+  caseFeedbackCommentId: string;
+  caseId: string;
+  commentText: string;
+  commenterName: string;
+  createdAt: string;
+};
+
 const domasColor = "#272e79";
 
 const CASE_TYPES = [
@@ -272,6 +323,9 @@ const normalizeCaseStatus = (value: string | null | undefined) => {
   return normalized;
 };
 
+const normalizeDecisionStatus = (value: string | null | undefined) =>
+  (value ?? "").trim().toUpperCase();
+
 const getCaseStatusLabel = (value: string | null | undefined) => {
   const normalized = normalizeCaseStatus(value);
   return normalized.length > 0 ? normalized : "-";
@@ -333,11 +387,6 @@ const toNumberedItems = (value: string | null | undefined) => {
     .filter((line) => line.length > 0);
 };
 
-const toEditableNumberedItems = (value: string | null | undefined) => {
-  const items = toNumberedItems(value);
-  return items.length > 0 ? items : [""];
-};
-
 const serializeNumberedItems = (items: string[]) =>
   items
     .map((item) => item.replace(/\r?\n/g, " ").trim())
@@ -346,6 +395,24 @@ const serializeNumberedItems = (items: string[]) =>
 
 const hasNumberedItems = (items: string[]) =>
   items.some((item) => item.trim().length > 0);
+
+const createEmptyPdcaItem = (): CasePdcaItem => ({
+  casePdcaItemId: undefined,
+  caseId: undefined,
+  itemNo: undefined,
+  planText: "",
+  doText: "",
+  doStartDate: "",
+  doEndDate: "",
+  checkText: "",
+  checkStartDate: "",
+  checkEndDate: "",
+  checkBy: "",
+  checkComment: "",
+  actText: "",
+  actStartDate: "",
+  actEndDate: "",
+});
 
 type NumberedListInputProps = {
   label: string;
@@ -494,6 +561,15 @@ const A3Page = () => {
   const [caseFishboneItems, setCaseFishboneItems] = useState<CaseFishboneItem[]>([]);
   const [caseFishboneItemsLoading, setCaseFishboneItemsLoading] = useState(true);
   const [fishboneCategories, setFishboneCategories] = useState<FishboneCategory[]>([]);
+  const [pdcaItems, setPdcaItems] = useState<CasePdcaItem[]>([]);
+  const [pdcaLoading, setPdcaLoading] = useState(false);
+  const [pdcaSaving, setPdcaSaving] = useState(false);
+  const [pdcaDeletedIds, setPdcaDeletedIds] = useState<string[]>([]);
+  const [feedbackComments, setFeedbackComments] = useState<CaseFeedbackComment[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackApproving, setFeedbackApproving] = useState(false);
+  const [feedbackCommentDraft, setFeedbackCommentDraft] = useState("");
   const [showPreview, setShowPreview] = useState(true);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
@@ -635,12 +711,20 @@ const A3Page = () => {
     return new Map(employees.map((item) => [item.UserId, item]));
   }, [employees]);
 
+  const getEmployeeLabel = (id: number | null | undefined) => {
+    if (!id) return "-";
+    const employee = employeeMap.get(id);
+    if (!employee) return `ID ${id}`;
+    return employee.Name;
+  };
+
   const caseMap = useMemo(() => {
     return new Map(cases.map((item) => [item.caseId, item]));
   }, [cases]);
 
   const selectedCase = caseMap.get(selectedCaseId) ?? null;
   const isProblemCase = selectedCase?.caseType === "PROBLEM";
+  const isCaseClosed = Boolean(selectedCase?.feedbackApprovedAt);
   const selectedBackgroundItems = useMemo(
     () => toNumberedItems(selectedCase?.background),
     [selectedCase?.background]
@@ -660,7 +744,7 @@ const A3Page = () => {
     return Number.isFinite(parsed) ? parsed : null;
   }, [profile]);
 
-  const accessibleFishboneSbuSubIds = useMemo(() => {
+  const viewableFishboneSbuSubIds = useMemo(() => {
     if (canCrudCase || employeeId === null) {
       return new Set<number>();
     }
@@ -677,18 +761,201 @@ const A3Page = () => {
     return allowed;
   }, [canCrudCase, departments, employeeId, sbuSubMap]);
 
+  const accessibleFishboneSbuSubIds = useMemo(() => {
+    if (canCrudCase || employeeId === null) {
+      return new Set<number>();
+    }
+    const allowed = new Set<number>();
+    for (const dept of departments) {
+      const decisionStatus = normalizeDecisionStatus(dept.decisionStatus);
+      if (decisionStatus !== "ACCEPT") {
+        continue;
+      }
+      if (dept.assigneeEmployeeId === employeeId) {
+        allowed.add(dept.sbuSubId);
+      }
+      const sbuSub = sbuSubMap.get(dept.sbuSubId);
+      if (sbuSub?.pic === employeeId) {
+        allowed.add(dept.sbuSubId);
+      }
+    }
+    return allowed;
+  }, [canCrudCase, departments, employeeId, sbuSubMap]);
+
+  const isCaseRequester = useMemo(() => {
+    if (!selectedCase) return false;
+    if (employeeId !== null) {
+      return selectedCase.requesterEmployeeId === employeeId;
+    }
+    if (profile?.userId) {
+      return selectedCase.requesterId === profile.userId;
+    }
+    return false;
+  }, [selectedCase, employeeId, profile]);
+
   const canManageAnyFishbone = useMemo(() => {
     if (canCrudCase) return true;
     return accessibleFishboneSbuSubIds.size > 0;
   }, [canCrudCase, accessibleFishboneSbuSubIds]);
 
+  const isCaseParticipant = useMemo(() => {
+    if (canCrudCase) return true;
+    if (isCaseRequester) return true;
+    if (employeeId === null) return false;
+    if (viewableFishboneSbuSubIds.size > 0) return true;
+    const originId = selectedCase?.originSbuSubId;
+    if (!originId) return false;
+    const originSbuSub = sbuSubMap.get(originId);
+    return originSbuSub?.pic === employeeId;
+  }, [
+    canCrudCase,
+    isCaseRequester,
+    employeeId,
+    viewableFishboneSbuSubIds,
+    selectedCase,
+    sbuSubMap,
+  ]);
+
+  const canViewAnyFishbone = useMemo(() => {
+    return isCaseParticipant;
+  }, [isCaseParticipant]);
+
+  const canViewPdca = useMemo(
+    () => Boolean(selectedCaseId) && isCaseParticipant,
+    [selectedCaseId, isCaseParticipant]
+  );
+
+  const canViewFeedback = useMemo(
+    () => Boolean(selectedCaseId) && isCaseParticipant,
+    [selectedCaseId, isCaseParticipant]
+  );
+
+  const myDecisionDepartments = useMemo(() => {
+    if (employeeId === null) return [];
+    return departments.filter((dept) => {
+      const sbuSub = sbuSubMap.get(dept.sbuSubId);
+      return sbuSub?.pic === employeeId;
+    });
+  }, [departments, employeeId, sbuSubMap]);
+
+  const myCaseDecisionStats = useMemo(() => {
+    const stats = { accept: 0, reject: 0, pending: 0 };
+    for (const dept of myDecisionDepartments) {
+      const status = normalizeDecisionStatus(dept.decisionStatus);
+      if (status === "ACCEPT") stats.accept += 1;
+      if (status === "REJECT") stats.reject += 1;
+      if (status === "PENDING") stats.pending += 1;
+    }
+    return stats;
+  }, [myDecisionDepartments]);
+
+  const caseDecisionNotice = useMemo(() => {
+    if (!selectedCase || employeeId === null) return null;
+    if (myDecisionDepartments.length === 0) return null;
+    const decisionScopeLabel =
+      selectedCase.caseType === "PROJECT" ? "PDCA" : "Fishbone & PDCA";
+    const { accept, reject, pending } = myCaseDecisionStats;
+    if (reject > 0 && accept === 0) {
+      return {
+        tone: "rose",
+        text:
+          "Departemen Anda sudah REJECT. Anda hanya bisa melihat data sampai di-ACCEPT ulang.",
+      };
+    }
+    if (reject > 0 && accept > 0) {
+      return {
+        tone: "rose",
+        text: `Ada departemen Anda yang REJECT. ${decisionScopeLabel} hanya bisa diisi untuk departemen yang sudah ACCEPT.`,
+      };
+    }
+    if (pending > 0 && accept === 0) {
+      return {
+        tone: "amber",
+        text: `Menunggu keputusan departemen. Input ${decisionScopeLabel} bisa diisi setelah di-ACCEPT.`,
+      };
+    }
+    if (pending > 0 && accept > 0) {
+      return {
+        tone: "amber",
+        text: `Sebagian departemen masih PENDING. ${decisionScopeLabel} hanya bisa diisi untuk departemen yang sudah ACCEPT.`,
+      };
+    }
+    return null;
+  }, [selectedCase, employeeId, myDecisionDepartments, myCaseDecisionStats]);
+
+  const isDecisionLocked = useMemo(() => {
+    if (canCrudCase) return false;
+    if (employeeId === null) return false;
+    if (myDecisionDepartments.length === 0) return false;
+    const { accept, reject, pending } = myCaseDecisionStats;
+    if (accept > 0) return false;
+    return reject > 0 || pending > 0;
+  }, [
+    canCrudCase,
+    employeeId,
+    myDecisionDepartments,
+    myCaseDecisionStats,
+  ]);
+
+  const canEditPdcaPlan = useMemo(
+    () =>
+      !isCaseClosed &&
+      !isDecisionLocked &&
+      (canCrudCase ||
+        (employeeId !== null && accessibleFishboneSbuSubIds.size > 0)),
+    [
+      isCaseClosed,
+      isDecisionLocked,
+      canCrudCase,
+      employeeId,
+      accessibleFishboneSbuSubIds,
+    ]
+  );
+
+  const canEditPdcaAct = useMemo(
+    () => !isCaseClosed && !isDecisionLocked && (canCrudCase || isCaseRequester),
+    [isCaseClosed, isDecisionLocked, canCrudCase, isCaseRequester]
+  );
+
+  const canApproveFeedback = useMemo(() => {
+    if (!selectedCase || isCaseClosed) return false;
+    if (employeeId === null) return false;
+    const originId = selectedCase.originSbuSubId;
+    if (!originId) return false;
+    const originSbuSub = sbuSubMap.get(originId);
+    return originSbuSub?.pic === employeeId;
+  }, [selectedCase, isCaseClosed, employeeId, sbuSubMap]);
+
+  const feedbackApprovalHint = useMemo(() => {
+    if (!selectedCase || isCaseClosed || canApproveFeedback) return null;
+    if (!selectedCase.originSbuSubId) {
+      return "Origin SBU Sub belum diisi, approve belum tersedia.";
+    }
+    const originSbuSub = sbuSubMap.get(selectedCase.originSbuSubId);
+    if (!originSbuSub?.pic) {
+      return "PIC SBU Sub belum ditetapkan, approve belum tersedia.";
+    }
+    const picLabel = getEmployeeLabel(originSbuSub.pic);
+    return `Approve hanya untuk PIC SBU Sub pembuat case${picLabel !== "-" ? ` (${picLabel})` : ""}.`;
+  }, [selectedCase, isCaseClosed, canApproveFeedback, sbuSubMap, employeeMap]);
+
+  const feedbackApprovedByLabel = useMemo(() => {
+    if (!selectedCase) return "-";
+    if (selectedCase.feedbackApprovedByEmployeeId) {
+      return getEmployeeLabel(selectedCase.feedbackApprovedByEmployeeId);
+    }
+    return selectedCase.feedbackApprovedBy ?? "-";
+  }, [selectedCase, employeeMap]);
+
+  const canEditAttachments = useMemo(
+    () => !isCaseClosed && !isDecisionLocked,
+    [isCaseClosed, isDecisionLocked]
+  );
+
   const visibleCaseFishbones = useMemo(() => {
-    if (canCrudCase) return caseFishbones;
-    if (accessibleFishboneSbuSubIds.size === 0) return [];
-    return caseFishbones.filter((item) =>
-      accessibleFishboneSbuSubIds.has(item.sbuSubId)
-    );
-  }, [caseFishbones, canCrudCase, accessibleFishboneSbuSubIds]);
+    if (!canViewAnyFishbone) return [];
+    return caseFishbones;
+  }, [caseFishbones, canViewAnyFishbone]);
 
   const accessibleFishboneDepartments = useMemo(() => {
     if (canCrudCase) return departments;
@@ -698,21 +965,61 @@ const A3Page = () => {
     );
   }, [canCrudCase, departments, accessibleFishboneSbuSubIds]);
 
-  const canCreateFishbone = useMemo(() => {
-    return canManageAnyFishbone && accessibleFishboneDepartments.length > 0;
-  }, [canManageAnyFishbone, accessibleFishboneDepartments]);
+  const fishboneAccessNotice = useMemo(() => {
+    if (!isProblemCase || !selectedCase) return null;
+    if (isDecisionLocked && !canCrudCase) return caseDecisionNotice;
+    if (canManageAnyFishbone) return null;
+    return caseDecisionNotice;
+  }, [
+    isProblemCase,
+    selectedCase,
+    isDecisionLocked,
+    canCrudCase,
+    canManageAnyFishbone,
+    caseDecisionNotice,
+  ]);
+
+  const pdcaAccessNotice = useMemo(() => {
+    if (!canViewPdca) return null;
+    if (canEditPdcaPlan) return null;
+    return caseDecisionNotice;
+  }, [canViewPdca, canEditPdcaPlan, caseDecisionNotice]);
+
+      const canCreateFishbone = useMemo(() => {
+        return (
+          !isCaseClosed &&
+          !isDecisionLocked &&
+          canManageAnyFishbone &&
+        accessibleFishboneDepartments.length > 0
+      );
+    }, [
+      isCaseClosed,
+      isDecisionLocked,
+      canManageAnyFishbone,
+      accessibleFishboneDepartments,
+    ]);
 
     const canAddDepartment = useMemo(() => {
+      if (isCaseClosed) return false;
       if (canCrudCase) return true;
+      if (isDecisionLocked) return false;
       if (!selectedCase) return false;
       if (employeeId === null) return false;
       if (selectedCase.requesterEmployeeId === employeeId) return true;
-    return departments.some((dept) => {
-      if (dept.assigneeEmployeeId === employeeId) return true;
-      const sbuSub = sbuSubMap.get(dept.sbuSubId);
-      return sbuSub?.pic === employeeId;
-    });
-    }, [canCrudCase, selectedCase, employeeId, departments, sbuSubMap]);
+      return departments.some((dept) => {
+        if (dept.assigneeEmployeeId === employeeId) return true;
+        const sbuSub = sbuSubMap.get(dept.sbuSubId);
+        return sbuSub?.pic === employeeId;
+      });
+    }, [
+      isCaseClosed,
+      canCrudCase,
+      isDecisionLocked,
+      selectedCase,
+      employeeId,
+      departments,
+      sbuSubMap,
+    ]);
 
   const focusDecisionNotes = (deptId: string) => {
     const el = decisionNoteRefs.current.get(deptId);
@@ -721,11 +1028,13 @@ const A3Page = () => {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  const canManageFishboneBySbuSub = (sbuSubId?: number | null) => {
-    if (!sbuSubId) return false;
-    if (canCrudCase) return true;
-    return accessibleFishboneSbuSubIds.has(sbuSubId);
-  };
+    const canManageFishboneBySbuSub = (sbuSubId?: number | null) => {
+      if (isCaseClosed) return false;
+      if (isDecisionLocked) return false;
+      if (!sbuSubId) return false;
+      if (canCrudCase) return true;
+      return accessibleFishboneSbuSubIds.has(sbuSubId);
+    };
 
   const normalizeWorkStatus = (value: string | null) => {
     const normalized = (value ?? "").trim().toUpperCase();
@@ -736,7 +1045,13 @@ const A3Page = () => {
     let notDone = 0;
     let pending = 0;
     let inProgress = 0;
+    let total = 0;
     for (const item of items) {
+      const decisionStatus = normalizeDecisionStatus(item.decisionStatus);
+      if (decisionStatus === "REJECT") {
+        continue;
+      }
+      total += 1;
       const status = normalizeWorkStatus(item.workStatus);
       if (status !== "DONE" && status !== "CANCEL") {
         notDone += 1;
@@ -748,7 +1063,7 @@ const A3Page = () => {
         inProgress += 1;
       }
     }
-    return { notDone, pending, inProgress, total: items.length };
+    return { notDone, pending, inProgress, total };
   };
 
   const myAssignments = useMemo(() => {
@@ -1054,11 +1369,14 @@ const A3Page = () => {
     });
   }, [sbuSubs, sbuMap]);
 
-  const getEmployeeLabel = (id: number | null | undefined) => {
-    if (!id) return "-";
-    const employee = employeeMap.get(id);
-    if (!employee) return `ID ${id}`;
-    return employee.Name;
+  const getEmployeeOptionLabel = (employee: Employee) => {
+    const name = employee.Name?.trim();
+    return name ? `${name} (${employee.UserId})` : `ID ${employee.UserId}`;
+  };
+
+  const getEmployeeOptionValue = (employee: Employee) => {
+    const name = employee.Name?.trim();
+    return name ? name : `ID ${employee.UserId}`;
   };
 
   const fetchProfile = async () => {
@@ -1300,6 +1618,76 @@ const A3Page = () => {
     }
   };
 
+  const toPdcaFormItem = (item: CasePdcaItemApi): CasePdcaItem => ({
+    casePdcaItemId: item.casePdcaItemId,
+    caseId: item.caseId,
+    itemNo: item.itemNo,
+    planText: item.planText ?? "",
+    doText: item.doText ?? "",
+    doStartDate: toDateInputValue(item.doStartDate),
+    doEndDate: toDateInputValue(item.doEndDate),
+    checkText: item.checkText ?? "",
+    checkStartDate: toDateInputValue(item.checkStartDate),
+    checkEndDate: toDateInputValue(item.checkEndDate),
+    checkBy: item.checkBy ?? "",
+    checkComment: item.checkComment ?? "",
+    actText: item.actText ?? "",
+    actStartDate: toDateInputValue(item.actStartDate),
+    actEndDate: toDateInputValue(item.actEndDate),
+  });
+
+  const fetchCasePdcaItems = async (caseId: string) => {
+    setPdcaLoading(true);
+    try {
+      const res = await apiFetch(
+        `/case-pdca?caseId=${encodeURIComponent(caseId)}`,
+        { credentials: "include" }
+      );
+      const json = await safeJson(res);
+      if (!res.ok) {
+        showToast(getErrorMessage(json), "error");
+        setPdcaItems([createEmptyPdcaItem()]);
+        setPdcaDeletedIds([]);
+        return;
+      }
+      const list = Array.isArray(json?.response) ? json.response : [];
+      const normalized = list
+        .map((item: CasePdcaItemApi) => toPdcaFormItem(item))
+        .sort((a: CasePdcaItem, b: CasePdcaItem) => (a.itemNo ?? 0) - (b.itemNo ?? 0));
+      setPdcaItems(normalized.length > 0 ? normalized : [createEmptyPdcaItem()]);
+      setPdcaDeletedIds([]);
+    } catch (error) {
+      showToast("Gagal memuat PDCA", "error");
+      setPdcaItems([createEmptyPdcaItem()]);
+      setPdcaDeletedIds([]);
+    } finally {
+      setPdcaLoading(false);
+    }
+  };
+
+  const fetchCaseFeedbackComments = async (caseId: string) => {
+    setFeedbackLoading(true);
+    try {
+      const res = await apiFetch(
+        `/case-feedback-comment?caseId=${encodeURIComponent(caseId)}`,
+        { credentials: "include", cache: "no-store" }
+      );
+      const json = await safeJson(res);
+      if (!res.ok) {
+        showToast(getErrorMessage(json), "error");
+        setFeedbackComments([]);
+        return;
+      }
+      const list = Array.isArray(json?.response) ? json.response : [];
+      setFeedbackComments(list);
+    } catch (error) {
+      showToast("Gagal memuat komentar feedback", "error");
+      setFeedbackComments([]);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProfile();
     fetchCases();
@@ -1347,6 +1735,27 @@ const A3Page = () => {
       setShowCaseFishboneItemForm(false);
     }
   }, [selectedCaseId, isProblemCase]);
+
+  useEffect(() => {
+    if (!selectedCaseId || !canViewPdca) {
+      setPdcaItems([]);
+      setPdcaDeletedIds([]);
+      setPdcaLoading(false);
+      return;
+    }
+    fetchCasePdcaItems(selectedCaseId);
+  }, [selectedCaseId, canViewPdca]);
+
+  useEffect(() => {
+    if (!selectedCaseId || !canViewFeedback) {
+      setFeedbackComments([]);
+      setFeedbackLoading(false);
+      setFeedbackCommentDraft("");
+      return;
+    }
+    fetchCaseFeedbackComments(selectedCaseId);
+    setFeedbackCommentDraft("");
+  }, [selectedCaseId, canViewFeedback]);
 
   useEffect(() => {
     if (!isProblemCase || !selectedCaseFishboneId) {
@@ -1400,6 +1809,233 @@ const A3Page = () => {
       setSelectedCaseFishboneId(visibleCaseFishbones[0].caseFishboneId);
     }
   }, [visibleCaseFishbones, selectedCaseFishboneId, isProblemCase]);
+
+  const pdcaItemsForRender =
+    pdcaItems.length > 0
+      ? pdcaItems
+      : canEditPdcaPlan
+        ? [createEmptyPdcaItem()]
+        : [];
+
+  const updatePdcaItem = (
+    index: number,
+    patch: Partial<CasePdcaItem>
+  ) => {
+    setPdcaItems((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], ...patch };
+      return next;
+    });
+  };
+
+  const addPdcaItem = () => {
+    setPdcaItems((prev) => {
+      if (prev.length === 0) return [createEmptyPdcaItem()];
+      return [...prev, createEmptyPdcaItem()];
+    });
+  };
+
+  const removePdcaItem = (index: number) => {
+    setPdcaItems((prev) => {
+      const target = prev[index];
+      if (target?.casePdcaItemId) {
+        setPdcaDeletedIds((deleted) => [
+          ...deleted,
+          target.casePdcaItemId as string,
+        ]);
+      }
+      const next = prev.filter((_, idx) => idx !== index);
+      return next.length > 0 ? next : [createEmptyPdcaItem()];
+    });
+  };
+
+  const toNullableText = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+
+  const buildPdcaPayload = (
+    item: CasePdcaItem,
+    itemNo: number,
+    caseId: string
+  ) => ({
+    caseId,
+    itemNo,
+    planText: toNullableText(item.planText),
+    doText: toNullableText(item.doText),
+    doStartDate: item.doStartDate || null,
+    doEndDate: item.doEndDate || null,
+    checkText: toNullableText(item.checkText),
+    checkStartDate: item.checkStartDate || null,
+    checkEndDate: item.checkEndDate || null,
+    checkBy: toNullableText(item.checkBy),
+    checkComment: toNullableText(item.checkComment),
+    actText: toNullableText(item.actText),
+    actStartDate: item.actStartDate || null,
+    actEndDate: item.actEndDate || null,
+  });
+
+  const handlePdcaSave = async () => {
+    if (!selectedCaseId) return;
+    if (!canEditPdcaPlan && !canEditPdcaAct) {
+      showToast("Tidak punya akses untuk menyimpan PDCA", "error");
+      return;
+    }
+    setPdcaSaving(true);
+    try {
+      if (canEditPdcaPlan) {
+        for (const casePdcaItemId of pdcaDeletedIds) {
+          const res = await apiFetch("/case-pdca", {
+            method: "DELETE",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ casePdcaItemId }),
+          });
+          const json = await safeJson(res);
+          if (!res.ok) {
+            throw new Error(getErrorMessage(json));
+          }
+        }
+      }
+
+      for (let index = 0; index < pdcaItemsForRender.length; index += 1) {
+        const item = pdcaItemsForRender[index];
+        if (!item.casePdcaItemId && !canEditPdcaPlan) {
+          continue;
+        }
+
+        const basePayload = buildPdcaPayload(item, index + 1, selectedCaseId);
+        const payload: Record<string, unknown> = {};
+
+        if (canEditPdcaPlan) {
+          payload.caseId = basePayload.caseId;
+          payload.itemNo = basePayload.itemNo;
+          payload.planText = basePayload.planText;
+          payload.doText = basePayload.doText;
+          payload.doStartDate = basePayload.doStartDate;
+          payload.doEndDate = basePayload.doEndDate;
+          payload.checkText = basePayload.checkText;
+          payload.checkStartDate = basePayload.checkStartDate;
+          payload.checkEndDate = basePayload.checkEndDate;
+          payload.checkBy = basePayload.checkBy;
+          payload.checkComment = basePayload.checkComment;
+        }
+
+        if (canEditPdcaAct) {
+          payload.actText = basePayload.actText;
+          payload.actStartDate = basePayload.actStartDate;
+          payload.actEndDate = basePayload.actEndDate;
+        }
+
+        const body = item.casePdcaItemId
+          ? { casePdcaItemId: item.casePdcaItemId, ...payload }
+          : payload;
+
+        const res = await apiFetch("/case-pdca", {
+          method: item.casePdcaItemId ? "PUT" : "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const json = await safeJson(res);
+        if (!res.ok) {
+          throw new Error(getErrorMessage(json));
+        }
+      }
+
+      await fetchCasePdcaItems(selectedCaseId);
+      showToast("PDCA tersimpan", "success");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Gagal menyimpan PDCA",
+        "error"
+      );
+    } finally {
+      setPdcaSaving(false);
+    }
+  };
+
+  const handleFeedbackCommentSave = async () => {
+    if (!selectedCaseId) return;
+    if (isCaseClosed) {
+      showToast("Case sudah dikunci", "error");
+      return;
+    }
+    const trimmed = feedbackCommentDraft.trim();
+    if (!trimmed) {
+      showToast("Komentar wajib diisi", "error");
+      return;
+    }
+    setFeedbackSaving(true);
+    try {
+      const res = await apiFetch("/case-feedback-comment", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: selectedCaseId, commentText: trimmed }),
+      });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(getErrorMessage(json));
+      }
+      const created = json?.response as CaseFeedbackComment | undefined;
+      if (created?.caseFeedbackCommentId) {
+        setFeedbackComments((prev) => {
+          if (
+            prev.some(
+              (item) =>
+                item.caseFeedbackCommentId === created.caseFeedbackCommentId
+            )
+          ) {
+            return prev;
+          }
+          return [...prev, created];
+        });
+      } else {
+        await fetchCaseFeedbackComments(selectedCaseId);
+      }
+      setFeedbackCommentDraft("");
+      showToast("Komentar tersimpan", "success");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Gagal menyimpan komentar",
+        "error"
+      );
+    } finally {
+      setFeedbackSaving(false);
+    }
+  };
+
+  const handleFeedbackApprove = async () => {
+    if (!selectedCaseId) return;
+    if (!canApproveFeedback) {
+      showToast("Tidak punya akses untuk approve", "error");
+      return;
+    }
+    setFeedbackApproving(true);
+    try {
+      const res = await apiFetch("/case-feedback-approval", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: selectedCaseId }),
+      });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(getErrorMessage(json));
+      }
+      await fetchCases();
+      showToast("Case berhasil ditutup", "success");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Gagal approve case",
+        "error"
+      );
+    } finally {
+      setFeedbackApproving(false);
+    }
+  };
   const openCaseCreate = () => {
     setCaseFormMode("add");
     setCaseForm({
@@ -1860,6 +2496,10 @@ const A3Page = () => {
 
   const openCaseFishboneCreate = () => {
     if (!selectedCaseId) return;
+    if (isDecisionLocked) {
+      showToast("Departemen Anda sudah REJECT. Tidak bisa menambah fishbone.", "error");
+      return;
+    }
     if (!canManageAnyFishbone) {
       showToast("Tidak ada akses untuk membuat fishbone", "error");
       return;
@@ -3010,14 +3650,14 @@ const A3Page = () => {
               {showCaseDetails && selectedCase && (
                 <>
                   <div className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                          {selectedCase.caseType}
-                        </p>
-                        <h2 className="text-2xl font-bold text-slate-800">
-                          {selectedCase.caseTitle}
-                        </h2>
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                            {selectedCase.caseType}
+                          </p>
+                          <h2 className="text-2xl font-bold text-slate-800">
+                            {selectedCase.caseTitle}
+                          </h2>
                           <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
                             <span>ID: {selectedCase.caseId}</span>
                             <span>Status: {getCaseStatusLabel(selectedCase.status)}</span>
@@ -3031,12 +3671,24 @@ const A3Page = () => {
                           >
                             Refresh
                           </button>
-                        </div>
-                    </div>
+                          </div>
+                      </div>
 
-                    <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
-                      {selectedCase.caseType === "PROBLEM" && (
-                        <>
+                      {caseDecisionNotice && (
+                        <div
+                          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+                            caseDecisionNotice.tone === "rose"
+                              ? "border-rose-200 bg-rose-50 text-rose-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {caseDecisionNotice.text}
+                        </div>
+                      )}
+
+                      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+                        {selectedCase.caseType === "PROBLEM" && (
+                          <>
                             <div className="rounded-xl border border-slate-200 p-4">
                               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                 Latar Belakang
@@ -3150,10 +3802,14 @@ const A3Page = () => {
                             className="px-3 py-2 rounded-lg border border-slate-200 text-sm"
                           >
                             <option value="">Tambah departemen</option>
-                            {sbuSubs.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.sbuSubName} ({item.sbuSubCode})
-                              </option>
+                            {groupedSbuSubs.map((group) => (
+                              <optgroup key={group.key} label={group.sbuLabel}>
+                                {group.items.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.sbuSubName} ({item.sbuSubCode})
+                                  </option>
+                                ))}
+                              </optgroup>
                             ))}
                           </select>
                           <button
@@ -3188,9 +3844,11 @@ const A3Page = () => {
                           const decisionStatus = (dept.decisionStatus ?? "").toUpperCase();
                           const isDecisionAccepted = decisionStatus === "ACCEPT";
                           const isDecisionRejected = decisionStatus === "REJECT";
-                          const canEditDecision = canCrudCase || isPic;
-                          const canEditAssignment = isPic && isDecisionAccepted;
+                          const canEditDecision = !isCaseClosed && (canCrudCase || isPic);
+                          const canEditAssignment =
+                            !isCaseClosed && isPic && isDecisionAccepted;
                           const canEditWork =
+                            !isCaseClosed &&
                             (canCrudCase || isPic || isAssignee) &&
                             isDecisionAccepted;
                           const decisionNotesValue = (
@@ -3274,7 +3932,7 @@ const A3Page = () => {
                                   }`}
                                 >
                                   {isDecisionRejected
-                                    ? "Departemen ini ditolak. PIC dan progress tidak bisa diisi."
+                                    ? "Departemen ini menolak. PIC dan progress tidak bisa diisi."
                                     : "Tentukan keputusan (ACCEPT/REJECT) sebelum mengisi PIC dan progress."}
                                 </div>
                               )}
@@ -3660,117 +4318,122 @@ const A3Page = () => {
                                     Lokasi: {item.locationDesc || "-"}
                                   </p>
                                 </div>
-                                <div className="flex justify-between items-center text-xs text-slate-500">
-                                  <span>ID: {item.caseAttachmentId}</span>
-                                  <button
-                                    onClick={() => requestAttachmentDelete(item)}
-                                    className="text-rose-500 hover:underline"
-                                  >
-                                    Hapus
-                                  </button>
+                                  <div className="flex justify-between items-center text-xs text-slate-500">
+                                    <span>ID: {item.caseAttachmentId}</span>
+                                    {canEditAttachments && (
+                                      <button
+                                        onClick={() => requestAttachmentDelete(item)}
+                                        className="text-rose-500 hover:underline"
+                                      >
+                                        Hapus
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
+                              );
+                            })
+                          )}
+                        </div>
 
-                      <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-                        <h4 className="text-sm font-semibold text-slate-800">
-                          Upload Attachment
-                        </h4>
-                        <select
-                          value={attachmentForm.mediaType}
-                          onChange={(event) =>
-                            setAttachmentForm((prev) => ({
-                              ...prev,
-                              mediaType: event.target.value,
-                            }))
-                          }
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                        >
-                          {MEDIA_TYPES.map((type) => (
-                            <option key={type} value={type}>
-                              {type}
-                            </option>
-                          ))}
-                        </select>
-                        <label className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 text-sm text-slate-600 cursor-pointer hover:border-rose-300 hover:text-rose-600">
-                          <span className="truncate">
-                            {attachmentForm.file
-                              ? attachmentForm.file.name
-                              : "Pilih file foto / video"}
-                          </span>
-                          <span className="px-2 py-1 rounded-md bg-white border border-slate-200 text-xs text-slate-600">
-                            Browse
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*,video/*"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0] ?? null;
-                              if (!file) {
+                        {canEditAttachments && (
+                          <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                            <h4 className="text-sm font-semibold text-slate-800">
+                              Upload Attachment
+                            </h4>
+                            <select
+                              value={attachmentForm.mediaType}
+                              onChange={(event) =>
                                 setAttachmentForm((prev) => ({
                                   ...prev,
-                                  file: null,
-                                }));
-                                return;
+                                  mediaType: event.target.value,
+                                }))
                               }
-                              const inferredType = file.type.startsWith("video/")
-                                ? "VIDEO"
-                                : "PHOTO";
-                              setAttachmentForm((prev) => ({
-                                ...prev,
-                                file,
-                                mediaType: inferredType,
-                              }));
-                            }}
-                            className="sr-only"
-                          />
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Caption"
-                          value={attachmentForm.caption}
-                          onChange={(event) =>
-                            setAttachmentForm((prev) => ({
-                              ...prev,
-                              caption: event.target.value,
-                            }))
-                          }
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Lokasi"
-                          value={attachmentForm.locationDesc}
-                          onChange={(event) =>
-                            setAttachmentForm((prev) => ({
-                              ...prev,
-                              locationDesc: event.target.value,
-                            }))
-                          }
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                        />
-                        <button
-                          onClick={handleAttachmentSubmit}
-                          disabled={attachmentSubmitting}
-                          className={`w-full px-3 py-2 rounded-lg bg-rose-400 text-white text-sm ${
-                            attachmentSubmitting ? "opacity-60 cursor-not-allowed" : ""
-                          }`}
-                        >
-                          {attachmentSubmitting ? "Uploading..." : "Upload"}
-                        </button>
-                      </div>
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                            >
+                              {MEDIA_TYPES.map((type) => (
+                                <option key={type} value={type}>
+                                  {type}
+                                </option>
+                              ))}
+                            </select>
+                            <label className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 text-sm text-slate-600 cursor-pointer hover:border-rose-300 hover:text-rose-600">
+                              <span className="truncate">
+                                {attachmentForm.file
+                                  ? attachmentForm.file.name
+                                  : "Pilih file foto / video"}
+                              </span>
+                              <span className="px-2 py-1 rounded-md bg-white border border-slate-200 text-xs text-slate-600">
+                                Browse
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*,video/*"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0] ?? null;
+                                  if (!file) {
+                                    setAttachmentForm((prev) => ({
+                                      ...prev,
+                                      file: null,
+                                    }));
+                                    return;
+                                  }
+                                  const inferredType = file.type.startsWith("video/")
+                                    ? "VIDEO"
+                                    : "PHOTO";
+                                  setAttachmentForm((prev) => ({
+                                    ...prev,
+                                    file,
+                                    mediaType: inferredType,
+                                  }));
+                                }}
+                                className="sr-only"
+                              />
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Caption"
+                              value={attachmentForm.caption}
+                              onChange={(event) =>
+                                setAttachmentForm((prev) => ({
+                                  ...prev,
+                                  caption: event.target.value,
+                                }))
+                              }
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Lokasi"
+                              value={attachmentForm.locationDesc}
+                              onChange={(event) =>
+                                setAttachmentForm((prev) => ({
+                                  ...prev,
+                                  locationDesc: event.target.value,
+                                }))
+                              }
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                            />
+                            <button
+                              onClick={handleAttachmentSubmit}
+                              disabled={attachmentSubmitting}
+                              className={`w-full px-3 py-2 rounded-lg bg-rose-400 text-white text-sm ${
+                                attachmentSubmitting ? "opacity-60 cursor-not-allowed" : ""
+                              }`}
+                            >
+                              {attachmentSubmitting ? "Uploading..." : "Upload"}
+                            </button>
+                          </div>
+                        )}
                     </div>
                   </div>
-                  {isProblemCase && canManageAnyFishbone && (
-                  <div className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-800">
-                          Fishbone Case
-                        </h3>
+                    {isProblemCase &&
+                      (canViewAnyFishbone || fishboneAccessNotice) && (
+                      <div className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-slate-800">
+                            Fishbone Case
+                          </h3>
                         <p className="text-xs text-slate-500">
                           Buat akar masalah berdasarkan case terpilih.
                         </p>
@@ -3781,230 +4444,711 @@ const A3Page = () => {
                           className="px-3 py-2 rounded-lg bg-rose-400 text-white text-sm"
                         >
                           Tambah Fishbone
-                        </button>
+                          </button>
+                        )}
+                      </div>
+
+                      {fishboneAccessNotice && (
+                        <div
+                          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+                            fishboneAccessNotice.tone === "rose"
+                              ? "border-rose-200 bg-rose-50 text-rose-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {fishboneAccessNotice.text}
+                        </div>
+                      )}
+                      {canViewAnyFishbone && (
+                        <div className="mt-4 grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
+                          <div className="space-y-3">
+                            {caseFishbonesLoading ? (
+                              <p className="text-sm text-slate-500">Memuat fishbone...</p>
+                            ) : visibleCaseFishbones.length === 0 ? (
+                              <p className="text-sm text-slate-500">Belum ada fishbone.</p>
+                            ) : (
+                              visibleCaseFishbones.map((item) => (
+                                <button
+                                  key={item.caseFishboneId}
+                                  onClick={() => setSelectedCaseFishboneId(item.caseFishboneId)}
+                                  className={`w-full text-left rounded-xl border px-4 py-3 ${
+                                    item.caseFishboneId === selectedCaseFishboneId
+                                      ? "border-rose-300 bg-rose-50"
+                                      : "border-slate-200 hover:border-rose-200"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                        {getSbuSubLabel(item.sbuSubId)}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-800">
+                                        {item.fishboneName}
+                                      </p>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        {item.fishboneDesc || "-"}
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-slate-400">
+                                      {item.isActive ? "Aktif" : "Nonaktif"}
+                                    </span>
+                                  </div>
+                                </button>
+                              ))
+                            )}
+                          </div>
+
+                          <div className="space-y-4">
+                            {!selectedCaseFishbone && (
+                              <p className="text-sm text-slate-500">
+                                Pilih fishbone untuk melihat detail.
+                              </p>
+                            )}
+                            {selectedCaseFishbone && (
+                              <>
+                                <div className="rounded-xl border border-slate-200 p-4 space-y-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                        {getSbuSubLabel(selectedCaseFishbone.sbuSubId)}
+                                      </p>
+                                      <p className="text-lg font-semibold text-slate-800">
+                                        {selectedCaseFishbone.fishboneName}
+                                      </p>
+                                      <p className="text-sm text-slate-500">
+                                        {selectedCaseFishbone.fishboneDesc || "-"}
+                                      </p>
+                                    </div>
+                                    {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => openCaseFishboneEdit(selectedCaseFishbone)}
+                                          className="px-3 py-2 rounded-lg border border-rose-300 text-rose-500 text-sm"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            handleCaseFishboneDelete(
+                                              selectedCaseFishbone.caseFishboneId
+                                            )
+                                          }
+                                          className="px-3 py-2 rounded-lg bg-rose-100 text-rose-600 text-sm"
+                                        >
+                                          Hapus
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                  <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <h4 className="text-sm font-semibold text-slate-800">
+                                        Sumber Masalah
+                                      </h4>
+                                      {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                        <button
+                                          onClick={openCaseFishboneCauseCreate}
+                                          className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
+                                        >
+                                          Tambah
+                                        </button>
+                                      )}
+                                    </div>
+                                    {caseFishboneCausesLoading ? (
+                                      <p className="text-xs text-slate-500">Memuat...</p>
+                                    ) : caseFishboneCauses.length === 0 ? (
+                                      <p className="text-xs text-slate-500">Belum ada sumber masalah.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {caseFishboneCauses.map((item) => (
+                                          <div
+                                            key={item.caseFishboneCauseId}
+                                            className="rounded-lg border border-slate-200 p-3"
+                                          >
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-sm font-semibold text-slate-800">
+                                                  #{item.causeNo} {item.causeText}
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                  {item.isActive ? "Aktif" : "Nonaktif"}
+                                                </p>
+                                              </div>
+                                              {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                                <div className="flex gap-2 text-xs">
+                                                  <button
+                                                    onClick={() => openCaseFishboneCauseEdit(item)}
+                                                    className="text-rose-500 hover:underline"
+                                                  >
+                                                    Edit
+                                                  </button>
+                                                  <button
+                                                    onClick={() =>
+                                                      handleCaseFishboneCauseDelete(
+                                                        item.caseFishboneCauseId
+                                                      )
+                                                    }
+                                                    className="text-slate-400 hover:underline"
+                                                  >
+                                                    Hapus
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <h4 className="text-sm font-semibold text-slate-800">
+                                        Masalah & Solusi
+                                      </h4>
+                                      {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                        <button
+                                          onClick={openCaseFishboneItemCreate}
+                                          className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
+                                        >
+                                          Tambah
+                                        </button>
+                                      )}
+                                    </div>
+                                    {caseFishboneItemsLoading ? (
+                                      <p className="text-xs text-slate-500">Memuat...</p>
+                                    ) : caseFishboneItems.length === 0 ? (
+                                      <p className="text-xs text-slate-500">Belum ada item.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {caseFishboneItems.map((item) => (
+                                          <div
+                                            key={item.caseFishboneItemId}
+                                            className="rounded-lg border border-slate-200 p-3"
+                                          >
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                                  {item.categoryCode}
+                                                </p>
+                                                <p className="text-sm font-semibold text-slate-800">
+                                                  {item.problemText}
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                  Solusi: {item.solutionText}
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                  Causes: {""}
+                                                  {item.causes
+                                                    .map((cause) => `#${cause.causeNo}`)
+                                                    .join(", ") || "-"}
+                                                </p>
+                                              </div>
+                                              {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
+                                                <div className="flex gap-2 text-xs">
+                                                  <button
+                                                    onClick={() => openCaseFishboneItemEdit(item)}
+                                                    className="text-rose-500 hover:underline"
+                                                  >
+                                                    Edit
+                                                  </button>
+                                                  <button
+                                                    onClick={() =>
+                                                      handleCaseFishboneItemDelete(
+                                                        item.caseFishboneItemId
+                                                      )
+                                                    }
+                                                    className="text-slate-400 hover:underline"
+                                                  >
+                                                    Hapus
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                            {isProblemCase && previewSection}
+                          </div>
+                        </div>
                       )}
                     </div>
-
-                    <div className="mt-4 grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
-                      <div className="space-y-3">
-                        {caseFishbonesLoading ? (
-                          <p className="text-sm text-slate-500">Memuat fishbone...</p>
-                        ) : visibleCaseFishbones.length === 0 ? (
-                          <p className="text-sm text-slate-500">Belum ada fishbone.</p>
-                        ) : (
-                          visibleCaseFishbones.map((item) => (
+                    )}
+                  {canViewPdca && (
+                    <div className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-slate-800">
+                              PDCA (Plan, Do, Check, Act)
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                              {isProblemCase
+                                ? "Tahap III setelah fishbone. Setiap poin saling terhubung."
+                                : "Tahap implementasi & tindak lanjut project."}
+                            </p>
+                          </div>
+                        <div className="flex flex-wrap gap-2">
+                          {canEditPdcaPlan && (
                             <button
-                              key={item.caseFishboneId}
-                              onClick={() => setSelectedCaseFishboneId(item.caseFishboneId)}
-                              className={`w-full text-left rounded-xl border px-4 py-3 ${
-                                item.caseFishboneId === selectedCaseFishboneId
-                                  ? "border-rose-300 bg-rose-50"
-                                  : "border-slate-200 hover:border-rose-200"
+                              onClick={addPdcaItem}
+                              className="px-3 py-2 rounded-lg bg-rose-400 text-white text-sm"
+                            >
+                              Tambah Poin
+                            </button>
+                          )}
+                          {(canEditPdcaPlan || canEditPdcaAct) && (
+                            <button
+                              onClick={handlePdcaSave}
+                              disabled={pdcaSaving || pdcaLoading}
+                              className={`px-3 py-2 rounded-lg border text-sm ${
+                                pdcaSaving || pdcaLoading
+                                  ? "border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed"
+                                  : "border-emerald-400 text-emerald-600 hover:bg-emerald-50"
                               }`}
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                                    {getSbuSubLabel(item.sbuSubId)}
-                                  </p>
-                                  <p className="text-sm font-semibold text-slate-800">
-                                    {item.fishboneName}
-                                  </p>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    {item.fishboneDesc || "-"}
-                                  </p>
-                                </div>
-                                <span className="text-xs text-slate-400">
-                                  {item.isActive ? "Aktif" : "Nonaktif"}
-                                </span>
-                              </div>
+                              {pdcaSaving ? "Menyimpan..." : "Simpan PDCA"}
                             </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {pdcaAccessNotice && (
+                          <div
+                            className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
+                              pdcaAccessNotice.tone === "rose"
+                                ? "border-rose-200 bg-rose-50 text-rose-700"
+                                : "border-amber-200 bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            {pdcaAccessNotice.text}
+                          </div>
+                        )}
+
+                        {pdcaLoading ? (
+                          <p className="mt-4 text-sm text-slate-500">Memuat PDCA...</p>
+                        ) : pdcaItemsForRender.length === 0 ? (
+                        <p className="mt-4 text-sm text-slate-500">
+                          Belum ada poin PDCA.
+                        </p>
+                      ) : (
+                        <div className="mt-4 space-y-4">
+                          {pdcaItemsForRender.map((item, index) => (
+                          <div
+                            key={`pdca-${index}`}
+                            className="rounded-xl border border-slate-200 p-4 space-y-4"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-800">
+                                Poin {index + 1}
+                              </p>
+                              {pdcaItemsForRender.length > 1 && canEditPdcaPlan && (
+                                <button
+                                  onClick={() => removePdcaItem(index)}
+                                  className="text-xs text-rose-500 hover:underline"
+                                >
+                                  Hapus
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-4 gap-3">
+                              <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                  Plan
+                                </p>
+                                <textarea
+                                  value={item.planText}
+                                  disabled={!canEditPdcaPlan}
+                                  onChange={(event) =>
+                                    updatePdcaItem(index, {
+                                      planText: event.target.value,
+                                    })
+                                  }
+                                  placeholder={`Plan poin ${index + 1}`}
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm h-24 ${
+                                    canEditPdcaPlan
+                                      ? "border-slate-200"
+                                      : "border-slate-100 bg-slate-50 text-slate-500"
+                                  }`}
+                                />
+                              </div>
+
+                              <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                  Do
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  Menjawab plan: {item.planText || "-"}
+                                </p>
+                                <textarea
+                                  value={item.doText}
+                                  disabled={!canEditPdcaPlan}
+                                  onChange={(event) =>
+                                    updatePdcaItem(index, { doText: event.target.value })
+                                  }
+                                  placeholder="Aksi / pelaksanaan"
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm h-20 ${
+                                    canEditPdcaPlan
+                                      ? "border-slate-200"
+                                      : "border-slate-100 bg-slate-50 text-slate-500"
+                                  }`}
+                                />
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div className="space-y-1">
+                                    <label className="text-xs text-slate-500">
+                                      Mulai
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={item.doStartDate}
+                                      disabled={!canEditPdcaPlan}
+                                      onChange={(event) =>
+                                        updatePdcaItem(index, {
+                                          doStartDate: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
+                                        canEditPdcaPlan
+                                          ? "border-slate-200 text-slate-700 bg-white"
+                                          : "border-slate-100 bg-slate-50 text-slate-500"
+                                      }`}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs text-slate-500">
+                                      Selesai
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={item.doEndDate}
+                                      min={item.doStartDate || undefined}
+                                      disabled={!canEditPdcaPlan}
+                                      onChange={(event) =>
+                                        updatePdcaItem(index, {
+                                          doEndDate: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
+                                        canEditPdcaPlan
+                                          ? "border-slate-200 text-slate-700 bg-white"
+                                          : "border-slate-100 bg-slate-50 text-slate-500"
+                                      }`}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                  Check
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  Menjawab plan: {item.planText || "-"}
+                                </p>
+                                <textarea
+                                  value={item.checkText}
+                                  disabled={!canEditPdcaPlan}
+                                  onChange={(event) =>
+                                    updatePdcaItem(index, {
+                                      checkText: event.target.value,
+                                    })
+                                  }
+                                  placeholder="Hasil pemeriksaan"
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm h-20 ${
+                                    canEditPdcaPlan
+                                      ? "border-slate-200"
+                                      : "border-slate-100 bg-slate-50 text-slate-500"
+                                  }`}
+                                />
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div className="space-y-1">
+                                    <label className="text-xs text-slate-500">
+                                      Mulai
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={item.checkStartDate}
+                                      disabled={!canEditPdcaPlan}
+                                      onChange={(event) =>
+                                        updatePdcaItem(index, {
+                                          checkStartDate: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
+                                        canEditPdcaPlan
+                                          ? "border-slate-200 text-slate-700 bg-white"
+                                          : "border-slate-100 bg-slate-50 text-slate-500"
+                                      }`}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs text-slate-500">
+                                      Selesai
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={item.checkEndDate}
+                                      min={item.checkStartDate || undefined}
+                                      disabled={!canEditPdcaPlan}
+                                      onChange={(event) =>
+                                        updatePdcaItem(index, {
+                                          checkEndDate: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
+                                        canEditPdcaPlan
+                                          ? "border-slate-200 text-slate-700 bg-white"
+                                          : "border-slate-100 bg-slate-50 text-slate-500"
+                                      }`}
+                                    />
+                                  </div>
+                                </div>
+                                {(() => {
+                                  const checkByValue = item.checkBy ?? "";
+                                  const hasLegacyCheckBy =
+                                    checkByValue.length > 0 &&
+                                    !employees.some(
+                                      (employee) =>
+                                        getEmployeeOptionValue(employee) ===
+                                        checkByValue
+                                    );
+                                  const canEditCheckBy =
+                                    canEditPdcaPlan && !employeesLoading;
+                                  return (
+                                    <select
+                                      value={checkByValue}
+                                      disabled={!canEditCheckBy}
+                                      onChange={(event) =>
+                                        updatePdcaItem(index, {
+                                          checkBy: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                                        canEditCheckBy
+                                          ? "border-slate-200"
+                                          : "border-slate-100 bg-slate-50 text-slate-500"
+                                      }`}
+                                    >
+                                      <option value="">
+                                        {employeesLoading
+                                          ? "Memuat karyawan..."
+                                          : "Pilih checker"}
+                                      </option>
+                                      {hasLegacyCheckBy && (
+                                        <option value={checkByValue}>
+                                          {checkByValue}
+                                        </option>
+                                      )}
+                                      {employees.map((employee) => {
+                                        const value = getEmployeeOptionValue(
+                                          employee
+                                        );
+                                        return (
+                                          <option
+                                            key={employee.UserId}
+                                            value={value}
+                                          >
+                                            {getEmployeeOptionLabel(employee)}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                  );
+                                })()}
+                                <textarea
+                                  value={item.checkComment}
+                                  disabled={!canEditPdcaPlan}
+                                  onChange={(event) =>
+                                    updatePdcaItem(index, {
+                                      checkComment: event.target.value,
+                                    })
+                                  }
+                                  placeholder="Komentar check"
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm h-16 ${
+                                    canEditPdcaPlan
+                                      ? "border-slate-200"
+                                      : "border-slate-100 bg-slate-50 text-slate-500"
+                                  }`}
+                                />
+                              </div>
+
+                              <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                  Act
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  Menjawab plan: {item.planText || "-"}
+                                </p>
+                                <textarea
+                                  value={item.actText}
+                                  disabled={!canEditPdcaAct}
+                                  onChange={(event) =>
+                                    updatePdcaItem(index, { actText: event.target.value })
+                                  }
+                                  placeholder="Tindak lanjut / implementasi"
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm h-28 ${
+                                    canEditPdcaAct
+                                      ? "border-slate-200"
+                                      : "border-slate-100 bg-slate-50 text-slate-500"
+                                  }`}
+                                />
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div className="space-y-1">
+                                    <label className="text-xs text-slate-500">
+                                      Mulai
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={item.actStartDate}
+                                      disabled={!canEditPdcaAct}
+                                      onChange={(event) =>
+                                        updatePdcaItem(index, {
+                                          actStartDate: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
+                                        canEditPdcaAct
+                                          ? "border-slate-200 text-slate-700 bg-white"
+                                          : "border-slate-100 bg-slate-50 text-slate-500"
+                                      }`}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs text-slate-500">
+                                      Selesai
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={item.actEndDate}
+                                      min={item.actStartDate || undefined}
+                                      disabled={!canEditPdcaAct}
+                                      onChange={(event) =>
+                                        updatePdcaItem(index, {
+                                          actEndDate: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
+                                        canEditPdcaAct
+                                          ? "border-slate-200 text-slate-700 bg-white"
+                                          : "border-slate-100 bg-slate-50 text-slate-500"
+                                      }`}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {canViewFeedback && (
+                    <div className="mt-6 bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-slate-800">
+                            Feedback Setelah Implementasi
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            Kolom komentar terbuka untuk semua pihak yang memiliki akses melihat case.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isCaseClosed ? (
+                            <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs">
+                              Case sudah dikunci
+                            </span>
+                          ) : canApproveFeedback ? (
+                            <button
+                              onClick={handleFeedbackApprove}
+                              disabled={feedbackApproving}
+                              className={`px-3 py-2 rounded-lg border text-sm ${
+                                feedbackApproving
+                                  ? "border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed"
+                                  : "border-emerald-400 text-emerald-600 hover:bg-emerald-50"
+                              }`}
+                            >
+                              {feedbackApproving ? "Memproses..." : "Approve & Tutup Case"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      {feedbackApprovalHint && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          {feedbackApprovalHint}
+                        </p>
+                      )}
+
+                      {isCaseClosed && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Disetujui oleh {feedbackApprovedByLabel} pada{" "}
+                          {formatDateTime(selectedCase?.feedbackApprovedAt ?? null)}
+                        </p>
+                      )}
+
+                      {!isCaseClosed && (
+                        <div className="mt-4 space-y-2">
+                          <textarea
+                            value={feedbackCommentDraft}
+                            onChange={(event) =>
+                              setFeedbackCommentDraft(event.target.value)
+                            }
+                            placeholder="Tulis komentar feedback..."
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm h-24"
+                            maxLength={1000}
+                          />
+                          <div className="flex justify-end">
+                            <button
+                              onClick={handleFeedbackCommentSave}
+                              disabled={feedbackSaving || feedbackLoading}
+                              className={`px-3 py-2 rounded-lg border text-sm ${
+                                feedbackSaving || feedbackLoading
+                                  ? "border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed"
+                                  : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              {feedbackSaving ? "Menyimpan..." : "Kirim Komentar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-4 space-y-3">
+                        {feedbackLoading ? (
+                          <p className="text-sm text-slate-500">Memuat komentar...</p>
+                        ) : feedbackComments.length === 0 ? (
+                          <p className="text-sm text-slate-500">Belum ada komentar.</p>
+                        ) : (
+                          feedbackComments.map((comment) => (
+                            <div
+                              key={comment.caseFeedbackCommentId}
+                              className="rounded-lg border border-slate-200 p-3"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {comment.commenterName}
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                  {formatDateTime(comment.createdAt)}
+                                </p>
+                              </div>
+                              <p className="mt-2 text-sm text-slate-600 whitespace-pre-wrap">
+                                {comment.commentText}
+                              </p>
+                            </div>
                           ))
                         )}
                       </div>
-
-                      <div className="space-y-4">
-                        {!selectedCaseFishbone && (
-                          <p className="text-sm text-slate-500">
-                            Pilih fishbone untuk melihat detail.
-                          </p>
-                        )}
-                        {selectedCaseFishbone && (
-                          <>
-                            <div className="rounded-xl border border-slate-200 p-4 space-y-2">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                                    {getSbuSubLabel(selectedCaseFishbone.sbuSubId)}
-                                  </p>
-                                  <p className="text-lg font-semibold text-slate-800">
-                                    {selectedCaseFishbone.fishboneName}
-                                  </p>
-                                  <p className="text-sm text-slate-500">
-                                    {selectedCaseFishbone.fishboneDesc || "-"}
-                                  </p>
-                                </div>
-                                {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => openCaseFishboneEdit(selectedCaseFishbone)}
-                                      className="px-3 py-2 rounded-lg border border-rose-300 text-rose-500 text-sm"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      onClick={() =>
-                                        handleCaseFishboneDelete(
-                                          selectedCaseFishbone.caseFishboneId
-                                        )
-                                      }
-                                      className="px-3 py-2 rounded-lg bg-rose-100 text-rose-600 text-sm"
-                                    >
-                                      Hapus
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <h4 className="text-sm font-semibold text-slate-800">
-                                    Sumber Masalah
-                                  </h4>
-                                  {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
-                                    <button
-                                      onClick={openCaseFishboneCauseCreate}
-                                      className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
-                                    >
-                                      Tambah
-                                    </button>
-                                  )}
-                                </div>
-                                {caseFishboneCausesLoading ? (
-                                  <p className="text-xs text-slate-500">Memuat...</p>
-                                ) : caseFishboneCauses.length === 0 ? (
-                                  <p className="text-xs text-slate-500">Belum ada sumber masalah.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {caseFishboneCauses.map((item) => (
-                                      <div
-                                        key={item.caseFishboneCauseId}
-                                        className="rounded-lg border border-slate-200 p-3"
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div>
-                                            <p className="text-sm font-semibold text-slate-800">
-                                              #{item.causeNo} {item.causeText}
-                                            </p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                              {item.isActive ? "Aktif" : "Nonaktif"}
-                                            </p>
-                                          </div>
-                                          {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
-                                            <div className="flex gap-2 text-xs">
-                                              <button
-                                                onClick={() => openCaseFishboneCauseEdit(item)}
-                                                className="text-rose-500 hover:underline"
-                                              >
-                                                Edit
-                                              </button>
-                                              <button
-                                                onClick={() =>
-                                                  handleCaseFishboneCauseDelete(
-                                                    item.caseFishboneCauseId
-                                                  )
-                                                }
-                                                className="text-slate-400 hover:underline"
-                                              >
-                                                Hapus
-                                              </button>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <h4 className="text-sm font-semibold text-slate-800">
-                                    Masalah & Solusi
-                                  </h4>
-                                  {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
-                                    <button
-                                      onClick={openCaseFishboneItemCreate}
-                                      className="px-2.5 py-1 rounded-lg bg-rose-400 text-white text-xs"
-                                    >
-                                      Tambah
-                                    </button>
-                                  )}
-                                </div>
-                                {caseFishboneItemsLoading ? (
-                                  <p className="text-xs text-slate-500">Memuat...</p>
-                                ) : caseFishboneItems.length === 0 ? (
-                                  <p className="text-xs text-slate-500">Belum ada item.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {caseFishboneItems.map((item) => (
-                                      <div
-                                        key={item.caseFishboneItemId}
-                                        className="rounded-lg border border-slate-200 p-3"
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div>
-                                            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                                              {item.categoryCode}
-                                            </p>
-                                            <p className="text-sm font-semibold text-slate-800">
-                                              {item.problemText}
-                                            </p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                              Solusi: {item.solutionText}
-                                            </p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                              Causes: {""}
-                                              {item.causes
-                                                .map((cause) => `#${cause.causeNo}`)
-                                                .join(", ") || "-"}
-                                            </p>
-                                          </div>
-                                          {canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId) && (
-                                            <div className="flex gap-2 text-xs">
-                                              <button
-                                                onClick={() => openCaseFishboneItemEdit(item)}
-                                                className="text-rose-500 hover:underline"
-                                              >
-                                                Edit
-                                              </button>
-                                              <button
-                                                onClick={() =>
-                                                  handleCaseFishboneItemDelete(
-                                                    item.caseFishboneItemId
-                                                  )
-                                                }
-                                                className="text-slate-400 hover:underline"
-                                              >
-                                                Hapus
-                                              </button>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                        {isProblemCase && previewSection}
-                      </div>
                     </div>
-                  </div>
                   )}
                 </>
               )}
@@ -4032,28 +5176,30 @@ const A3Page = () => {
             <p className="text-gray-600 mb-4 text-center">
               Data ini akan sulit dipulihkan
             </p>
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={() =>
-                  setAttachmentDeleteConfirm({ open: false, item: null })
-                }
-                className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleAttachmentDelete}
-                disabled={attachmentDeleting}
-                className={`px-4 py-2 bg-rose-400 text-white rounded-lg ${
-                  attachmentDeleting && "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                {attachmentDeleting ? "Deleting..." : "Hapus"}
-              </button>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() =>
+                    setAttachmentDeleteConfirm({ open: false, item: null })
+                  }
+                  className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg"
+                >
+                  Batal
+                </button>
+                {canEditAttachments && (
+                  <button
+                    onClick={handleAttachmentDelete}
+                    disabled={attachmentDeleting}
+                    className={`px-4 py-2 bg-rose-400 text-white rounded-lg ${
+                      attachmentDeleting && "opacity-50 cursor-not-allowed"
+                    }`}
+                  >
+                    {attachmentDeleting ? "Deleting..." : "Hapus"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       {showCaseForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-2xl shadow-xl w-[520px] max-h-[90vh] overflow-auto">
