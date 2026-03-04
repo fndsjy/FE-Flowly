@@ -32,6 +32,7 @@ interface Pilar {
 interface Employee {
   UserId: number;
   Name: string;
+  DeptName?: string | null;
 }
 
 interface JabatanItem {
@@ -225,10 +226,17 @@ const ProsedurPage = () => {
     return filtered.filter((item) => !recommendedIdSet.has(item.id));
   }, [filtered, recommendedIdSet]);
 
+  const formatEmployeeLabel = (employee?: Employee | null) => {
+    if (!employee) return "-";
+    const name = employee.Name?.trim() || "Nama tidak tersedia";
+    const deptName = employee.DeptName?.trim();
+    return deptName ? `${name} - ${deptName}` : name;
+  };
+
   const getPicName = (id: number | null) => {
     if (!id) return "-";
     const emp = employees.find((e) => e.UserId === id);
-    return emp ? emp.Name : `ID ${id}`;
+    return formatEmployeeLabel(emp);
   };
 
   const getJabatanName = (id: string | null) => {

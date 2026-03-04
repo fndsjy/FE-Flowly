@@ -40,7 +40,14 @@ type PilarItem = { id: number; pilarName: string };
 type SbuItem = { id: number; sbuName: string; sbuCode: string };
 type SbuSubItem = { id: number; sbuSubName: string; sbuSubCode: string };
 type UserItem = { userId: string; name: string; username: string };
-type EmployeeItem = { UserId: number; Name: string };
+type EmployeeItem = { UserId: number; Name: string; DeptName?: string | null };
+
+const formatEmployeeLabel = (employee?: EmployeeItem | null) => {
+  if (!employee) return "-";
+  const name = employee.Name?.trim() || "Nama tidak tersedia";
+  const deptName = employee.DeptName?.trim();
+  return deptName ? `${name} - ${deptName}` : name;
+};
 
 const AuditLogPage = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -89,7 +96,7 @@ const AuditLogPage = () => {
       setSbuMap(new Map(sbuItems.map((item) => [item.id, `${item.sbuName} (${item.sbuCode})`])));
       setSbuSubMap(new Map(sbuSubItems.map((item) => [item.id, `${item.sbuSubName} (${item.sbuSubCode})`])));
       setUserMap(new Map(userItems.map((item) => [item.userId, item.name || item.username])));
-      setEmployeeMap(new Map(employeeItems.map((item) => [item.UserId, item.Name])));
+      setEmployeeMap(new Map(employeeItems.map((item) => [item.UserId, formatEmployeeLabel(item)])));
     } catch (err) {
       console.error("Error fetch lookup data:", err);
     }
@@ -193,10 +200,10 @@ const AuditLogPage = () => {
     if (!item.actorId) return "system";
     if (item.actorType === "EMPLOYEE") {
       const name = employeeMap.get(Number(item.actorId));
-      return name ? `${name} (${item.actorId})` : item.actorId;
+      return name || "Karyawan";
     }
     const name = userMap.get(item.actorId);
-    return name ? `${name} (${item.actorId})` : item.actorId;
+    return name || "Akun";
   };
 
   const buildChangeSummary = (changes: AuditChange[] | null) => {

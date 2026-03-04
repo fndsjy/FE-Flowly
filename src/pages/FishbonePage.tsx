@@ -128,6 +128,8 @@ const PREVIEW_LINE_GAP = 12;
 const PREVIEW_SPINE_PADDING = 16;
 const PREVIEW_SOURCE_GAP = 0;
 const PREVIEW_CATEGORY_LINE_GAP = 0;
+const FISHBONE_PAGE_SIZE_OPTIONS = [6, 9, 12, 18] as const;
+const DEFAULT_FISHBONE_PAGE_SIZE = 9;
 
 const FishbonePage = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -147,6 +149,10 @@ const FishbonePage = () => {
   const [fishboneSearch, setFishboneSearch] = useState("");
   const [fishboneStatusFilter, setFishboneStatusFilter] = useState<StatusFilter>("all");
   const [selectedFishboneId, setSelectedFishboneId] = useState("");
+  const [fishbonePage, setFishbonePage] = useState(1);
+  const [fishbonePageSize, setFishbonePageSize] = useState<number>(
+    DEFAULT_FISHBONE_PAGE_SIZE
+  );
 
   const [causes, setCauses] = useState<FishboneCause[]>([]);
   const [causesLoading, setCausesLoading] = useState(true);
@@ -469,6 +475,10 @@ const FishbonePage = () => {
     fetchItems(selectedFishboneId);
   }, [selectedFishboneId]);
 
+  useEffect(() => {
+    setFishbonePage(1);
+  }, [fishboneSearch, fishboneStatusFilter, selectedSbuSubId]);
+
   const filteredFishbones = useMemo(() => {
     const term = fishboneSearch.trim().toLowerCase();
     return fishbones.filter((item) => {
@@ -483,6 +493,31 @@ const FishbonePage = () => {
       );
     });
   }, [fishbones, fishboneSearch, fishboneStatusFilter, sbuSubMap]);
+
+  const fishbonePageCount = useMemo(
+    () => Math.max(1, Math.ceil(filteredFishbones.length / fishbonePageSize)),
+    [filteredFishbones.length, fishbonePageSize]
+  );
+
+  const fishbonePageRange = useMemo(() => {
+    if (filteredFishbones.length === 0) {
+      return { start: 0, end: 0 };
+    }
+    const currentPage = Math.min(fishbonePage, fishbonePageCount);
+    const start = (currentPage - 1) * fishbonePageSize + 1;
+    const end = Math.min(filteredFishbones.length, currentPage * fishbonePageSize);
+    return { start, end };
+  }, [filteredFishbones.length, fishbonePage, fishbonePageCount, fishbonePageSize]);
+
+  const paginatedFishbones = useMemo(() => {
+    const currentPage = Math.min(fishbonePage, fishbonePageCount);
+    const start = (currentPage - 1) * fishbonePageSize;
+    return filteredFishbones.slice(start, start + fishbonePageSize);
+  }, [filteredFishbones, fishbonePage, fishbonePageCount, fishbonePageSize]);
+
+  useEffect(() => {
+    setFishbonePage((prev) => Math.min(Math.max(1, fishbonePageCount), prev));
+  }, [fishbonePageCount]);
 
   const filteredCauses = useMemo(() => {
     const term = causeSearch.trim().toLowerCase();
@@ -1955,12 +1990,12 @@ const FishbonePage = () => {
             <span>
               {sbuSubsLoading ? "Memuat data SBU Sub..." : `Total SBU Sub: ${sbuSubs.length}`}
             </span>
-            <span>
-              {fishbonesLoading
-                ? "Memuat data masalah utama..."
-                : `Menampilkan ${fishbones.length} masalah utama`}
-            </span>
-          </div>
+              <span>
+                {fishbonesLoading
+                  ? "Memuat data masalah utama..."
+                  : `Menampilkan ${filteredFishbones.length} masalah utama`}
+              </span>
+            </div>
           </div>
         )}
 
@@ -1982,19 +2017,36 @@ const FishbonePage = () => {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/70 flex flex-col md:flex-row md:items-center gap-3">
-            <input
-              type="text"
-              placeholder="Cari masalah utama..."
-              value={fishboneSearch}
-              onChange={(event) => setFishboneSearch(event.target.value)}
-              className="flex-1 px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
-              focus:border-teal-400 focus:ring-teal-400 focus:ring-1 outline-none transition"
-            />
-            {!isPreviewOnly && (
+            <div className="bg-white rounded-2xl p-4 border border-slate-200/70 flex flex-col md:flex-row md:items-center gap-3">
+              <input
+                type="text"
+                placeholder="Cari masalah utama..."
+                value={fishboneSearch}
+                onChange={(event) => setFishboneSearch(event.target.value)}
+                className="flex-1 px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
+                focus:border-teal-400 focus:ring-teal-400 focus:ring-1 outline-none transition"
+              />
               <select
-                value={fishboneStatusFilter}
-                onChange={(event) => setFishboneStatusFilter(event.target.value as StatusFilter)}
+                value={selectedSbuSubId}
+                onChange={(event) =>
+                  setSelectedSbuSubId(event.target.value ? Number(event.target.value) : "")
+                }
+                className="px-3 py-2.5 rounded-2xl border border-slate-200 bg-white/90
+                focus:border-teal-400 focus:ring-teal-400 focus:ring-1 outline-none transition"
+              >
+                <option value="">
+                  {sbuSubsLoading ? "Memuat SBU Sub..." : "Semua SBU Sub"}
+                </option>
+                {sbuSubs.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.sbuSubName} ({item.sbuSubCode})
+                  </option>
+                ))}
+              </select>
+              {!isPreviewOnly && (
+                <select
+                  value={fishboneStatusFilter}
+                  onChange={(event) => setFishboneStatusFilter(event.target.value as StatusFilter)}
                 className="px-3 py-2.5 rounded-2xl border border-slate-200 bg-white/90
                 focus:border-teal-400 focus:ring-teal-400 focus:ring-1 outline-none transition"
               >
@@ -2005,79 +2057,137 @@ const FishbonePage = () => {
             )}
           </div>
 
-          {fishbonesLoading ? (
-            <p className="text-slate-500 animate-pulse">Memuat data masalah utama...</p>
-          ) : filteredFishbones.length === 0 ? (
-            <p className="text-slate-500 text-center mt-6">Belum ada masalah utama.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredFishbones.map((item) => {
-                const isSelected = selectedFishboneId === item.fishboneId;
-                return (
-                  <div
-                    key={item.fishboneId}
-                    onClick={() => setSelectedFishboneId(item.fishboneId)}
-                    className={`group rounded-3xl border p-5 shadow-lg transition-all cursor-pointer bg-white ${
-                      isSelected
-                        ? "border-teal-400 shadow-teal-100"
-                        : "border-slate-200/80 hover:-translate-y-1 hover:shadow-xl"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                          {item.fishboneId}
+            {fishbonesLoading ? (
+              <p className="text-slate-500 animate-pulse">Memuat data masalah utama...</p>
+            ) : filteredFishbones.length === 0 ? (
+              <p className="text-slate-500 text-center mt-6">Belum ada masalah utama.</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {paginatedFishbones.map((item) => {
+                    const isSelected = selectedFishboneId === item.fishboneId;
+                    return (
+                      <div
+                        key={item.fishboneId}
+                        onClick={() => setSelectedFishboneId(item.fishboneId)}
+                        className={`group rounded-3xl border p-5 shadow-lg transition-all cursor-pointer bg-white ${
+                          isSelected
+                            ? "border-teal-400 shadow-teal-100"
+                            : "border-slate-200/80 hover:-translate-y-1 hover:shadow-xl"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                              {item.fishboneId}
+                            </p>
+                            <h3 className="text-lg font-semibold text-slate-900 line-clamp-2">
+                              {item.fishboneName}
+                            </h3>
+                          </div>
+                          {renderStatusPill(item.isActive)}
+                        </div>
+
+                        <p className="mt-3 text-sm text-slate-600 line-clamp-2">
+                          {item.fishboneDesc || "Belum ada deskripsi."}
                         </p>
-                        <h3 className="text-lg font-semibold text-slate-900 line-clamp-2">
-                          {item.fishboneName}
-                        </h3>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+                            SBU Sub: {getSbuSubLabel(item.sbuSubId)}
+                          </span>
+                        </div>
+
+                        {canCrud && (
+                          <div className="mt-4 flex gap-2 text-xs">
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openFishboneEdit(item);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setDeleteConfirm({
+                                  open: true,
+                                  type: "fishbone",
+                                  id: item.fishboneId,
+                                  label: item.fishboneName,
+                                });
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-600 hover:bg-rose-200"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {renderStatusPill(item.isActive)}
-                    </div>
-
-                    <p className="mt-3 text-sm text-slate-600 line-clamp-2">
-                      {item.fishboneDesc || "Belum ada deskripsi."}
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                        SBU Sub: {getSbuSubLabel(item.sbuSubId)}
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                  <span>
+                    Menampilkan {fishbonePageRange.start}-{fishbonePageRange.end} dari{" "}
+                    {filteredFishbones.length} masalah utama
+                  </span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2">
+                      <span>Per halaman</span>
+                      <select
+                        value={fishbonePageSize}
+                        onChange={(event) => {
+                          setFishbonePageSize(Number(event.target.value));
+                          setFishbonePage(1);
+                        }}
+                        className="px-2 py-1 rounded-lg border border-slate-200 bg-white"
+                      >
+                        {FISHBONE_PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        Halaman {Math.min(fishbonePage, fishbonePageCount)} dari {fishbonePageCount}
                       </span>
+                      <button
+                        type="button"
+                        disabled={fishbonePage <= 1}
+                        onClick={() => setFishbonePage((prev) => Math.max(1, prev - 1))}
+                        className={`px-3 py-1 rounded-lg border ${
+                          fishbonePage <= 1
+                            ? "text-slate-300 border-slate-200 cursor-not-allowed"
+                            : "text-slate-600 border-slate-300 hover:bg-slate-100"
+                        }`}
+                      >
+                        Prev
+                      </button>
+                      <button
+                        type="button"
+                        disabled={fishbonePage >= fishbonePageCount}
+                        onClick={() =>
+                          setFishbonePage((prev) => Math.min(fishbonePageCount, prev + 1))
+                        }
+                        className={`px-3 py-1 rounded-lg border ${
+                          fishbonePage >= fishbonePageCount
+                            ? "text-slate-300 border-slate-200 cursor-not-allowed"
+                            : "text-slate-600 border-slate-300 hover:bg-slate-100"
+                        }`}
+                      >
+                        Next
+                      </button>
                     </div>
-
-                    {canCrud && (
-                      <div className="mt-4 flex gap-2 text-xs">
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openFishboneEdit(item);
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setDeleteConfirm({
-                              open: true,
-                              type: "fishbone",
-                              id: item.fishboneId,
-                              label: item.fishboneName,
-                            });
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-600 hover:bg-rose-200"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                </div>
+              </div>
+            )}
+          </section>
 
         {isPreviewOnly ? (
           <div className="mt-6">{previewSection}</div>

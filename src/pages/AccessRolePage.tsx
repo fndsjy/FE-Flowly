@@ -40,6 +40,7 @@ interface UserData {
 interface EmployeeData {
   UserId: number;
   Name: string;
+  DeptName?: string | null;
 }
 
 interface MasterAccessItem {
@@ -120,6 +121,13 @@ const normalizeRoleName = (value?: string | null) => {
 
 const normalizeKey = (value?: string | null) => (value ?? "").trim().toUpperCase();
 
+const formatEmployeeLabel = (employee?: EmployeeData | null) => {
+  if (!employee) return "-";
+  const name = employee.Name?.trim() || "Nama tidak tersedia";
+  const deptName = employee.DeptName?.trim();
+  return deptName ? `${name} - ${deptName}` : name;
+};
+
 const AccessRolePage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
@@ -168,7 +176,7 @@ const AccessRolePage = () => {
     return new Map(
       employees.map((employee) => [
         String(employee.UserId),
-        employee.Name ? `${employee.Name} (${employee.UserId})` : `ID ${employee.UserId}`,
+        formatEmployeeLabel(employee),
       ])
     );
   }, [employees]);
@@ -202,18 +210,16 @@ const AccessRolePage = () => {
     if (subjectType === "ADMIN") {
       return users.map((user) => ({
         id: user.userId,
-        label: `${user.name} (@${user.username})`,
-        subtitle: user.userId,
+        label: `${user.name}`,
+        subtitle: `@${user.username}`,
         type: "ADMIN",
       }));
     }
 
     return employees.map((employee) => ({
       id: String(employee.UserId),
-      label: employee.Name
-        ? `${employee.Name} (${employee.UserId})`
-        : `ID ${employee.UserId}`,
-      subtitle: `ID ${employee.UserId}`,
+      label: formatEmployeeLabel(employee),
+      subtitle: employee.DeptName?.trim() || "-",
       type: "USER",
     }));
   }, [subjectType, roles, users, employees]);
@@ -358,9 +364,9 @@ const AccessRolePage = () => {
       return roleMap.get(selectedSubject.id) ?? selectedSubject.id;
     }
     if (selectedSubject.type === "ADMIN") {
-      return userMap.get(selectedSubject.id) ?? selectedSubject.id;
+      return userMap.get(selectedSubject.id) ?? "Akun";
     }
-    return employeeMap.get(selectedSubject.id) ?? selectedSubject.id;
+    return employeeMap.get(selectedSubject.id) ?? "Karyawan";
   }, [selectedSubject, roleMap, userMap, employeeMap]);
 
   const resolveResourceKeyFromAccess = (
@@ -941,7 +947,8 @@ const AccessRolePage = () => {
         <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
           <div className="bg-white rounded-2xl p-4 shadow-lg shadow-gray-300/40">
             <div className="flex gap-2 mb-4">
-              {(["ROLE", "ADMIN", "USER"] as SubjectTypeOption[]).map((type) => (
+              {/* {(["ROLE", "ADMIN", "USER"] as SubjectTypeOption[]).map((type) => ( */}
+              {(["ROLE", "ADMIN"] as SubjectTypeOption[]).map((type) => (
                 <button
                   key={type}
                   onClick={() => setSubjectType(type)}

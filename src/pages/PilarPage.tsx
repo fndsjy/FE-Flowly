@@ -24,6 +24,12 @@ interface JabatanItem {
   isDeleted: boolean;
 }
 
+interface EmployeeItem {
+  UserId: number;
+  Name: string;
+  DeptName?: string | null;
+}
+
 const domasColor = "#272e79";
 
 const PilarPage = () => {
@@ -33,7 +39,7 @@ const PilarPage = () => {
   const [data, setData] = useState<pilar[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [employees, setEmployees] = useState<{ UserId: number, Name: string }[]>([]);
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [jabatans, setJabatans] = useState<JabatanItem[]>([]);
   const navigate = useNavigate();
 
@@ -233,10 +239,17 @@ const PilarPage = () => {
     }
   };
 
+  const formatEmployeeLabel = (employee?: EmployeeItem | null) => {
+    if (!employee) return "-";
+    const name = employee.Name?.trim() || "Nama tidak tersedia";
+    const deptName = employee.DeptName?.trim();
+    return deptName ? `${name} - ${deptName}` : name;
+  };
+
   const getPicName = (id: number | null) => {
     if (!id) return "-";
     const emp = employees.find((e) => e.UserId === id);
-    return emp ? emp.Name : `ID ${id}`;
+    return formatEmployeeLabel(emp);
   };
 
   const getJabatanName = (id: string | null) => {
@@ -460,7 +473,7 @@ const PilarPage = () => {
 
                 {employees.map((emp) => (
                   <option key={emp.UserId} value={emp.UserId}>
-                    {emp.Name}
+                    {formatEmployeeLabel(emp)}
                   </option>
                 ))}
               </select>
