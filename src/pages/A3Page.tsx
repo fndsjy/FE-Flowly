@@ -31,6 +31,7 @@ type Employee = {
   UserId: number;
   Name: string;
   jobDesc: string | null;
+  DeptName?: string | null;
 };
 
 type UserProfile = {
@@ -711,11 +712,18 @@ const A3Page = () => {
     return new Map(employees.map((item) => [item.UserId, item]));
   }, [employees]);
 
+  const formatEmployeeLabel = (employee?: Employee | null) => {
+    if (!employee) return "-";
+    const name = employee.Name?.trim() || "Nama tidak tersedia";
+    const deptName = employee.DeptName?.trim();
+    return deptName ? `${name} - ${deptName}` : name;
+  };
+
   const getEmployeeLabel = (id: number | null | undefined) => {
     if (!id) return "-";
     const employee = employeeMap.get(id);
-    if (!employee) return `ID ${id}`;
-    return employee.Name;
+    if (!employee) return "-";
+    return formatEmployeeLabel(employee);
   };
 
   const caseMap = useMemo(() => {
@@ -913,8 +921,8 @@ const A3Page = () => {
   );
 
   const canEditPdcaAct = useMemo(
-    () => !isCaseClosed && !isDecisionLocked && (canCrudCase || isCaseRequester),
-    [isCaseClosed, isDecisionLocked, canCrudCase, isCaseRequester]
+    () => canEditPdcaPlan,
+    [canEditPdcaPlan]
   );
 
   const canApproveFeedback = useMemo(() => {
@@ -1370,8 +1378,7 @@ const A3Page = () => {
   }, [sbuSubs, sbuMap]);
 
   const getEmployeeOptionLabel = (employee: Employee) => {
-    const name = employee.Name?.trim();
-    return name ? `${name} (${employee.UserId})` : `ID ${employee.UserId}`;
+    return formatEmployeeLabel(employee);
   };
 
   const getEmployeeOptionValue = (employee: Employee) => {
@@ -4052,7 +4059,7 @@ const A3Page = () => {
                                               key={employee.UserId}
                                               value={employee.UserId}
                                             >
-                                              {employee.Name}
+                                              {formatEmployeeLabel(employee)}
                                             </option>
                                           ))}
                                         </select>
@@ -4920,6 +4927,9 @@ const A3Page = () => {
                                         getEmployeeOptionValue(employee) ===
                                         checkByValue
                                     );
+                                  const legacyLabel = /^ID\\s+\\d+$/i.test(checkByValue)
+                                    ? "Nama tidak tersedia"
+                                    : checkByValue;
                                   const canEditCheckBy =
                                     canEditPdcaPlan && !employeesLoading;
                                   return (
@@ -4938,15 +4948,15 @@ const A3Page = () => {
                                       }`}
                                     >
                                       <option value="">
-                                        {employeesLoading
-                                          ? "Memuat karyawan..."
-                                          : "Pilih checker"}
+                                      {employeesLoading
+                                        ? "Memuat karyawan..."
+                                        : "Pilih checker"}
+                                    </option>
+                                    {hasLegacyCheckBy && (
+                                      <option value={checkByValue}>
+                                        {legacyLabel}
                                       </option>
-                                      {hasLegacyCheckBy && (
-                                        <option value={checkByValue}>
-                                          {checkByValue}
-                                        </option>
-                                      )}
+                                    )}
                                       {employees.map((employee) => {
                                         const value = getEmployeeOptionValue(
                                           employee

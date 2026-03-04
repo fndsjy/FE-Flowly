@@ -42,6 +42,7 @@ type IkFormData = {
 type Employee = {
   UserId: number;
   Name: string | null;
+  DeptName?: string | null;
 };
 
 type ProcedureSopOption = {
@@ -483,16 +484,21 @@ const MasterIkPage = () => {
     }
   };
 
+  const formatEmployeeLabel = (employee?: Employee | null) => {
+    if (!employee) return "-";
+    const name = employee.Name?.trim() || "Nama tidak tersedia";
+    const deptName = employee.DeptName?.trim();
+    return deptName ? `${name} - ${deptName}` : name;
+  };
+
   const getEmployeeOptionLabel = (employee: Employee) => {
-    const name = employee.Name?.trim();
-    return name ? `${name} (${employee.UserId})` : `ID ${employee.UserId}`;
+    return formatEmployeeLabel(employee);
   };
 
   const getEmployeeDisplayName = (employeeId: number | null | undefined) => {
     if (!employeeId) return "-";
     const employee = employees.find((item) => item.UserId === employeeId);
-    if (!employee) return `ID ${employeeId}`;
-    return employee.Name?.trim() || `ID ${employee.UserId}`;
+    return formatEmployeeLabel(employee ?? null);
   };
 
   const formatApprovalName = (employeeId: number | null | undefined) => {

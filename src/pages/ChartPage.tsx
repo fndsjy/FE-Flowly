@@ -56,6 +56,7 @@ interface EmployeeItem {
   UserId: number;
   Name?: string;
   jobDesc?: string | null;
+  DeptName?: string | null;
 }
 
 interface JabatanItem {
@@ -491,7 +492,7 @@ const ChartPage = () => {
     setJobDescModal({
       open: true,
       userId,
-      name: emp?.Name ?? `#${userId}`,
+      name: emp?.Name?.trim() || "Nama tidak tersedia",
       jobDesc: emp?.jobDesc ?? "",
     });
   };
@@ -565,16 +566,23 @@ const ChartPage = () => {
   const canCrudChartMember = !accessLoading && hasChartMemberModuleCrud && hasOrgCrud;
   const canAddRoot = canCrudChart;
 
+  const formatEmployeeLabel = (employee?: EmployeeItem | null) => {
+    if (!employee) return null;
+    const name = employee.Name?.trim() || "Nama tidak tersedia";
+    const deptName = employee.DeptName?.trim();
+    return deptName ? `${name} - ${deptName}` : name;
+  };
+
   const getPicName = (picId: number | null | undefined) => {
     if (!picId) return null;
     const emp = employees.find((e) => e.UserId === picId);
-    return emp ? emp.Name ?? `#${picId}` : `#${picId}`;
+    return formatEmployeeLabel(emp) ?? "Karyawan";
   };
 
   const getEmployeeName = (userId: number | null | undefined) => {
     if (!userId) return null;
     const emp = employees.find((e) => e.UserId === userId);
-    return emp ? emp.Name ?? `#${userId}` : `#${userId}`;
+    return formatEmployeeLabel(emp);
   };
 
   const getEmployeeJobDesc = (userId: number | null | undefined) => {
@@ -742,7 +750,7 @@ const ChartPage = () => {
 
         {members.map((m, idx) => {
           const employeeUserId = m.userId;
-          const employeeName = m.userId ? getEmployeeName(m.userId) ?? `User #${m.userId}` : null;
+          const employeeName = m.userId ? getEmployeeName(m.userId) ?? "Karyawan" : null;
           const employeeJobDesc = m.userId ? getEmployeeJobDesc(m.userId) : null;
 
           return (
@@ -1257,7 +1265,7 @@ const ChartPage = () => {
                     <option value="">-- Pilih pegawai (opsional) --</option>
                     {employees.map((emp) => (
                       <option key={emp.UserId} value={emp.UserId}>
-                        {emp.Name ?? `#${emp.UserId}`}
+                        {formatEmployeeLabel(emp)}
                       </option>
                     ))}
                   </select>
@@ -1314,7 +1322,7 @@ const ChartPage = () => {
               <option value="">-- Pilih pegawai (kosong untuk clear) --</option>
               {employees.map((emp) => (
                 <option key={emp.UserId} value={emp.UserId}>
-                  {emp.Name ?? `#${emp.UserId}`}
+                  {formatEmployeeLabel(emp)}
                 </option>
               ))}
             </select>

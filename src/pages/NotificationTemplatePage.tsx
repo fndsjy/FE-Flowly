@@ -24,7 +24,7 @@ type NotificationTemplateForm = {
   caseNotificationTemplateId: string;
   templateName: string;
   channel: string;
-  role: "PIC" | "ASSIGNEE" | "REQUESTER";
+  role: "PIC" | "ASSIGNEE" | "REQUESTER" | "ALL";
   action: string;
   caseType: string;
   messageTemplate: string;
@@ -37,7 +37,7 @@ type TemplateField = {
   hint: string;
 };
 
-const NOTIFICATION_ROLES = ["PIC", "ASSIGNEE", "REQUESTER"] as const;
+const NOTIFICATION_ROLES = ["PIC", "ASSIGNEE", "REQUESTER", "ALL"] as const;
 const NOTIFICATION_CHANNELS = ["WHATSAPP"] as const;
 const CASE_TYPE_OPTIONS = [
   { value: "PROBLEM", label: "Case" },
@@ -48,12 +48,17 @@ const NOTIFICATION_ACTION_OPTIONS = [
   { value: "ADD_DEPARTMENT", label: "User -> PIC (Tambah departemen)", role: "PIC" },
   { value: "ASSIGN_TASK", label: "PIC -> Assignee (Assign tugas)", role: "ASSIGNEE" },
   { value: "DECISION", label: "PIC -> Requester (Keputusan departemen)", role: "REQUESTER" },
+  {
+    value: "FEEDBACK_COMMENT",
+    label: "Requester -> PIC/Assignee (Feedback komentar)",
+  },
 ] as const;
-const ACTION_ROLE_MAP = new Map<string, "PIC" | "ASSIGNEE" | "REQUESTER">([
+const ACTION_ROLE_MAP = new Map<string, "PIC" | "ASSIGNEE" | "REQUESTER" | "ALL">([
   ["NEW_CASE", "PIC"],
   ["ADD_DEPARTMENT", "PIC"],
   ["ASSIGN_TASK", "ASSIGNEE"],
   ["DECISION", "REQUESTER"],
+  ["FEEDBACK_COMMENT", "ALL"],
 ]);
 const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
   { key: "{caseId}", label: "ID case", hint: "ID unik case" },
@@ -171,6 +176,16 @@ const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
     hint: "Nama PIC yang memutuskan",
   },
   {
+    key: "{commenterName}",
+    label: "Nama pemberi komentar",
+    hint: "Nama requester yang memberi feedback",
+  },
+  {
+    key: "{commentText}",
+    label: "Isi komentar",
+    hint: "Teks feedback/comment",
+  },
+  {
     key: "{senderUserId}",
     label: "User ID pengirim",
     hint: "Otomatis requester/PIC sesuai action",
@@ -180,11 +195,15 @@ const MESSAGE_TEMPLATE_FIELDS: TemplateField[] = [
     label: "Nama pengirim",
     hint: "Otomatis requester/PIC sesuai action",
   },
-  { key: "{role}", label: "Role penerima", hint: "PIC, ASSIGNEE, atau REQUESTER" },
+  {
+    key: "{role}",
+    label: "Role penerima",
+    hint: "PIC, ASSIGNEE, REQUESTER, atau ALL",
+  },
   {
     key: "{action}",
     label: "Aksi",
-    hint: "NEW_CASE, ADD_DEPARTMENT, ASSIGN_TASK, atau DECISION",
+    hint: "NEW_CASE, ADD_DEPARTMENT, ASSIGN_TASK, DECISION, atau FEEDBACK_COMMENT",
   },
 ];
 
@@ -231,7 +250,7 @@ const getActionLabel = (value: string | null | undefined) => {
 
 const resolveRoleForAction = (
   action: string,
-  fallback: "PIC" | "ASSIGNEE" | "REQUESTER"
+  fallback: "PIC" | "ASSIGNEE" | "REQUESTER" | "ALL"
 ) => ACTION_ROLE_MAP.get(action) ?? fallback;
 
 const isRoleLocked = (action: string) => ACTION_ROLE_MAP.has(action);
@@ -349,6 +368,8 @@ const NotificationTemplatePage = () => {
         ? "ASSIGNEE"
         : item.role?.toUpperCase() === "REQUESTER"
         ? "REQUESTER"
+        : item.role?.toUpperCase() === "ALL"
+        ? "ALL"
         : "PIC";
     setNotificationTemplateFormMode("edit");
     setNotificationTemplateForm({
@@ -682,17 +703,18 @@ const NotificationTemplatePage = () => {
                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     Role
                   </label>
-                  <select
-                    value={notificationTemplateForm.role}
-                    onChange={(event) =>
-                      setNotificationTemplateForm((prev) => ({
-                        ...prev,
-                        role: event.target.value as
-                          | "PIC"
-                          | "ASSIGNEE"
-                          | "REQUESTER",
-                      }))
-                    }
+                    <select
+                      value={notificationTemplateForm.role}
+                      onChange={(event) =>
+                        setNotificationTemplateForm((prev) => ({
+                          ...prev,
+                          role: event.target.value as
+                            | "PIC"
+                            | "ASSIGNEE"
+                            | "REQUESTER"
+                            | "ALL",
+                        }))
+                      }
                     disabled={isRoleLocked(notificationTemplateForm.action)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
                   >
