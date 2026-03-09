@@ -69,17 +69,23 @@ type CaseHeader = {
   updatedAt: string;
 };
 
-type CaseDepartment = {
-  caseDepartmentId: string;
-  caseId: string;
-  sbuSubId: number;
-  decisionStatus: string;
-  decisionAt: string | null;
-  decisionBy: string | null;
-  decisionNotes: string | null;
-  assigneeEmployeeId: number | null;
-  assignedAt: string | null;
-  assignedBy: string | null;
+  type CaseDepartment = {
+    caseDepartmentId: string;
+    caseId: string;
+    sbuSubId: number;
+    decisionStatus: string;
+    decisionAt: string | null;
+    decisionBy: string | null;
+    decisionNotes: string | null;
+    assigneeEmployeeId: number | null;
+    assigneeEmployeeIds: number[];
+    assignees: Array<{
+      employeeId: number;
+      assignedAt: string | null;
+      assignedBy: string | null;
+    }>;
+    assignedAt: string | null;
+    assignedBy: string | null;
   workStatus: string | null;
   startDate: string | null;
   targetDate: string | null;
@@ -174,6 +180,7 @@ type FishboneCategory = {
 type CasePdcaItemApi = {
   casePdcaItemId: string;
   caseId: string;
+  ownerEmployeeId: number | null;
   itemNo: number;
   planText: string | null;
   doText: string | null;
@@ -196,6 +203,7 @@ type CasePdcaItemApi = {
 type CasePdcaItem = {
   casePdcaItemId?: string;
   caseId?: string;
+  ownerEmployeeId?: number | null;
   itemNo?: number;
   planText: string;
   doText: string;
@@ -397,9 +405,10 @@ const serializeNumberedItems = (items: string[]) =>
 const hasNumberedItems = (items: string[]) =>
   items.some((item) => item.trim().length > 0);
 
-const createEmptyPdcaItem = (): CasePdcaItem => ({
+const createEmptyPdcaItem = (ownerEmployeeId?: number | null): CasePdcaItem => ({
   casePdcaItemId: undefined,
   caseId: undefined,
+  ownerEmployeeId: ownerEmployeeId ?? null,
   itemNo: undefined,
   planText: "",
   doText: "",
@@ -414,6 +423,25 @@ const createEmptyPdcaItem = (): CasePdcaItem => ({
   actStartDate: "",
   actEndDate: "",
 });
+
+const getAssigneeIds = (dept?: CaseDepartment | null) => {
+  if (!dept) return [];
+  const direct = Array.isArray(dept.assigneeEmployeeIds)
+    ? dept.assigneeEmployeeIds.filter((id) => Number.isFinite(id))
+    : [];
+  if (direct.length > 0) {
+    return Array.from(new Set(direct));
+  }
+  const fromAssignees = Array.isArray(dept.assignees)
+    ? dept.assignees
+        .map((item) => item.employeeId)
+        .filter((id) => Number.isFinite(id))
+    : [];
+  if (fromAssignees.length > 0) {
+    return Array.from(new Set(fromAssignees));
+  }
+  return dept.assigneeEmployeeId ? [dept.assigneeEmployeeId] : [];
+};
 
 type NumberedListInputProps = {
   label: string;
@@ -635,7 +663,7 @@ const A3Page = () => {
     Record<
       string,
       {
-        assigneeEmployeeId: number | "";
+        assigneeEmployeeIds: number[];
         decisionNotes: string;
         workStatus: string;
         startDate: string;
@@ -643,8 +671,9 @@ const A3Page = () => {
         endDate: string;
         workNotes: string;
       }
-    >
-  >({});
+      >
+    >({});
+  const [assigneeSearch, setAssigneeSearch] = useState<Record<string, string>>({});
   const [decisionNoteErrors, setDecisionNoteErrors] = useState<Record<string, boolean>>(
     {}
   );
@@ -726,6 +755,23 @@ const A3Page = () => {
     return formatEmployeeLabel(employee);
   };
 
+  const formatAssigneeLabels = (ids: number[]) => {
+    if (!ids || ids.length === 0) return "Belum ditentukan";
+    const labels = ids
+      .map((id) => getEmployeeLabel(id))
+      .filter((label) => label && label !== "-");
+    return labels.length > 0 ? labels.join(", ") : "Belum ditentukan";
+  };
+
+  const areSameIds = (a: number[], b: number[]) => {
+    if (a.length !== b.length) return false;
+    const setA = new Set(a);
+    for (const id of b) {
+      if (!setA.has(id)) return false;
+    }
+    return true;
+  };
+
   const caseMap = useMemo(() => {
     return new Map(cases.map((item) => [item.caseId, item]));
   }, [cases]);
@@ -756,13 +802,13 @@ const A3Page = () => {
     if (canCrudCase || employeeId === null) {
       return new Set<number>();
     }
-    const allowed = new Set<number>();
-    for (const dept of departments) {
-      if (dept.assigneeEmployeeId === employeeId) {
-        allowed.add(dept.sbuSubId);
-      }
-      const sbuSub = sbuSubMap.get(dept.sbuSubId);
-      if (sbuSub?.pic === employeeId) {
+      const allowed = new Set<number>();
+      for (const dept of departments) {
+        if (getAssigneeIds(dept).includes(employeeId)) {
+          allowed.add(dept.sbuSubId);
+        }
+        const sbuSub = sbuSubMap.get(dept.sbuSubId);
+        if (sbuSub?.pic === employeeId) {
         allowed.add(dept.sbuSubId);
       }
     }
@@ -773,17 +819,17 @@ const A3Page = () => {
     if (canCrudCase || employeeId === null) {
       return new Set<number>();
     }
-    const allowed = new Set<number>();
-    for (const dept of departments) {
-      const decisionStatus = normalizeDecisionStatus(dept.decisionStatus);
-      if (decisionStatus !== "ACCEPT") {
-        continue;
-      }
-      if (dept.assigneeEmployeeId === employeeId) {
-        allowed.add(dept.sbuSubId);
-      }
-      const sbuSub = sbuSubMap.get(dept.sbuSubId);
-      if (sbuSub?.pic === employeeId) {
+      const allowed = new Set<number>();
+      for (const dept of departments) {
+        const decisionStatus = normalizeDecisionStatus(dept.decisionStatus);
+        if (decisionStatus !== "ACCEPT") {
+          continue;
+        }
+        if (getAssigneeIds(dept).includes(employeeId)) {
+          allowed.add(dept.sbuSubId);
+        }
+        const sbuSub = sbuSubMap.get(dept.sbuSubId);
+        if (sbuSub?.pic === employeeId) {
         allowed.add(dept.sbuSubId);
       }
     }
@@ -800,6 +846,11 @@ const A3Page = () => {
     }
     return false;
   }, [selectedCase, employeeId, profile]);
+
+  const isCaseAssignee = useMemo(() => {
+    if (employeeId === null) return false;
+    return departments.some((dept) => getAssigneeIds(dept).includes(employeeId));
+  }, [departments, employeeId]);
 
   const canManageAnyFishbone = useMemo(() => {
     if (canCrudCase) return true;
@@ -824,9 +875,19 @@ const A3Page = () => {
     sbuSubMap,
   ]);
 
-  const canViewAnyFishbone = useMemo(() => {
+  const canPreviewFishbone = useMemo(() => {
     return isCaseParticipant;
   }, [isCaseParticipant]);
+
+  const canViewFishboneDetail = useMemo(() => {
+    if (canCrudCase) return true;
+    return viewableFishboneSbuSubIds.size > 0;
+  }, [canCrudCase, viewableFishboneSbuSubIds]);
+
+  const canViewAnyFishbone = useMemo(
+    () => canPreviewFishbone,
+    [canPreviewFishbone]
+  );
 
   const canViewPdca = useMemo(
     () => Boolean(selectedCaseId) && isCaseParticipant,
@@ -909,14 +970,13 @@ const A3Page = () => {
     () =>
       !isCaseClosed &&
       !isDecisionLocked &&
-      (canCrudCase ||
-        (employeeId !== null && accessibleFishboneSbuSubIds.size > 0)),
+      (canCrudCase || (employeeId !== null && isCaseAssignee)),
     [
       isCaseClosed,
       isDecisionLocked,
       canCrudCase,
       employeeId,
-      accessibleFishboneSbuSubIds,
+      isCaseAssignee,
     ]
   );
 
@@ -924,6 +984,19 @@ const A3Page = () => {
     () => canEditPdcaPlan,
     [canEditPdcaPlan]
   );
+
+  const canEditPdcaItem = (item: CasePdcaItem) => {
+    if (!canEditPdcaPlan && !canEditPdcaAct) return false;
+    if (canCrudCase) return true;
+    if (employeeId === null) return false;
+    if (item.ownerEmployeeId && item.ownerEmployeeId === employeeId) {
+      return true;
+    }
+    if (!item.ownerEmployeeId && isCaseAssignee) {
+      return true;
+    }
+    return false;
+  };
 
   const canApproveFeedback = useMemo(() => {
     if (!selectedCase || isCaseClosed) return false;
@@ -961,9 +1034,35 @@ const A3Page = () => {
   );
 
   const visibleCaseFishbones = useMemo(() => {
-    if (!canViewAnyFishbone) return [];
-    return caseFishbones;
-  }, [caseFishbones, canViewAnyFishbone]);
+    if (!canViewFishboneDetail) return [];
+    if (canCrudCase) return caseFishbones;
+    if (employeeId === null) return [];
+    if (viewableFishboneSbuSubIds.size === 0) return [];
+    return caseFishbones.filter((item) =>
+      viewableFishboneSbuSubIds.has(item.sbuSubId)
+    );
+  }, [
+    caseFishbones,
+    canViewFishboneDetail,
+    canCrudCase,
+    employeeId,
+    viewableFishboneSbuSubIds,
+  ]);
+
+  const previewFishbones = useMemo(() => {
+    if (!canPreviewFishbone) return [];
+    return caseFishbones.filter((item) => item.isActive);
+  }, [caseFishbones, canPreviewFishbone]);
+
+  const hasDetailFishbones = useMemo(
+    () => canViewFishboneDetail && visibleCaseFishbones.length > 0,
+    [canViewFishboneDetail, visibleCaseFishbones]
+  );
+
+  const selectableFishbones = useMemo(
+    () => (hasDetailFishbones ? visibleCaseFishbones : previewFishbones),
+    [hasDetailFishbones, visibleCaseFishbones, previewFishbones]
+  );
 
   const accessibleFishboneDepartments = useMemo(() => {
     if (canCrudCase) return departments;
@@ -974,13 +1073,14 @@ const A3Page = () => {
   }, [canCrudCase, departments, accessibleFishboneSbuSubIds]);
 
   const fishboneAccessNotice = useMemo(() => {
-    if (!isProblemCase || !selectedCase) return null;
+    if (!isProblemCase || !selectedCase || !canViewFishboneDetail) return null;
     if (isDecisionLocked && !canCrudCase) return caseDecisionNotice;
     if (canManageAnyFishbone) return null;
     return caseDecisionNotice;
   }, [
     isProblemCase,
     selectedCase,
+    canViewFishboneDetail,
     isDecisionLocked,
     canCrudCase,
     canManageAnyFishbone,
@@ -1015,7 +1115,7 @@ const A3Page = () => {
       if (employeeId === null) return false;
       if (selectedCase.requesterEmployeeId === employeeId) return true;
       return departments.some((dept) => {
-        if (dept.assigneeEmployeeId === employeeId) return true;
+        if (getAssigneeIds(dept).includes(employeeId)) return true;
         const sbuSub = sbuSubMap.get(dept.sbuSubId);
         return sbuSub?.pic === employeeId;
       });
@@ -1076,16 +1176,26 @@ const A3Page = () => {
 
   const myAssignments = useMemo(() => {
     if (employeeId === null) return [];
-    return caseDepartmentOverview.filter(
-      (item) => item.assigneeEmployeeId === employeeId
+    return caseDepartmentOverview.filter((item) =>
+      getAssigneeIds(item).includes(employeeId)
     );
   }, [caseDepartmentOverview, employeeId]);
 
   const myDelegations = useMemo(() => {
     if (!profile?.userId) return [];
-    return caseDepartmentOverview.filter(
-      (item) => item.assignedBy === profile.userId && item.assigneeEmployeeId !== null
-    );
+    return caseDepartmentOverview.filter((item) => {
+      const assignees = item.assignees ?? [];
+      if (assignees.length > 0) {
+        return assignees.some(
+          (assignee) =>
+            assignee.assignedBy === profile.userId &&
+            Number.isFinite(assignee.employeeId)
+        );
+      }
+      return (
+        item.assignedBy === profile.userId && getAssigneeIds(item).length > 0
+      );
+    });
   }, [caseDepartmentOverview, profile]);
 
   const myWorkSummary = useMemo(
@@ -1128,7 +1238,7 @@ const A3Page = () => {
         pendingDecision: false,
       };
 
-      if (dept.assigneeEmployeeId === employeeId) {
+      if (employeeId !== null && getAssigneeIds(dept).includes(employeeId)) {
         existing.isAssignee = true;
       }
 
@@ -1217,11 +1327,11 @@ const A3Page = () => {
 
   const selectedCaseFishbone = useMemo(() => {
     return (
-      visibleCaseFishbones.find(
+      selectableFishbones.find(
         (item) => item.caseFishboneId === selectedCaseFishboneId
       ) ?? null
     );
-  }, [visibleCaseFishbones, selectedCaseFishboneId]);
+  }, [selectableFishbones, selectedCaseFishboneId]);
 
   const activeCaseFishboneCauses = useMemo(() => {
     return caseFishboneCauses.filter((item) => !item.isDeleted);
@@ -1628,6 +1738,7 @@ const A3Page = () => {
   const toPdcaFormItem = (item: CasePdcaItemApi): CasePdcaItem => ({
     casePdcaItemId: item.casePdcaItemId,
     caseId: item.caseId,
+    ownerEmployeeId: item.ownerEmployeeId ?? null,
     itemNo: item.itemNo,
     planText: item.planText ?? "",
     doText: item.doText ?? "",
@@ -1651,24 +1762,24 @@ const A3Page = () => {
         { credentials: "include" }
       );
       const json = await safeJson(res);
-      if (!res.ok) {
-        showToast(getErrorMessage(json), "error");
-        setPdcaItems([createEmptyPdcaItem()]);
-        setPdcaDeletedIds([]);
-        return;
-      }
-      const list = Array.isArray(json?.response) ? json.response : [];
-      const normalized = list
+        if (!res.ok) {
+          showToast(getErrorMessage(json), "error");
+          setPdcaItems([]);
+          setPdcaDeletedIds([]);
+          return;
+        }
+        const list = Array.isArray(json?.response) ? json.response : [];
+        const normalized = list
         .map((item: CasePdcaItemApi) => toPdcaFormItem(item))
         .sort((a: CasePdcaItem, b: CasePdcaItem) => (a.itemNo ?? 0) - (b.itemNo ?? 0));
-      setPdcaItems(normalized.length > 0 ? normalized : [createEmptyPdcaItem()]);
-      setPdcaDeletedIds([]);
-    } catch (error) {
-      showToast("Gagal memuat PDCA", "error");
-      setPdcaItems([createEmptyPdcaItem()]);
-      setPdcaDeletedIds([]);
-    } finally {
-      setPdcaLoading(false);
+        setPdcaItems(normalized);
+        setPdcaDeletedIds([]);
+      } catch (error) {
+        showToast("Gagal memuat PDCA", "error");
+        setPdcaItems([]);
+        setPdcaDeletedIds([]);
+      } finally {
+        setPdcaLoading(false);
     }
   };
 
@@ -1730,18 +1841,18 @@ const A3Page = () => {
     }
     fetchDepartments(selectedCaseId);
     fetchAttachments(selectedCaseId);
-    if (isProblemCase) {
+    if (isProblemCase && canViewAnyFishbone) {
       fetchCaseFishbones(selectedCaseId);
-    } else {
-      setCaseFishbones([]);
-      setSelectedCaseFishboneId("");
-      setCaseFishboneCauses([]);
-      setCaseFishboneItems([]);
-      setShowCaseFishboneForm(false);
-      setShowCaseFishboneCauseForm(false);
-      setShowCaseFishboneItemForm(false);
+      return;
     }
-  }, [selectedCaseId, isProblemCase]);
+    setCaseFishbones([]);
+    setSelectedCaseFishboneId("");
+    setCaseFishboneCauses([]);
+    setCaseFishboneItems([]);
+    setShowCaseFishboneForm(false);
+    setShowCaseFishboneCauseForm(false);
+    setShowCaseFishboneItemForm(false);
+  }, [selectedCaseId, isProblemCase, canViewAnyFishbone]);
 
   useEffect(() => {
     if (!selectedCaseId || !canViewPdca) {
@@ -1765,20 +1876,20 @@ const A3Page = () => {
   }, [selectedCaseId, canViewFeedback]);
 
   useEffect(() => {
-    if (!isProblemCase || !selectedCaseFishboneId) {
+    if (!isProblemCase || !selectedCaseFishboneId || !canViewAnyFishbone) {
       setCaseFishboneCauses([]);
       setCaseFishboneItems([]);
       return;
     }
     fetchCaseFishboneCauses(selectedCaseFishboneId);
     fetchCaseFishboneItems(selectedCaseFishboneId);
-  }, [selectedCaseFishboneId, isProblemCase]);
+  }, [selectedCaseFishboneId, isProblemCase, canViewAnyFishbone]);
 
   useEffect(() => {
     const nextForms: Record<
       string,
       {
-        assigneeEmployeeId: number | "";
+        assigneeEmployeeIds: number[];
         decisionNotes: string;
         workStatus: string;
         startDate: string;
@@ -1790,7 +1901,7 @@ const A3Page = () => {
     for (const dept of departments) {
       const normalizedStatus = normalizeWorkStatus(dept.workStatus);
       nextForms[dept.caseDepartmentId] = {
-        assigneeEmployeeId: dept.assigneeEmployeeId ?? "",
+        assigneeEmployeeIds: getAssigneeIds(dept),
         decisionNotes: dept.decisionNotes ?? "",
         workStatus: dept.workStatus ?? "",
         startDate: toDateInputValue(dept.startDate),
@@ -1803,26 +1914,21 @@ const A3Page = () => {
   }, [departments]);
 
   useEffect(() => {
-    if (!isProblemCase || visibleCaseFishbones.length === 0) {
+    if (!isProblemCase || selectableFishbones.length === 0) {
       setSelectedCaseFishboneId("");
       return;
     }
     if (
       !selectedCaseFishboneId ||
-      !visibleCaseFishbones.some(
+      !selectableFishbones.some(
         (item) => item.caseFishboneId === selectedCaseFishboneId
       )
     ) {
-      setSelectedCaseFishboneId(visibleCaseFishbones[0].caseFishboneId);
+      setSelectedCaseFishboneId(selectableFishbones[0].caseFishboneId);
     }
-  }, [visibleCaseFishbones, selectedCaseFishboneId, isProblemCase]);
+  }, [selectableFishbones, selectedCaseFishboneId, isProblemCase]);
 
-  const pdcaItemsForRender =
-    pdcaItems.length > 0
-      ? pdcaItems
-      : canEditPdcaPlan
-        ? [createEmptyPdcaItem()]
-        : [];
+  const pdcaItemsForRender = pdcaItems;
 
   const updatePdcaItem = (
     index: number,
@@ -1836,16 +1942,17 @@ const A3Page = () => {
     });
   };
 
-  const addPdcaItem = () => {
-    setPdcaItems((prev) => {
-      if (prev.length === 0) return [createEmptyPdcaItem()];
-      return [...prev, createEmptyPdcaItem()];
-    });
+  const addPdcaItem = (ownerEmployeeId?: number | null) => {
+    const ownerId = ownerEmployeeId ?? employeeId ?? null;
+    setPdcaItems((prev) => [...prev, createEmptyPdcaItem(ownerId)]);
   };
 
   const removePdcaItem = (index: number) => {
     setPdcaItems((prev) => {
       const target = prev[index];
+      if (!target || !canEditPdcaItem(target)) {
+        return prev;
+      }
       if (target?.casePdcaItemId) {
         setPdcaDeletedIds((deleted) => [
           ...deleted,
@@ -1853,22 +1960,89 @@ const A3Page = () => {
         ]);
       }
       const next = prev.filter((_, idx) => idx !== index);
-      return next.length > 0 ? next : [createEmptyPdcaItem()];
+      return next;
     });
   };
+
+  const pdcaGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        ownerEmployeeId: number | null;
+        items: Array<{ item: CasePdcaItem; index: number }>;
+      }
+    >();
+    const ensureGroup = (ownerEmployeeId: number | null) => {
+      const key = ownerEmployeeId === null ? "unassigned" : `emp:${ownerEmployeeId}`;
+      const existing = groups.get(key);
+      if (existing) return existing;
+      const next = { ownerEmployeeId, items: [] as Array<{ item: CasePdcaItem; index: number }> };
+      groups.set(key, next);
+      return next;
+    };
+
+    pdcaItemsForRender.forEach((item, index) => {
+      const ownerId =
+        item.ownerEmployeeId !== undefined ? item.ownerEmployeeId : null;
+      ensureGroup(ownerId).items.push({ item, index });
+    });
+
+    if (employeeId !== null && canEditPdcaPlan) {
+      ensureGroup(employeeId);
+    }
+
+    const ownerIds = Array.from(groups.values())
+      .map((group) => group.ownerEmployeeId)
+      .filter((id): id is number => id !== null);
+    const uniqueOwnerIds = Array.from(new Set(ownerIds)).sort((a, b) =>
+      getEmployeeLabel(a).localeCompare(getEmployeeLabel(b))
+    );
+
+    const orderedOwnerIds: Array<number | null> = [];
+    if (employeeId !== null && groups.has(`emp:${employeeId}`)) {
+      orderedOwnerIds.push(employeeId);
+    }
+    for (const id of uniqueOwnerIds) {
+      if (id === employeeId) continue;
+      orderedOwnerIds.push(id);
+    }
+    if (groups.has("unassigned")) {
+      orderedOwnerIds.push(null);
+    }
+
+    return orderedOwnerIds.map((ownerEmployeeId) => {
+      const group = ensureGroup(ownerEmployeeId);
+      const sortedItems = [...group.items].sort((a, b) => {
+        const aNo =
+          a.item.itemNo ?? Number.POSITIVE_INFINITY;
+        const bNo =
+          b.item.itemNo ?? Number.POSITIVE_INFINITY;
+        if (aNo !== bNo) return aNo - bNo;
+        return a.index - b.index;
+      });
+      return {
+        ownerEmployeeId,
+        ownerLabel:
+          ownerEmployeeId === null
+            ? "Belum ditentukan"
+            : getEmployeeLabel(ownerEmployeeId),
+        items: sortedItems.map((entry, idx) => ({
+          ...entry,
+          displayNo: idx + 1,
+        })),
+      };
+    });
+  }, [pdcaItemsForRender, employeeId, canEditPdcaPlan, employeeMap]);
 
   const toNullableText = (value: string) => {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   };
 
-  const buildPdcaPayload = (
-    item: CasePdcaItem,
-    itemNo: number,
-    caseId: string
-  ) => ({
+  const buildPdcaPayload = (item: CasePdcaItem, caseId: string) => ({
     caseId,
-    itemNo,
+    ownerEmployeeId: item.ownerEmployeeId ?? null,
+    itemNo: item.itemNo,
     planText: toNullableText(item.planText),
     doText: toNullableText(item.doText),
     doStartDate: item.doStartDate || null,
@@ -1888,17 +2062,25 @@ const A3Page = () => {
     if (!canEditPdcaPlan && !canEditPdcaAct) {
       showToast("Tidak punya akses untuk menyimpan PDCA", "error");
       return;
-    }
-    setPdcaSaving(true);
-    try {
-      if (canEditPdcaPlan) {
-        for (const casePdcaItemId of pdcaDeletedIds) {
-          const res = await apiFetch("/case-pdca", {
-            method: "DELETE",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ casePdcaItemId }),
-          });
+      }
+      setPdcaSaving(true);
+      try {
+        const deletableIds = new Set(
+          pdcaItemsForRender
+            .filter((item) => item.casePdcaItemId && canEditPdcaItem(item))
+            .map((item) => item.casePdcaItemId as string)
+        );
+        if (canEditPdcaPlan) {
+          for (const casePdcaItemId of pdcaDeletedIds) {
+            if (!deletableIds.has(casePdcaItemId)) {
+              continue;
+            }
+            const res = await apiFetch("/case-pdca", {
+              method: "DELETE",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ casePdcaItemId }),
+            });
           const json = await safeJson(res);
           if (!res.ok) {
             throw new Error(getErrorMessage(json));
@@ -1908,16 +2090,22 @@ const A3Page = () => {
 
       for (let index = 0; index < pdcaItemsForRender.length; index += 1) {
         const item = pdcaItemsForRender[index];
+        if (!canEditPdcaItem(item)) {
+          continue;
+        }
         if (!item.casePdcaItemId && !canEditPdcaPlan) {
           continue;
         }
 
-        const basePayload = buildPdcaPayload(item, index + 1, selectedCaseId);
+        const basePayload = buildPdcaPayload(item, selectedCaseId);
         const payload: Record<string, unknown> = {};
 
         if (canEditPdcaPlan) {
           payload.caseId = basePayload.caseId;
-          payload.itemNo = basePayload.itemNo;
+          payload.ownerEmployeeId = basePayload.ownerEmployeeId;
+          if (basePayload.itemNo !== undefined) {
+            payload.itemNo = basePayload.itemNo;
+          }
           payload.planText = basePayload.planText;
           payload.doText = basePayload.doText;
           payload.doStartDate = basePayload.doStartDate;
@@ -2329,7 +2517,7 @@ const A3Page = () => {
 
   const handleAssignmentUpdate = async (
     deptId: string,
-    nextAssignee?: number | ""
+    nextAssignees?: number[]
   ) => {
     const department = departments.find(
       (item) => item.caseDepartmentId === deptId
@@ -2340,9 +2528,11 @@ const A3Page = () => {
       return;
     }
     const form = departmentWorkForms[deptId];
-    if (!form && nextAssignee === undefined) return;
-    const assigneeValue =
-      nextAssignee !== undefined ? nextAssignee : form?.assigneeEmployeeId ?? "";
+    if (!form && nextAssignees === undefined) return;
+    const assigneeIds = nextAssignees ?? form?.assigneeEmployeeIds ?? [];
+    const normalizedAssignees = Array.from(
+      new Set(assigneeIds.filter((id) => Number.isFinite(id)))
+    );
     try {
       const res = await apiFetch("/case-department", {
         method: "PUT",
@@ -2350,7 +2540,7 @@ const A3Page = () => {
         credentials: "include",
         body: JSON.stringify({
           caseDepartmentId: deptId,
-          assigneeEmployeeId: assigneeValue === "" ? null : assigneeValue,
+          assigneeEmployeeIds: normalizedAssignees,
         }),
       });
       const json = await safeJson(res);
@@ -3374,10 +3564,10 @@ const A3Page = () => {
                             <span className="text-[11px] text-slate-600 line-clamp-2">
                               {cause.causeText}
                             </span>
+                            </div>
+                          ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        )}
                   </div>
                 </div>
               </div>
@@ -3845,9 +4035,9 @@ const A3Page = () => {
                           const sbuSub = sbuSubMap.get(dept.sbuSubId);
                           const isPic =
                             employeeId !== null && sbuSub?.pic === employeeId;
-                          const isAssignee =
-                            employeeId !== null &&
-                            dept.assigneeEmployeeId === employeeId;
+                            const isAssignee =
+                              employeeId !== null &&
+                              getAssigneeIds(dept).includes(employeeId);
                           const decisionStatus = (dept.decisionStatus ?? "").toUpperCase();
                           const isDecisionAccepted = decisionStatus === "ACCEPT";
                           const isDecisionRejected = decisionStatus === "REJECT";
@@ -4025,52 +4215,120 @@ const A3Page = () => {
                                   </label>
                                   {canEditAssignment ? (
                                     <>
-                                      <div className="flex gap-2">
-                                        <select
-                                          value={form?.assigneeEmployeeId ?? ""}
-                                          onChange={(event) => {
-                                            const nextValue = event.target.value
-                                              ? Number(event.target.value)
-                                              : "";
-                                            const currentValue =
-                                              form?.assigneeEmployeeId ??
-                                              dept.assigneeEmployeeId ??
-                                              "";
-                                            setDepartmentWorkForms((prev) => ({
-                                              ...prev,
-                                              [dept.caseDepartmentId]: {
-                                                ...(prev[dept.caseDepartmentId] ?? form),
-                                                assigneeEmployeeId: nextValue,
-                                              },
-                                            }));
-                                            if (nextValue !== currentValue) {
-                                              handleAssignmentUpdate(
-                                                dept.caseDepartmentId,
-                                                nextValue
-                                              );
-                                            }
-                                          }}
-                                          disabled={employeesLoading}
-                                          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                                        >
-                                          <option value="">Belum ditentukan</option>
-                                          {employees.map((employee) => (
-                                            <option
-                                              key={employee.UserId}
-                                              value={employee.UserId}
-                                            >
-                                              {formatEmployeeLabel(employee)}
-                                            </option>
-                                          ))}
-                                        </select>
+                                      <input
+                                        type="text"
+                                        value={assigneeSearch[dept.caseDepartmentId] ?? ""}
+                                        onChange={(event) =>
+                                          setAssigneeSearch((prev) => ({
+                                            ...prev,
+                                            [dept.caseDepartmentId]: event.target.value,
+                                          }))
+                                        }
+                                        placeholder="Cari karyawan..."
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                                      />
+                                      <div className="max-h-44 overflow-auto rounded-lg border border-slate-200 px-3 py-2 space-y-2">
+                                        {(() => {
+                                          const currentValue =
+                                            form?.assigneeEmployeeIds ??
+                                            getAssigneeIds(dept);
+                                          const query = (
+                                            assigneeSearch[dept.caseDepartmentId] ?? ""
+                                          )
+                                            .trim()
+                                            .toLowerCase();
+                                          const filteredEmployees =
+                                            query.length > 0
+                                              ? employees.filter((employee) =>
+                                                  formatEmployeeLabel(employee)
+                                                    .toLowerCase()
+                                                    .includes(query)
+                                                )
+                                              : employees;
+                                          if (employeesLoading) {
+                                            return (
+                                              <p className="text-xs text-slate-500">
+                                                Memuat karyawan...
+                                              </p>
+                                            );
+                                          }
+                                          if (filteredEmployees.length === 0) {
+                                            return (
+                                              <p className="text-xs text-slate-500">
+                                                Tidak ada karyawan yang cocok.
+                                              </p>
+                                            );
+                                          }
+                                          return filteredEmployees.map((employee) => {
+                                            const isChecked = currentValue.includes(
+                                              employee.UserId
+                                            );
+                                            return (
+                                              <label
+                                                key={employee.UserId}
+                                                className="flex items-start gap-2 text-sm text-slate-700"
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isChecked}
+                                                  onChange={(event) => {
+                                                    const nextSelected = event.target
+                                                      .checked
+                                                      ? [
+                                                          ...currentValue,
+                                                          employee.UserId,
+                                                        ]
+                                                      : currentValue.filter(
+                                                          (id) =>
+                                                            id !== employee.UserId
+                                                        );
+                                                    const normalizedSelected = Array.from(
+                                                      new Set(
+                                                        nextSelected.filter((id) =>
+                                                          Number.isFinite(id)
+                                                        )
+                                                      )
+                                                    );
+                                                    setDepartmentWorkForms((prev) => ({
+                                                      ...prev,
+                                                      [dept.caseDepartmentId]: {
+                                                        ...(prev[dept.caseDepartmentId] ??
+                                                          form),
+                                                        assigneeEmployeeIds:
+                                                          normalizedSelected,
+                                                      },
+                                                    }));
+                                                    if (
+                                                      !areSameIds(
+                                                        normalizedSelected,
+                                                        currentValue
+                                                      )
+                                                    ) {
+                                                      handleAssignmentUpdate(
+                                                        dept.caseDepartmentId,
+                                                        normalizedSelected
+                                                      );
+                                                    }
+                                                  }}
+                                                  className="mt-1"
+                                                />
+                                                <span>{formatEmployeeLabel(employee)}</span>
+                                              </label>
+                                            );
+                                          });
+                                        })()}
                                       </div>
                                       <p className="text-xs text-slate-500">
-                                        Current: {getEmployeeLabel(dept.assigneeEmployeeId)}
+                                        Terpilih:{" "}
+                                        {formatAssigneeLabels(
+                                          form?.assigneeEmployeeIds ??
+                                            getAssigneeIds(dept)
+                                        )}
                                       </p>
                                     </>
                                   ) : (
                                     <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600">
-                                      {getEmployeeLabel(dept.assigneeEmployeeId)}
+                                      {formatAssigneeLabels(getAssigneeIds(dept))}
                                     </div>
                                   )}
                                 </div>
@@ -4090,11 +4348,11 @@ const A3Page = () => {
                                         setDepartmentWorkForms((prev) => {
                                           const current = prev[dept.caseDepartmentId] ?? form;
                                           const next = {
-                                            ...(current ?? {
-                                              assigneeEmployeeId: "",
-                                              decisionNotes: "",
-                                              workStatus: "",
-                                              startDate: "",
+                                              ...(current ?? {
+                                                assigneeEmployeeIds: [],
+                                                decisionNotes: "",
+                                                workStatus: "",
+                                                startDate: "",
                                               targetDate: "",
                                               endDate: "",
                                               workNotes: "",
@@ -4434,7 +4692,7 @@ const A3Page = () => {
                     </div>
                   </div>
                     {isProblemCase &&
-                      (canViewAnyFishbone || fishboneAccessNotice) && (
+                      (canPreviewFishbone || fishboneAccessNotice) && (
                       <div className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -4466,7 +4724,7 @@ const A3Page = () => {
                           {fishboneAccessNotice.text}
                         </div>
                       )}
-                      {canViewAnyFishbone && (
+                      {hasDetailFishbones ? (
                         <div className="mt-4 grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
                           <div className="space-y-3">
                             {caseFishbonesLoading ? (
@@ -4686,9 +4944,58 @@ const A3Page = () => {
                             {isProblemCase && previewSection}
                           </div>
                         </div>
-                      )}
+                      ) : canPreviewFishbone ? (
+                        <div className="mt-4 space-y-4">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                            Mode preview saja. Hanya fishbone aktif yang bisa dipilih.
+                          </div>
+                          {caseFishbonesLoading ? (
+                            <p className="text-sm text-slate-500">Memuat fishbone...</p>
+                          ) : previewFishbones.length === 0 ? (
+                            <p className="text-sm text-slate-500">
+                              Belum ada fishbone aktif.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
+                              <div className="space-y-3">
+                                {previewFishbones.map((item) => (
+                                  <button
+                                    key={item.caseFishboneId}
+                                    onClick={() =>
+                                      setSelectedCaseFishboneId(item.caseFishboneId)
+                                    }
+                                    className={`w-full text-left rounded-xl border px-4 py-3 ${
+                                      item.caseFishboneId === selectedCaseFishboneId
+                                        ? "border-rose-300 bg-rose-50"
+                                        : "border-slate-200 hover:border-rose-200"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                                          {getSbuSubLabel(item.sbuSubId)}
+                                        </p>
+                                        <p className="text-sm font-semibold text-slate-800">
+                                          {item.fishboneName}
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                          {item.fishboneDesc || "-"}
+                                        </p>
+                                      </div>
+                                      <span className="text-xs text-emerald-500">
+                                        Aktif
+                                      </span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="space-y-4">{previewSection}</div>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-                    )}
+                  )}
                   {canViewPdca && (
                     <div className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-200">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4702,27 +5009,19 @@ const A3Page = () => {
                                 : "Tahap implementasi & tindak lanjut project."}
                             </p>
                           </div>
-                        <div className="flex flex-wrap gap-2">
-                          {canEditPdcaPlan && (
-                            <button
-                              onClick={addPdcaItem}
-                              className="px-3 py-2 rounded-lg bg-rose-400 text-white text-sm"
-                            >
-                              Tambah Poin
-                            </button>
-                          )}
-                          {(canEditPdcaPlan || canEditPdcaAct) && (
-                            <button
-                              onClick={handlePdcaSave}
-                              disabled={pdcaSaving || pdcaLoading}
-                              className={`px-3 py-2 rounded-lg border text-sm ${
-                                pdcaSaving || pdcaLoading
-                                  ? "border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed"
-                                  : "border-emerald-400 text-emerald-600 hover:bg-emerald-50"
-                              }`}
-                            >
-                              {pdcaSaving ? "Menyimpan..." : "Simpan PDCA"}
-                            </button>
+                          <div className="flex flex-wrap gap-2">
+                            {(canEditPdcaPlan || canEditPdcaAct) && (
+                              <button
+                                onClick={handlePdcaSave}
+                                disabled={pdcaSaving || pdcaLoading}
+                                className={`px-3 py-2 rounded-lg border text-sm ${
+                                  pdcaSaving || pdcaLoading
+                                    ? "border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed"
+                                    : "border-emerald-400 text-emerald-600 hover:bg-emerald-50"
+                                }`}
+                              >
+                                {pdcaSaving ? "Menyimpan..." : "Simpan PDCA"}
+                              </button>
                             )}
                           </div>
                         </div>
@@ -4741,47 +5040,116 @@ const A3Page = () => {
 
                         {pdcaLoading ? (
                           <p className="mt-4 text-sm text-slate-500">Memuat PDCA...</p>
-                        ) : pdcaItemsForRender.length === 0 ? (
-                        <p className="mt-4 text-sm text-slate-500">
-                          Belum ada poin PDCA.
-                        </p>
-                      ) : (
-                        <div className="mt-4 space-y-4">
-                          {pdcaItemsForRender.map((item, index) => (
-                          <div
-                            key={`pdca-${index}`}
-                            className="rounded-xl border border-slate-200 p-4 space-y-4"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-slate-800">
-                                Poin {index + 1}
-                              </p>
-                              {pdcaItemsForRender.length > 1 && canEditPdcaPlan && (
-                                <button
-                                  onClick={() => removePdcaItem(index)}
-                                  className="text-xs text-rose-500 hover:underline"
+                        ) : pdcaGroups.length === 0 ? (
+                          <p className="mt-4 text-sm text-slate-500">
+                            Belum ada poin PDCA.
+                          </p>
+                        ) : (
+                          <div className="mt-4 space-y-6">
+                            {pdcaGroups.map((group) => {
+                              const canAddGroup =
+                                canEditPdcaPlan &&
+                                (canCrudCase ||
+                                  (employeeId !== null &&
+                                    group.ownerEmployeeId === employeeId));
+                              const groupKey =
+                                group.ownerEmployeeId === null
+                                  ? "pdca-unassigned"
+                                  : `pdca-owner-${group.ownerEmployeeId}`;
+                              const groupTitle =
+                                employeeId !== null &&
+                                group.ownerEmployeeId === employeeId
+                                  ? "Poin Saya"
+                                  : group.ownerLabel;
+                              return (
+                                <div
+                                  key={groupKey}
+                                  className="rounded-2xl border border-slate-200 p-4"
                                 >
-                                  Hapus
-                                </button>
-                              )}
-                            </div>
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-800">
+                                        {groupTitle}
+                                      </p>
+                                      <p className="text-xs text-slate-500">
+                                        {group.items.length} poin
+                                      </p>
+                                    </div>
+                                    {canAddGroup && (
+                                      <button
+                                        onClick={() =>
+                                          addPdcaItem(group.ownerEmployeeId)
+                                        }
+                                        className="px-3 py-2 rounded-lg bg-rose-400 text-white text-sm"
+                                      >
+                                        Tambah Poin
+                                      </button>
+                                    )}
+                                  </div>
+                                  {group.items.length === 0 ? (
+                                    <p className="mt-3 text-sm text-slate-500">
+                                      Belum ada poin.
+                                    </p>
+                                  ) : (
+                                    <div className="mt-4 space-y-4">
+                                      {group.items.map((entry) => {
+                                        const item = entry.item;
+                                        const index = entry.index;
+                                        const displayNo =
+                                          item.itemNo ?? entry.displayNo;
+                                        const canEditItem = canEditPdcaItem(item);
+                                        const itemKey =
+                                          item.casePdcaItemId ??
+                                          `pdca-${groupKey}-${index}`;
+                                        return (
+                                          <div
+                                            key={itemKey}
+                                            className="rounded-xl border border-slate-200 p-4 space-y-4"
+                                          >
+                                            <div className="flex items-center justify-between gap-2">
+                                              <div>
+                                                <p className="text-sm font-semibold text-slate-800">
+                                                  Poin {displayNo}
+                                                </p>
+                                                {item.ownerEmployeeId ? (
+                                                  <p className="text-xs text-slate-500">
+                                                    Pemilik:{" "}
+                                                    {getEmployeeLabel(
+                                                      item.ownerEmployeeId
+                                                    )}
+                                                  </p>
+                                                ) : (
+                                                  <p className="text-xs text-slate-500">
+                                                    Pemilik: -
+                                                  </p>
+                                                )}
+                                              </div>
+                                              {canEditItem && (
+                                                <button
+                                                  onClick={() => removePdcaItem(index)}
+                                                  className="text-xs text-rose-500 hover:underline"
+                                                >
+                                                  Hapus
+                                                </button>
+                                              )}
+                                            </div>
 
-                            <div className="grid grid-cols-1 xl:grid-cols-4 gap-3">
+                                            <div className="grid grid-cols-1 xl:grid-cols-4 gap-3">
                               <div className="rounded-lg border border-slate-200 p-3 space-y-2">
                                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   Plan
                                 </p>
                                 <textarea
                                   value={item.planText}
-                                  disabled={!canEditPdcaPlan}
+                                    disabled={!canEditItem}
                                   onChange={(event) =>
                                     updatePdcaItem(index, {
                                       planText: event.target.value,
                                     })
                                   }
-                                  placeholder={`Plan poin ${index + 1}`}
+                                  placeholder={`Plan poin ${displayNo}`}
                                   className={`w-full px-3 py-2 rounded-lg border text-sm h-24 ${
-                                    canEditPdcaPlan
+                                      canEditItem
                                       ? "border-slate-200"
                                       : "border-slate-100 bg-slate-50 text-slate-500"
                                   }`}
@@ -4797,13 +5165,13 @@ const A3Page = () => {
                                 </p>
                                 <textarea
                                   value={item.doText}
-                                  disabled={!canEditPdcaPlan}
+                                    disabled={!canEditItem}
                                   onChange={(event) =>
                                     updatePdcaItem(index, { doText: event.target.value })
                                   }
                                   placeholder="Aksi / pelaksanaan"
                                   className={`w-full px-3 py-2 rounded-lg border text-sm h-20 ${
-                                    canEditPdcaPlan
+                                      canEditItem
                                       ? "border-slate-200"
                                       : "border-slate-100 bg-slate-50 text-slate-500"
                                   }`}
@@ -4816,14 +5184,14 @@ const A3Page = () => {
                                     <input
                                       type="date"
                                       value={item.doStartDate}
-                                      disabled={!canEditPdcaPlan}
+                                      disabled={!canEditItem}
                                       onChange={(event) =>
                                         updatePdcaItem(index, {
                                           doStartDate: event.target.value,
                                         })
                                       }
                                       className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
-                                        canEditPdcaPlan
+                                          canEditItem
                                           ? "border-slate-200 text-slate-700 bg-white"
                                           : "border-slate-100 bg-slate-50 text-slate-500"
                                       }`}
@@ -4837,14 +5205,14 @@ const A3Page = () => {
                                       type="date"
                                       value={item.doEndDate}
                                       min={item.doStartDate || undefined}
-                                      disabled={!canEditPdcaPlan}
+                                      disabled={!canEditItem}
                                       onChange={(event) =>
                                         updatePdcaItem(index, {
                                           doEndDate: event.target.value,
                                         })
                                       }
                                       className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
-                                        canEditPdcaPlan
+                                          canEditItem
                                           ? "border-slate-200 text-slate-700 bg-white"
                                           : "border-slate-100 bg-slate-50 text-slate-500"
                                       }`}
@@ -4862,7 +5230,7 @@ const A3Page = () => {
                                 </p>
                                 <textarea
                                   value={item.checkText}
-                                  disabled={!canEditPdcaPlan}
+                                    disabled={!canEditItem}
                                   onChange={(event) =>
                                     updatePdcaItem(index, {
                                       checkText: event.target.value,
@@ -4870,7 +5238,7 @@ const A3Page = () => {
                                   }
                                   placeholder="Hasil pemeriksaan"
                                   className={`w-full px-3 py-2 rounded-lg border text-sm h-20 ${
-                                    canEditPdcaPlan
+                                      canEditItem
                                       ? "border-slate-200"
                                       : "border-slate-100 bg-slate-50 text-slate-500"
                                   }`}
@@ -4883,14 +5251,14 @@ const A3Page = () => {
                                     <input
                                       type="date"
                                       value={item.checkStartDate}
-                                      disabled={!canEditPdcaPlan}
+                                      disabled={!canEditItem}
                                       onChange={(event) =>
                                         updatePdcaItem(index, {
                                           checkStartDate: event.target.value,
                                         })
                                       }
                                       className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
-                                        canEditPdcaPlan
+                                          canEditItem
                                           ? "border-slate-200 text-slate-700 bg-white"
                                           : "border-slate-100 bg-slate-50 text-slate-500"
                                       }`}
@@ -4904,14 +5272,14 @@ const A3Page = () => {
                                       type="date"
                                       value={item.checkEndDate}
                                       min={item.checkStartDate || undefined}
-                                      disabled={!canEditPdcaPlan}
+                                      disabled={!canEditItem}
                                       onChange={(event) =>
                                         updatePdcaItem(index, {
                                           checkEndDate: event.target.value,
                                         })
                                       }
                                       className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
-                                        canEditPdcaPlan
+                                          canEditItem
                                           ? "border-slate-200 text-slate-700 bg-white"
                                           : "border-slate-100 bg-slate-50 text-slate-500"
                                       }`}
@@ -4931,7 +5299,7 @@ const A3Page = () => {
                                     ? "Nama tidak tersedia"
                                     : checkByValue;
                                   const canEditCheckBy =
-                                    canEditPdcaPlan && !employeesLoading;
+                                      canEditItem && !employeesLoading;
                                   return (
                                     <select
                                       value={checkByValue}
@@ -4975,7 +5343,7 @@ const A3Page = () => {
                                 })()}
                                 <textarea
                                   value={item.checkComment}
-                                  disabled={!canEditPdcaPlan}
+                                    disabled={!canEditItem}
                                   onChange={(event) =>
                                     updatePdcaItem(index, {
                                       checkComment: event.target.value,
@@ -4983,7 +5351,7 @@ const A3Page = () => {
                                   }
                                   placeholder="Komentar check"
                                   className={`w-full px-3 py-2 rounded-lg border text-sm h-16 ${
-                                    canEditPdcaPlan
+                                      canEditItem
                                       ? "border-slate-200"
                                       : "border-slate-100 bg-slate-50 text-slate-500"
                                   }`}
@@ -4999,13 +5367,13 @@ const A3Page = () => {
                                 </p>
                                 <textarea
                                   value={item.actText}
-                                  disabled={!canEditPdcaAct}
+                                  disabled={!canEditItem}
                                   onChange={(event) =>
                                     updatePdcaItem(index, { actText: event.target.value })
                                   }
                                   placeholder="Tindak lanjut / implementasi"
                                   className={`w-full px-3 py-2 rounded-lg border text-sm h-28 ${
-                                    canEditPdcaAct
+                                    canEditItem
                                       ? "border-slate-200"
                                       : "border-slate-100 bg-slate-50 text-slate-500"
                                   }`}
@@ -5018,14 +5386,14 @@ const A3Page = () => {
                                     <input
                                       type="date"
                                       value={item.actStartDate}
-                                      disabled={!canEditPdcaAct}
+                                      disabled={!canEditItem}
                                       onChange={(event) =>
                                         updatePdcaItem(index, {
                                           actStartDate: event.target.value,
                                         })
                                       }
                                       className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
-                                        canEditPdcaAct
+                                        canEditItem
                                           ? "border-slate-200 text-slate-700 bg-white"
                                           : "border-slate-100 bg-slate-50 text-slate-500"
                                       }`}
@@ -5039,14 +5407,14 @@ const A3Page = () => {
                                       type="date"
                                       value={item.actEndDate}
                                       min={item.actStartDate || undefined}
-                                      disabled={!canEditPdcaAct}
+                                      disabled={!canEditItem}
                                       onChange={(event) =>
                                         updatePdcaItem(index, {
                                           actEndDate: event.target.value,
                                         })
                                       }
                                       className={`w-full min-w-[120px] px-3 py-2 rounded-lg border text-sm ${
-                                        canEditPdcaAct
+                                        canEditItem
                                           ? "border-slate-200 text-slate-700 bg-white"
                                           : "border-slate-100 bg-slate-50 text-slate-500"
                                       }`}
@@ -5056,9 +5424,15 @@ const A3Page = () => {
                               </div>
                             </div>
                           </div>
-                        ))}
-                        </div>
-                      )}
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                     </div>
                   )}
                   {canViewFeedback && (
