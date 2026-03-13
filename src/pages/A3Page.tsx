@@ -1,10 +1,11 @@
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 type SbuSub = {
   id: number;
@@ -91,6 +92,7 @@ type CaseHeader = {
   targetDate: string | null;
   endDate: string | null;
   workNotes: string | null;
+  availableAssigneeEmployeeIds?: number[];
   isActive: boolean;
   isDeleted: boolean;
   createdAt: string;
@@ -444,7 +446,7 @@ const getAssigneeIds = (dept?: CaseDepartment | null) => {
 };
 
 type NumberedListInputProps = {
-  label: string;
+  label: ReactNode;
   items: string[];
   onChange: (items: string[]) => void;
   placeholder: string;
@@ -466,7 +468,7 @@ const NumberedListInput = ({
       </label>
       <div className="mt-2 space-y-2">
         {normalizedItems.map((item, index) => (
-          <div key={`${label}-${index}`} className="flex items-start gap-2">
+          <div key={index} className="flex items-start gap-2">
             <span className="mt-2 w-6 shrink-0 text-right text-sm text-slate-400">
               {index + 1}.
             </span>
@@ -544,7 +546,8 @@ const A3Page = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
   const { showToast } = useToast();
-  const { loading: accessLoading, isAdmin, moduleAccessMap } = useAccessSummary();
+  const { loading: accessLoading, isAdmin, moduleAccessMap, orgAccess } =
+    useAccessSummary();
 
   const [cases, setCases] = useState<CaseHeader[]>([]);
   const [casesLoading, setCasesLoading] = useState(true);
@@ -761,6 +764,35 @@ const A3Page = () => {
       .map((id) => getEmployeeLabel(id))
       .filter((label) => label && label !== "-");
     return labels.length > 0 ? labels.join(", ") : "Belum ditentukan";
+  };
+
+  const getScopedAssigneeEmployeeIds = (
+    dept: CaseDepartment,
+    selectedIds: number[]
+  ) => {
+    if (!Array.isArray(dept.availableAssigneeEmployeeIds)) {
+      return null;
+    }
+    return Array.from(
+      new Set([
+        ...dept.availableAssigneeEmployeeIds.filter(
+          (id) => Number.isFinite(id) && id > 0
+        ),
+        ...selectedIds.filter((id) => Number.isFinite(id) && id > 0),
+      ])
+    );
+  };
+
+  const getDepartmentAssigneeEmployees = (
+    dept: CaseDepartment,
+    selectedIds: number[]
+  ) => {
+    const scopedIds = getScopedAssigneeEmployeeIds(dept, selectedIds);
+    if (scopedIds === null) {
+      return employees;
+    }
+    const scopedIdSet = new Set(scopedIds);
+    return employees.filter((employee) => scopedIdSet.has(employee.UserId));
   };
 
   const areSameIds = (a: number[], b: number[]) => {
@@ -1486,6 +1518,18 @@ const A3Page = () => {
       return a.sbuLabel.localeCompare(b.sbuLabel);
     });
   }, [sbuSubs, sbuMap]);
+
+  const originSbuSubOptions = useMemo(() => {
+    if (sbuSubs.length === 0) return [];
+    if (canCrudCase || isAdmin) return sbuSubs;
+    if (orgAccess.sbuSubRead.size === 0) return [];
+    return sbuSubs.filter((item) => orgAccess.sbuSubRead.has(item.id));
+  }, [sbuSubs, canCrudCase, isAdmin, orgAccess]);
+
+  const originSbuSubDefaultId = useMemo(() => {
+    if (originSbuSubOptions.length !== 1) return null;
+    return originSbuSubOptions[0]?.id ?? null;
+  }, [originSbuSubOptions]);
 
   const getEmployeeOptionLabel = (employee: Employee) => {
     return formatEmployeeLabel(employee);
@@ -2231,6 +2275,21 @@ const A3Page = () => {
       setFeedbackApproving(false);
     }
   };
+  useEffect(() => {
+    if (!showCaseForm || caseFormMode !== "add") return;
+    if (caseForm.originSbuSubId) return;
+    if (!originSbuSubDefaultId) return;
+    setCaseForm((prev) => ({
+      ...prev,
+      originSbuSubId: originSbuSubDefaultId,
+    }));
+  }, [
+    showCaseForm,
+    caseFormMode,
+    caseForm.originSbuSubId,
+    originSbuSubDefaultId,
+  ]);
+
   const openCaseCreate = () => {
     setCaseFormMode("add");
     setCaseForm({
@@ -2244,7 +2303,7 @@ const A3Page = () => {
       projectObjective: "",
       locationDesc: "",
       notes: "",
-      originSbuSubId: "",
+      originSbuSubId: originSbuSubDefaultId ?? "",
       departmentSbuSubIds: [],
     });
     setCaseAttachmentDrafts([]);
@@ -2256,6 +2315,10 @@ const A3Page = () => {
   const handleCaseSubmit = async () => {
     if (!caseForm.caseTitle.trim()) {
       showToast("Judul case wajib diisi", "error");
+      return;
+    }
+    if (!caseForm.originSbuSubId) {
+      showToast("Asal SBU Sub wajib diisi", "error");
       return;
     }
 
@@ -2291,18 +2354,18 @@ const A3Page = () => {
         caseForm.caseType === "PROBLEM"
           ? serializeNumberedItems(caseForm.currentConditionItems)
           : "";
-        const payload: Record<string, unknown> = {
-          caseType: caseForm.caseType,
-          caseTitle: caseForm.caseTitle,
-          visibility: String(caseForm.visibility).toUpperCase(),
-          background: backgroundText || null,
-          currentCondition: currentConditionText || null,
+      const payload: Record<string, unknown> = {
+        caseType: caseForm.caseType,
+        caseTitle: caseForm.caseTitle,
+        visibility: String(caseForm.visibility).toUpperCase(),
+        originSbuSubId: Number(caseForm.originSbuSubId),
+        background: backgroundText || null,
+        currentCondition: currentConditionText || null,
         projectDesc: caseForm.caseType === "PROJECT" ? caseForm.projectDesc : null,
         projectObjective:
           caseForm.caseType === "PROJECT" ? caseForm.projectObjective : null,
         locationDesc: caseForm.locationDesc || null,
         notes: caseForm.notes || null,
-        originSbuSubId: caseForm.originSbuSubId || null,
       };
 
       let res: Response;
@@ -3713,6 +3776,10 @@ const A3Page = () => {
             <div className="bg-white rounded-2xl p-5 shadow-lg shadow-gray-200">
               <h2 className="text-lg font-semibold text-slate-800">Daftar Case</h2>
               <div className="mt-3 space-y-3">
+                <label className="text-xs uppercase tracking-wide text-slate-400">
+                  Pencarian
+                  <OptionalMark />
+                </label>
                 <input
                   type="text"
                   placeholder="Cari case..."
@@ -3721,18 +3788,29 @@ const A3Page = () => {
                   className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
                 />
                 <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={caseTypeFilter}
-                    onChange={(event) => setCaseTypeFilter(event.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
-                  >
-                    <option value="all">Semua Type</option>
-                    {CASE_TYPES.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide text-slate-400">
+                      Tipe Case
+                      <OptionalMark />
+                    </label>
+                    <select
+                      value={caseTypeFilter}
+                      onChange={(event) => setCaseTypeFilter(event.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
+                    >
+                      <option value="all">Semua Type</option>
+                      {CASE_TYPES.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide text-slate-400">
+                      Status Case
+                      <OptionalMark />
+                    </label>
                     <select
                       value={caseStatusFilter}
                       onChange={(event) => setCaseStatusFilter(event.target.value)}
@@ -3745,8 +3823,13 @@ const A3Page = () => {
                         </option>
                       ))}
                     </select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs uppercase tracking-wide text-slate-400 col-span-2">
+                    Filter Role
+                    <OptionalMark />
+                  </label>
                   {caseRoleOptions.map((option) => (
                     <button
                       key={option.value}
@@ -3987,28 +4070,34 @@ const A3Page = () => {
                       </h3>
                       {canAddDepartment && (
                         <div className="flex items-center gap-2">
-                          <select
-                            value={departmentForm.sbuSubId}
-                            onChange={(event) =>
-                              setDepartmentForm({
-                                sbuSubId: event.target.value
-                                  ? Number(event.target.value)
-                                  : "",
-                              })
-                            }
-                            className="px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                          >
-                            <option value="">Tambah departemen</option>
-                            {groupedSbuSubs.map((group) => (
-                              <optgroup key={group.key} label={group.sbuLabel}>
-                                {group.items.map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.sbuSubName} ({item.sbuSubCode})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ))}
-                          </select>
+                          <div className="space-y-1">
+                            <label className="text-xs uppercase tracking-wide text-slate-400">
+                              Tambah Departemen
+                              <OptionalMark />
+                            </label>
+                            <select
+                              value={departmentForm.sbuSubId}
+                              onChange={(event) =>
+                                setDepartmentForm({
+                                  sbuSubId: event.target.value
+                                    ? Number(event.target.value)
+                                    : "",
+                                })
+                              }
+                              className="px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                            >
+                              <option value="">Tambah departemen</option>
+                              {groupedSbuSubs.map((group) => (
+                                <optgroup key={group.key} label={group.sbuLabel}>
+                                  {group.items.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.sbuSubName} ({item.sbuSubCode})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ))}
+                            </select>
+                          </div>
                           <button
                             onClick={handleDepartmentCreate}
                             disabled={departmentSubmitting}
@@ -4137,6 +4226,7 @@ const A3Page = () => {
                               <div className="space-y-2">
                                 <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   Komentar Keputusan
+                                  <RequiredMark />
                                 </label>
                                 {canEditDecision ? (
                                   <>
@@ -4212,9 +4302,13 @@ const A3Page = () => {
                                 <div className="space-y-2">
                                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                     Penanggung Jawab
+                                    <OptionalMark />
                                   </label>
                                   {canEditAssignment ? (
                                     <>
+                                      <label className="text-xs uppercase tracking-wide text-slate-400">
+                                        <OptionalMark />
+                                      </label>
                                       <input
                                         type="text"
                                         value={assigneeSearch[dept.caseDepartmentId] ?? ""}
@@ -4237,18 +4331,31 @@ const A3Page = () => {
                                           )
                                             .trim()
                                             .toLowerCase();
+                                          const scopedEmployees =
+                                            getDepartmentAssigneeEmployees(
+                                              dept,
+                                              currentValue
+                                            );
                                           const filteredEmployees =
                                             query.length > 0
-                                              ? employees.filter((employee) =>
+                                              ? scopedEmployees.filter((employee) =>
                                                   formatEmployeeLabel(employee)
                                                     .toLowerCase()
                                                     .includes(query)
                                                 )
-                                              : employees;
+                                              : scopedEmployees;
                                           if (employeesLoading) {
                                             return (
                                               <p className="text-xs text-slate-500">
                                                 Memuat karyawan...
+                                              </p>
+                                            );
+                                          }
+                                          if (scopedEmployees.length === 0) {
+                                            return (
+                                              <p className="text-xs text-slate-500">
+                                                Belum ada chart member atau PIC
+                                                dalam scope SBU SUB ini.
                                               </p>
                                             );
                                           }
@@ -4325,6 +4432,14 @@ const A3Page = () => {
                                             getAssigneeIds(dept)
                                         )}
                                       </p>
+                                      {Array.isArray(
+                                        dept.availableAssigneeEmployeeIds
+                                      ) && (
+                                        <p className="text-xs text-slate-400">
+                                          Menampilkan chart member SBU Sub +
+                                          PIC SBU Sub, PIC SBU, dan PIC Pilar.
+                                        </p>
+                                      )}
                                     </>
                                   ) : (
                                     <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600">
@@ -4336,6 +4451,7 @@ const A3Page = () => {
                                 <div className="space-y-2">
                                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                     Status Pekerjaan
+                                    <OptionalMark />
                                   </label>
                                   {canEditWork ? (
                                     <select
@@ -4387,7 +4503,10 @@ const A3Page = () => {
 
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div className="space-y-1">
-                                  <label className="text-xs text-slate-500">Start</label>
+                                  <label className="text-xs text-slate-500">
+                                    Start
+                                    <OptionalMark />
+                                  </label>
                                   {canEditWork ? (
                                     <input
                                       type="date"
@@ -4410,7 +4529,10 @@ const A3Page = () => {
                                   )}
                                 </div>
                                 <div className="space-y-1">
-                                  <label className="text-xs text-slate-500">Target</label>
+                                  <label className="text-xs text-slate-500">
+                                    Target
+                                    <OptionalMark />
+                                  </label>
                                   {canEditWork ? (
                                     <input
                                       type="date"
@@ -4434,7 +4556,10 @@ const A3Page = () => {
                                   )}
                                 </div>
                                 <div className="space-y-1">
-                                  <label className="text-xs text-slate-500">Selesai</label>
+                                  <label className="text-xs text-slate-500">
+                                    Selesai
+                                    <OptionalMark />
+                                  </label>
                                   {canEditWork ? (
                                     <input
                                       type="date"
@@ -4463,6 +4588,7 @@ const A3Page = () => {
                               <div className="space-y-2">
                                 <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   Catatan Pekerjaan
+                                  <OptionalMark />
                                 </label>
                                 {canEditWork ? (
                                   <textarea
@@ -4605,6 +4731,10 @@ const A3Page = () => {
                             <h4 className="text-sm font-semibold text-slate-800">
                               Upload Attachment
                             </h4>
+                            <label className="text-xs uppercase tracking-wide text-slate-400">
+                              Tipe Media
+                              <RequiredMark />
+                            </label>
                             <select
                               value={attachmentForm.mediaType}
                               onChange={(event) =>
@@ -4621,6 +4751,10 @@ const A3Page = () => {
                                 </option>
                               ))}
                             </select>
+                            <label className="text-xs uppercase tracking-wide text-slate-400">
+                              File Attachment
+                              <RequiredMark />
+                            </label>
                             <label className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 text-sm text-slate-600 cursor-pointer hover:border-rose-300 hover:text-rose-600">
                               <span className="truncate">
                                 {attachmentForm.file
@@ -4654,6 +4788,10 @@ const A3Page = () => {
                                 className="sr-only"
                               />
                             </label>
+                            <label className="text-xs uppercase tracking-wide text-slate-400">
+                              Caption
+                              <OptionalMark />
+                            </label>
                             <input
                               type="text"
                               placeholder="Caption"
@@ -4666,6 +4804,10 @@ const A3Page = () => {
                               }
                               className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
                             />
+                            <label className="text-xs uppercase tracking-wide text-slate-400">
+                              Lokasi
+                              <OptionalMark />
+                            </label>
                             <input
                               type="text"
                               placeholder="Lokasi"
@@ -5138,6 +5280,7 @@ const A3Page = () => {
                               <div className="rounded-lg border border-slate-200 p-3 space-y-2">
                                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   Plan
+                                  <OptionalMark />
                                 </p>
                                 <textarea
                                   value={item.planText}
@@ -5159,6 +5302,7 @@ const A3Page = () => {
                               <div className="rounded-lg border border-slate-200 p-3 space-y-2">
                                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   Do
+                                  <OptionalMark />
                                 </p>
                                 <p className="text-[11px] text-slate-500">
                                   Menjawab plan: {item.planText || "-"}
@@ -5180,6 +5324,7 @@ const A3Page = () => {
                                   <div className="space-y-1">
                                     <label className="text-xs text-slate-500">
                                       Mulai
+                                      <OptionalMark />
                                     </label>
                                     <input
                                       type="date"
@@ -5200,6 +5345,7 @@ const A3Page = () => {
                                   <div className="space-y-1">
                                     <label className="text-xs text-slate-500">
                                       Selesai
+                                      <OptionalMark />
                                     </label>
                                     <input
                                       type="date"
@@ -5224,6 +5370,7 @@ const A3Page = () => {
                               <div className="rounded-lg border border-slate-200 p-3 space-y-2">
                                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   Check
+                                  <OptionalMark />
                                 </p>
                                 <p className="text-[11px] text-slate-500">
                                   Menjawab plan: {item.planText || "-"}
@@ -5247,6 +5394,7 @@ const A3Page = () => {
                                   <div className="space-y-1">
                                     <label className="text-xs text-slate-500">
                                       Mulai
+                                      <OptionalMark />
                                     </label>
                                     <input
                                       type="date"
@@ -5267,6 +5415,7 @@ const A3Page = () => {
                                   <div className="space-y-1">
                                     <label className="text-xs text-slate-500">
                                       Selesai
+                                      <OptionalMark />
                                     </label>
                                     <input
                                       type="date"
@@ -5361,6 +5510,7 @@ const A3Page = () => {
                               <div className="rounded-lg border border-slate-200 p-3 space-y-2">
                                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   Act
+                                  <OptionalMark />
                                 </p>
                                 <p className="text-[11px] text-slate-500">
                                   Menjawab plan: {item.planText || "-"}
@@ -5382,6 +5532,7 @@ const A3Page = () => {
                                   <div className="space-y-1">
                                     <label className="text-xs text-slate-500">
                                       Mulai
+                                      <OptionalMark />
                                     </label>
                                     <input
                                       type="date"
@@ -5402,6 +5553,7 @@ const A3Page = () => {
                                   <div className="space-y-1">
                                     <label className="text-xs text-slate-500">
                                       Selesai
+                                      <OptionalMark />
                                     </label>
                                     <input
                                       type="date"
@@ -5481,6 +5633,10 @@ const A3Page = () => {
 
                       {!isCaseClosed && (
                         <div className="mt-4 space-y-2">
+                          <label className="text-xs uppercase tracking-wide text-slate-400">
+                            Komentar Feedback
+                            <OptionalMark />
+                          </label>
                           <textarea
                             value={feedbackCommentDraft}
                             onChange={(event) =>
@@ -5591,6 +5747,10 @@ const A3Page = () => {
               {caseFormMode === "add" ? "Buat Case Baru" : "Edit Case"}
             </h2>
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Tipe Case
+                <RequiredMark />
+              </label>
               <select
                 value={caseForm.caseType}
                 onChange={(event) =>
@@ -5604,6 +5764,10 @@ const A3Page = () => {
                   </option>
                 ))}
               </select>
+                <label className="text-xs uppercase tracking-wide text-slate-400">
+                  Judul Case
+                  <RequiredMark />
+                </label>
                 <input
                   type="text"
                   placeholder="Judul case"
@@ -5613,6 +5777,10 @@ const A3Page = () => {
                   }
                   className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
                 />
+                <label className="text-xs uppercase tracking-wide text-slate-400">
+                  Visibilitas
+                  <RequiredMark />
+                </label>
                 <select
                   value={caseForm.visibility}
                   onChange={(event) =>
@@ -5630,7 +5798,12 @@ const A3Page = () => {
               {caseForm.caseType === "PROBLEM" && (
                 <>
                   <NumberedListInput
-                    label="Latar Belakang"
+                    label={
+                      <span>
+                        Latar Belakang
+                        <RequiredMark />
+                      </span>
+                    }
                     items={caseForm.backgroundItems}
                     onChange={(items) =>
                       setCaseForm({ ...caseForm, backgroundItems: items })
@@ -5639,7 +5812,12 @@ const A3Page = () => {
                     helperText="Tambah poin untuk menambah nomor."
                   />
                   <NumberedListInput
-                    label="Kondisi Saat Ini"
+                    label={
+                      <span>
+                        Kondisi Saat Ini
+                        <RequiredMark />
+                      </span>
+                    }
                     items={caseForm.currentConditionItems}
                     onChange={(items) =>
                       setCaseForm({ ...caseForm, currentConditionItems: items })
@@ -5652,6 +5830,10 @@ const A3Page = () => {
 
               {caseForm.caseType === "PROJECT" && (
                 <>
+                  <label className="text-xs uppercase tracking-wide text-slate-400">
+                    Deskripsi Project
+                    <RequiredMark />
+                  </label>
                   <textarea
                     placeholder="Deskripsi project"
                     value={caseForm.projectDesc}
@@ -5660,6 +5842,10 @@ const A3Page = () => {
                     }
                     className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 h-20"
                   />
+                  <label className="text-xs uppercase tracking-wide text-slate-400">
+                    Objective
+                    <OptionalMark />
+                  </label>
                   <textarea
                     placeholder="Objective"
                     value={caseForm.projectObjective}
@@ -5674,6 +5860,10 @@ const A3Page = () => {
                 </>
               )}
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Lokasi
+                <OptionalMark />
+              </label>
               <input
                 type="text"
                 placeholder="Lokasi"
@@ -5683,6 +5873,10 @@ const A3Page = () => {
                 }
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Catatan
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Catatan"
                 value={caseForm.notes}
@@ -5690,6 +5884,10 @@ const A3Page = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 h-20"
               />
 
+                <label className="text-xs uppercase tracking-wide text-slate-400">
+                  Asal SBU Sub
+                  <RequiredMark />
+                </label>
               <select
                 value={caseForm.originSbuSubId}
                 onChange={(event) =>
@@ -5703,7 +5901,7 @@ const A3Page = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               >
                 <option value="">Asal SBU Sub</option>
-                {sbuSubs.map((item) => (
+                {originSbuSubOptions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.sbuSubName} ({item.sbuSubCode})
                   </option>
@@ -5714,6 +5912,7 @@ const A3Page = () => {
                 <div>
                     <label className="text-xs uppercase tracking-wide text-slate-400">
                       Departemen Tujuan
+                      <RequiredMark />
                     </label>
                     <div className="mt-2 space-y-2 max-h-48 overflow-auto rounded-lg border-2 border-gray-200 p-3">
                       {groupedSbuSubs.length === 0 ? (
@@ -5768,6 +5967,7 @@ const A3Page = () => {
                 <div>
                   <label className="text-xs uppercase tracking-wide text-slate-400">
                     Dokumentasi (Foto/Video)
+                    <OptionalMark />
                   </label>
                   <input
                     type="file"
@@ -5821,6 +6021,10 @@ const A3Page = () => {
                               Hapus
                             </button>
                           </div>
+                          <label className="text-xs uppercase tracking-wide text-slate-400">
+                            Caption
+                            <OptionalMark />
+                          </label>
                           <input
                             type="text"
                             placeholder="Caption"
@@ -5836,6 +6040,10 @@ const A3Page = () => {
                             }
                             className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
                           />
+                          <label className="text-xs uppercase tracking-wide text-slate-400">
+                            Lokasi
+                            <OptionalMark />
+                          </label>
                           <input
                             type="text"
                             placeholder="Lokasi"
@@ -5886,6 +6094,10 @@ const A3Page = () => {
               {caseFishboneFormMode === "add" ? "Tambah Fishbone" : "Edit Fishbone"}
             </h2>
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Departemen
+                <RequiredMark />
+              </label>
               <select
                 value={caseFishboneForm.sbuSubId}
                 onChange={(event) =>
@@ -5904,6 +6116,10 @@ const A3Page = () => {
                 ))}
               </select>
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nama Fishbone
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Nama Fishbone"
@@ -5916,6 +6132,10 @@ const A3Page = () => {
                 }
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Deskripsi
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Deskripsi"
                 value={caseFishboneForm.fishboneDesc}
@@ -5940,6 +6160,7 @@ const A3Page = () => {
                     }
                   />
                   Aktif
+                  <OptionalMark />
                 </label>
               )}
             </div>
@@ -5972,6 +6193,10 @@ const A3Page = () => {
                 : "Edit Sumber Masalah"}
             </h2>
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nomor
+                <RequiredMark />
+              </label>
               <input
                 type="number"
                 placeholder="Nomor"
@@ -5984,6 +6209,10 @@ const A3Page = () => {
                 }
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Teks Sumber Masalah
+                <RequiredMark />
+              </label>
               <textarea
                 placeholder="Teks sumber masalah"
                 value={caseFishboneCauseForm.causeText}
@@ -6008,6 +6237,7 @@ const A3Page = () => {
                     }
                   />
                   Aktif
+                  <OptionalMark />
                 </label>
               )}
             </div>
@@ -6040,6 +6270,10 @@ const A3Page = () => {
                 : "Edit Masalah & Solusi"}
             </h2>
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Kategori
+                <RequiredMark />
+              </label>
               <select
                 value={caseFishboneItemForm.categoryCode}
                 onChange={(event) =>
@@ -6058,6 +6292,10 @@ const A3Page = () => {
                 ))}
               </select>
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Masalah
+                <RequiredMark />
+              </label>
               <textarea
                 placeholder="Masalah"
                 value={caseFishboneItemForm.problemText}
@@ -6069,6 +6307,10 @@ const A3Page = () => {
                 }
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 h-20"
               />
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Solusi
+                <RequiredMark />
+              </label>
               <textarea
                 placeholder="Solusi"
                 value={caseFishboneItemForm.solutionText}
@@ -6085,6 +6327,7 @@ const A3Page = () => {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs uppercase tracking-wide text-slate-400">
                     Sumber masalah
+                    <RequiredMark />
                   </span>
                   <div className="flex gap-2 text-xs">
                     <button
@@ -6112,6 +6355,10 @@ const A3Page = () => {
                     </button>
                   </div>
                 </div>
+                <label className="text-xs uppercase tracking-wide text-slate-400">
+                  Pencarian
+                  <OptionalMark />
+                </label>
                 <input
                   type="text"
                   placeholder="Cari sumber masalah..."
@@ -6177,6 +6424,7 @@ const A3Page = () => {
                     }
                   />
                   Aktif
+                  <OptionalMark />
                 </label>
               )}
             </div>

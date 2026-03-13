@@ -38,7 +38,7 @@ const Toast: React.FC<ToastProps> = ({ type, message, duration = 5000, onClose }
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 20, scale: 0.95 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className={`fixed top-6 right-6 z-50 max-w-xs w-full p-4 rounded-xl shadow-lg border ${bgColor} border-opacity-30 flex items-start gap-3`}
+      className={`fixed top-6 right-6 z-[10000] pointer-events-auto max-w-xs w-full p-4 rounded-xl shadow-lg border ${bgColor} border-opacity-30 flex items-start gap-3`}
       role="alert"
       aria-live="polite"
     >
@@ -119,7 +119,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed inset-0 pointer-events-none">
+      <div className="fixed inset-0 z-[9999] pointer-events-none">
         <AnimatePresence>
           {toasts.map((toast) => (
             <Toast

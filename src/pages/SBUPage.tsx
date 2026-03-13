@@ -6,6 +6,7 @@ import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 interface SBU {
   id: number;
@@ -498,6 +499,10 @@ const SBUPage = () => {
             </h2>
 
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                SBU Code
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="SBU Code"
@@ -509,6 +514,10 @@ const SBUPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nama SBU
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Nama SBU"
@@ -523,6 +532,10 @@ const SBUPage = () => {
                 <input type="hidden" value={formData.sbuPilar} name="sbuPilar" />
                 )}
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Deskripsi
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Deskripsi (optional)"
                 value={formData.description}
@@ -533,6 +546,10 @@ const SBUPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 h-24"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Job Description
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Job Description (optional)"
                 value={formData.jobDesc}
@@ -543,6 +560,10 @@ const SBUPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 h-24"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                PIC
+                <OptionalMark />
+              </label>
               <select
                 value={formData.pic ?? ""}
                 onChange={(e) =>
@@ -560,6 +581,10 @@ const SBUPage = () => {
                   </option>
                 ))}
               </select>
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Jabatan
+                <OptionalMark />
+              </label>
               <select
                 value={formData.jabatan ?? ""}
                 onChange={(e) =>

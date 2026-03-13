@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
+import { RequiredMark } from "../components/atoms/FormMarks";
 
 // Icon
 import { FaLock, FaKey, FaEye, FaEyeSlash } from "react-icons/fa";
@@ -196,6 +197,7 @@ const ChangePasswordPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Password Lama
+                    <RequiredMark />
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -222,6 +224,7 @@ const ChangePasswordPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Password Baru
+                    <RequiredMark />
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -251,6 +254,7 @@ const ChangePasswordPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Konfirmasi Password Baru
+                    <RequiredMark />
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">

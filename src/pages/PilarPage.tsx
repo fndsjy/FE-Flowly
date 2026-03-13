@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 interface pilar {
   id: string;
@@ -432,6 +433,10 @@ const PilarPage = () => {
             </h2>
 
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nama
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Nama"
@@ -442,6 +447,10 @@ const PilarPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Deskripsi
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Deskripsi"
                 value={formData.description}
@@ -452,6 +461,10 @@ const PilarPage = () => {
                 className="w-full px-3 py-2 rounded-lg h-24 border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Job Description
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Job Description"
                 value={formData.jobDesc}
@@ -461,6 +474,10 @@ const PilarPage = () => {
                 maxLength={500}
                 className="w-full px-3 py-2 rounded-lg h-24 border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
               />
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                PIC
+                <OptionalMark />
+              </label>
               <select
                 value={formData.pic ?? ""}
                 onChange={(e) =>
@@ -477,6 +494,10 @@ const PilarPage = () => {
                   </option>
                 ))}
               </select>
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Jabatan
+                <OptionalMark />
+              </label>
               <select
                 value={formData.jabatan ?? ""}
                 onChange={(e) =>

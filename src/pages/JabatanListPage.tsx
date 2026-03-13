@@ -3,6 +3,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
 import { apiFetch } from "../lib/api";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
 
@@ -474,6 +475,10 @@ const JabatanListPage = () => {
             </h2>
 
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nama Jabatan
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Nama Jabatan"
@@ -484,6 +489,10 @@ const JabatanListPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Deskripsi
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Deskripsi"
                 value={formData.jabatanDesc}
@@ -500,30 +509,42 @@ const JabatanListPage = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    type="number"
-                    min={1}
-                    max={maxLevel}
-                    placeholder="Level"
-                    value={formData.jabatanLevel}
-                    onChange={(e) =>
-                      setFormData({ ...formData, jabatanLevel: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
-                  />
-                  <select
-                    value={formData.jabatanIsActive ? "active" : "inactive"}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        jabatanIsActive: e.target.value === "active",
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                  <div className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide text-slate-400">
+                      Level
+                      <OptionalMark />
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={maxLevel}
+                      placeholder="Level"
+                      value={formData.jabatanLevel}
+                      onChange={(e) =>
+                        setFormData({ ...formData, jabatanLevel: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide text-slate-400">
+                      Status
+                      <RequiredMark />
+                    </label>
+                    <select
+                      value={formData.jabatanIsActive ? "active" : "inactive"}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          jabatanIsActive: e.target.value === "active",
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-rose-400 focus:ring-rose-400 focus:outline-none focus:ring-1"
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
                 </div>
               )}
 

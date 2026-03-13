@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 type SbuSub = {
   id: number;
@@ -1925,7 +1926,10 @@ const FishbonePage = () => {
           <div className="bg-white rounded-3xl p-4 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.25)] border border-slate-200/70 mb-6">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr] gap-4">
             <div>
-              <label className="text-xs uppercase tracking-wide text-slate-400">SBU Sub</label>
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                SBU Sub
+                <OptionalMark />
+              </label>
               <select
                 value={selectedSbuSubId}
                 onChange={(event) =>
@@ -1946,7 +1950,10 @@ const FishbonePage = () => {
             </div>
 
             <div>
-              <label className="text-xs uppercase tracking-wide text-slate-400">Masalah Utama</label>
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Masalah Utama
+                <OptionalMark />
+              </label>
               <select
                 value={selectedFishboneId}
                 onChange={(event) => setSelectedFishboneId(event.target.value)}
@@ -1967,7 +1974,10 @@ const FishbonePage = () => {
             </div>
 
             <div className="flex flex-col justify-between">
-              <label className="text-xs uppercase tracking-wide text-slate-400">Status</label>
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Status
+                <OptionalMark />
+              </label>
               <div className="mt-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                 {selectedFishbone ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2137,6 +2147,7 @@ const FishbonePage = () => {
                   <div className="flex flex-wrap items-center gap-3">
                     <label className="flex items-center gap-2">
                       <span>Per halaman</span>
+                      <OptionalMark />
                       <select
                         value={fishbonePageSize}
                         onChange={(event) => {
@@ -2577,7 +2588,10 @@ const FishbonePage = () => {
             </h2>
             <div className="space-y-3">
               <div>
-                <label className="text-xs uppercase tracking-wide text-slate-400">SBU Sub</label>
+                <label className="text-xs uppercase tracking-wide text-slate-400">
+                  SBU Sub
+                  <RequiredMark />
+                </label>
                 <select
                   value={fishboneForm.sbuSubId}
                   onChange={(event) =>
@@ -2597,6 +2611,10 @@ const FishbonePage = () => {
                 </select>
               </div>
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nama Masalah Utama
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Nama Masalah Utama"
@@ -2608,6 +2626,10 @@ const FishbonePage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Deskripsi
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Deskripsi (optional)"
                 value={fishboneForm.fishboneDesc}
@@ -2628,6 +2650,7 @@ const FishbonePage = () => {
                     }
                   />
                   Aktif
+                  <OptionalMark />
                 </label>
               )}
             </div>
@@ -2664,6 +2687,10 @@ const FishbonePage = () => {
                 Masalah utama: {selectedFishbone?.fishboneName || "-"}
               </div>
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nomor Sumber Masalah
+                <RequiredMark />
+              </label>
               <input
                 type="number"
                 placeholder="Nomor Sumber Masalah"
@@ -2674,6 +2701,10 @@ const FishbonePage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Teks Sumber Masalah
+                <RequiredMark />
+              </label>
               <textarea
                 placeholder="Teks sumber masalah"
                 value={causeForm.causeText}
@@ -2694,6 +2725,7 @@ const FishbonePage = () => {
                     }
                   />
                   Aktif
+                  <OptionalMark />
                 </label>
               )}
             </div>
@@ -2730,6 +2762,10 @@ const FishbonePage = () => {
                 Masalah utama: {selectedFishbone?.fishboneName || "-"}
               </div>
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Kategori
+                <RequiredMark />
+              </label>
               <select
                 value={itemForm.categoryCode}
                 onChange={(event) =>
@@ -2745,6 +2781,10 @@ const FishbonePage = () => {
                 ))}
               </select>
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Masalah
+                <RequiredMark />
+              </label>
               <textarea
                 placeholder="Masalah"
                 value={itemForm.problemText}
@@ -2755,6 +2795,10 @@ const FishbonePage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 h-24"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Solusi
+                <RequiredMark />
+              </label>
               <textarea
                 placeholder="Solusi"
                 value={itemForm.solutionText}
@@ -2767,7 +2811,10 @@ const FishbonePage = () => {
 
               <div className="rounded-lg border border-slate-200 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs uppercase tracking-wide text-slate-400">Sumber masalah</span>
+                  <span className="text-xs uppercase tracking-wide text-slate-400">
+                    Sumber masalah
+                    <RequiredMark />
+                  </span>
                   <div className="flex gap-2 text-xs">
                     <button
                       type="button"
@@ -2795,6 +2842,10 @@ const FishbonePage = () => {
                   Pilih nomor sumber masalah yang ingin dijawab oleh masalah & solusi ini.
                 </p>
 
+                <label className="text-xs uppercase tracking-wide text-slate-400">
+                  Pencarian
+                  <OptionalMark />
+                </label>
                 <input
                   type="text"
                   placeholder="Cari sumber masalah..."
@@ -2856,6 +2907,7 @@ const FishbonePage = () => {
                     }
                   />
                   Aktif
+                  <OptionalMark />
                 </label>
               )}
             </div>
@@ -2888,6 +2940,10 @@ const FishbonePage = () => {
               {categoryFormMode === "add" ? "Tambah Kategori" : "Edit Kategori"}
             </h2>
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Kode Kategori
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Kode Kategori"
@@ -2899,6 +2955,10 @@ const FishbonePage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nama Kategori
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Nama Kategori"
@@ -2910,6 +2970,10 @@ const FishbonePage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Deskripsi
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Deskripsi (optional)"
                 value={categoryForm.categoryDesc}
@@ -2930,6 +2994,7 @@ const FishbonePage = () => {
                     }
                   />
                   Aktif
+                  <OptionalMark />
                 </label>
               )}
             </div>

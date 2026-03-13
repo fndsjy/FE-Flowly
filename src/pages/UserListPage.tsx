@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
 import { apiFetch } from "../lib/api";
+import { OptionalMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
 
@@ -164,15 +165,21 @@ const UserListPage = () => {
         </div>
 
         {/* SEARCH */}
-        <div className="mb-6 flex justify-between items-center">
-          <input
-            type="text"
-            placeholder="Cari username, nama, atau role..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full md:w-1/2 px-4 py-2 rounded-xl bg-white border-2 border-gray-200
-            focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
-          />
+        <div className="mb-6 flex justify-between items-center gap-4">
+          <div className="w-full md:w-1/2 space-y-1">
+            <label className="text-xs uppercase tracking-wide text-slate-400">
+              Pencarian
+              <OptionalMark />
+            </label>
+            <input
+              type="text"
+              placeholder="Cari username, nama, atau role..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-4 py-2 rounded-xl bg-white border-2 border-gray-200
+              focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
+            />
+          </div>
           {/* BUTTON REGISTER */}
           <button
             onClick={() => navigate("/register")}

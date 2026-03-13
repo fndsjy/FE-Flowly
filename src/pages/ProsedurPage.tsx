@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
+import { OptionalMark } from "../components/atoms/FormMarks";
 
 interface SbuSub {
   id: number;
@@ -432,46 +433,64 @@ const ProsedurPage = () => {
 
         <div className="bg-white rounded-3xl p-4 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.25)] border border-slate-200/70 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_260px] gap-4">
-            <input
-              type="text"
-              placeholder="Cari kode, nama, atau deskripsi..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
-              focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-            />
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Pencarian
+                <OptionalMark />
+              </label>
+              <input
+                type="text"
+                placeholder="Cari kode, nama, atau deskripsi..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
+                focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+              />
+            </div>
 
-            <select
-              value={selectedPilarId}
-              onChange={(e) =>
-                setSelectedPilarId(e.target.value ? Number(e.target.value) : "")
-              }
-              className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 bg-white/90
-              focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-            >
-              <option value="">Semua Pilar</option>
-              {pilars.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.pilarName}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Filter Pilar
+                <OptionalMark />
+              </label>
+              <select
+                value={selectedPilarId}
+                onChange={(e) =>
+                  setSelectedPilarId(e.target.value ? Number(e.target.value) : "")
+                }
+                className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 bg-white/90
+                focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+              >
+                <option value="">Semua Pilar</option>
+                {pilars.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.pilarName}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <select
-              value={selectedSbuId}
-              onChange={(e) =>
-                setSelectedSbuId(e.target.value ? Number(e.target.value) : "")
-              }
-              className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 bg-white/90
-              focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-            >
-              <option value="">Semua SBU</option>
-              {filteredSbuOptions.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.sbuName} ({item.sbuCode})
-                </option>
-              ))}
-            </select>
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Filter SBU
+                <OptionalMark />
+              </label>
+              <select
+                value={selectedSbuId}
+                onChange={(e) =>
+                  setSelectedSbuId(e.target.value ? Number(e.target.value) : "")
+                }
+                className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 bg-white/90
+                focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+              >
+                <option value="">Semua SBU</option>
+                {filteredSbuOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.sbuName} ({item.sbuCode})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">

@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { OptionalMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
 
@@ -248,14 +249,20 @@ const AuditLogPage = () => {
 
         <div className="flex flex-row items-center justify-between">
           <form onSubmit={handleSearch} className="mb-6 flex flex-wrap gap-3 w-3/4">
-            <input
-              type="text"
-              placeholder="Cari module, entity, action, actor..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full md:w-1/2 px-4 py-2 rounded-xl bg-white border-2 border-gray-200
-                focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
-            />
+            <div className="w-full md:w-1/2 space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Pencarian
+                <OptionalMark />
+              </label>
+              <input
+                type="text"
+                placeholder="Cari module, entity, action, actor..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl bg-white border-2 border-gray-200
+                  focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
+              />
+            </div>
             <button
               type="submit"
               className="rounded-xl bg-[#272e79] px-4 py-2 text-white shadow hover:bg-[#1f255e] transition"

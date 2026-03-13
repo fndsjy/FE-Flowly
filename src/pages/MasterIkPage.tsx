@@ -5,6 +5,7 @@ import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
 import { openIkPreviewWindow } from "../lib/ik-preview";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 type MasterIkItem = {
   ikId: string;
@@ -1084,16 +1085,25 @@ const MasterIkPage = () => {
 
         <div className="bg-white/90 rounded-3xl p-4 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.25)] border border-slate-200/70 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-4">
-            <input
-              type="text"
-              placeholder="Cari IK berdasarkan nama, nomor, atau isi..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
-              focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-            />
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Pencarian
+                <OptionalMark />
+              </label>
+              <input
+                type="text"
+                placeholder="Cari IK berdasarkan nama, nomor, atau isi..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
+                focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+              />
+            </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-400">Filter Status</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                Filter Status
+                <OptionalMark />
+              </p>
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
@@ -1282,6 +1292,7 @@ const MasterIkPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Nama IK
+                  <RequiredMark />
                 </label>
                 <input
                   type="text"
@@ -1295,6 +1306,7 @@ const MasterIkPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Nomor IK
+                  <RequiredMark />
                 </label>
                 <input
                   type="text"
@@ -1308,6 +1320,7 @@ const MasterIkPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Tanggal Efektif
+                  <RequiredMark />
                 </label>
                 <input
                   type="date"
@@ -1329,6 +1342,7 @@ const MasterIkPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Dibuat oleh
+                  <OptionalMark />
                 </label>
                 <select
                   value={formData.dibuatOleh ?? ""}
@@ -1354,6 +1368,7 @@ const MasterIkPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Diketahui oleh
+                  <OptionalMark />
                 </label>
                 <select
                   value={formData.diketahuiOleh ?? ""}
@@ -1379,6 +1394,7 @@ const MasterIkPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Disetujui oleh
+                  <OptionalMark />
                 </label>
                 <select
                   value={formData.disetujuiOleh ?? ""}
@@ -1408,6 +1424,7 @@ const MasterIkPage = () => {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Status IK
+                      <OptionalMark />
                     </p>
                     <p className="text-sm text-slate-600">
                       Aktifkan/Nonaktifkan IK secara manual.
@@ -1444,6 +1461,7 @@ const MasterIkPage = () => {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     SOP Terkait
+                    <OptionalMark />
                   </p>
                   <p className="text-sm text-slate-600">
                     Pilih SOP yang memakai IK ini (opsional).
@@ -1455,13 +1473,19 @@ const MasterIkPage = () => {
               </div>
 
               <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-                <input
-                  type="text"
-                  value={sopSearch}
-                  onChange={(e) => setSopSearch(e.target.value)}
-                  placeholder="Cari SOP berdasarkan nama atau nomor..."
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-                />
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wide text-slate-400">
+                    Pencarian SOP
+                    <OptionalMark />
+                  </label>
+                  <input
+                    type="text"
+                    value={sopSearch}
+                    onChange={(e) => setSopSearch(e.target.value)}
+                    placeholder="Cari SOP berdasarkan nama atau nomor..."
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => setSelectedSopIds([])}
