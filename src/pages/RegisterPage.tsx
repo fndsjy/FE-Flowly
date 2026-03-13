@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "../components/organisms/MessageToast";
+import { RequiredMark } from "../components/atoms/FormMarks";
 import { apiFetch } from "../lib/api";
 
 const RegisterPage = () => {
@@ -102,7 +103,10 @@ const RegisterPage = () => {
 
             {/* Username */}
             <div>
-              <label className="block text-gray-300 mb-1">Username</label>
+              <label className="block text-gray-300 mb-1">
+                Username
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 value={form.username}
@@ -115,7 +119,10 @@ const RegisterPage = () => {
 
             {/* Name */}
             <div>
-              <label className="block text-gray-300 mb-1">Full Name</label>
+              <label className="block text-gray-300 mb-1">
+                Full Name
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 value={form.name}
@@ -128,7 +135,10 @@ const RegisterPage = () => {
 
             {/* Badge Number */}
             <div>
-              <label className="block text-gray-300 mb-1">Badge Number</label>
+              <label className="block text-gray-300 mb-1">
+                Badge Number
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 value={form.badgeNumber}
@@ -141,7 +151,10 @@ const RegisterPage = () => {
 
             {/* Password */}
             <div>
-              <label className="text-gray-300 mb-1 block">Password</label>
+              <label className="text-gray-300 mb-1 block">
+                Password
+                <RequiredMark />
+              </label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}

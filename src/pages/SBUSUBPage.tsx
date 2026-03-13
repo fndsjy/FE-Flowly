@@ -5,6 +5,7 @@ import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 interface SBU {
   id: number;
@@ -484,6 +485,10 @@ const SBUSUBPage = () => {
             </h2>
 
             <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Sub Code
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Sub Code"
@@ -494,6 +499,10 @@ const SBUSUBPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Nama Sub
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 placeholder="Nama Sub"
@@ -504,6 +513,10 @@ const SBUSUBPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Deskripsi
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Deskripsi (optional)"
                 value={formData.description}
@@ -514,6 +527,10 @@ const SBUSUBPage = () => {
                 className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 h-24"
               />
 
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Job Description
+                <OptionalMark />
+              </label>
               <textarea
                 placeholder="Job Description (optional)"
                 value={formData.jobDesc}
@@ -525,6 +542,10 @@ const SBUSUBPage = () => {
               />
 
               {/* PIC */}
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                PIC
+                <OptionalMark />
+              </label>
               <select
                 value={formData.pic ?? ""}
                 onChange={(e) =>
@@ -542,6 +563,10 @@ const SBUSUBPage = () => {
                   </option>
                 ))}
               </select>
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Jabatan
+                <OptionalMark />
+              </label>
               <select
                 value={formData.jabatan ?? ""}
                 onChange={(e) =>

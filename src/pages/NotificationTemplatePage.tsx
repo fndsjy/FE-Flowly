@@ -3,6 +3,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
 
@@ -629,6 +630,7 @@ const NotificationTemplatePage = () => {
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     Nama Template
+                    <RequiredMark />
                   </label>
                   <input
                     type="text"
@@ -646,6 +648,7 @@ const NotificationTemplatePage = () => {
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     Jenis Case
+                    <RequiredMark />
                   </label>
                   <select
                     value={notificationTemplateForm.caseType}
@@ -673,6 +676,7 @@ const NotificationTemplatePage = () => {
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     Aksi
+                    <RequiredMark />
                   </label>
                   <select
                     value={notificationTemplateForm.action}
@@ -702,6 +706,7 @@ const NotificationTemplatePage = () => {
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     Role
+                    <RequiredMark />
                   </label>
                     <select
                       value={notificationTemplateForm.role}
@@ -734,6 +739,7 @@ const NotificationTemplatePage = () => {
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     Channel
+                    <RequiredMark />
                   </label>
                   <select
                     value={notificationTemplateForm.channel}
@@ -756,6 +762,7 @@ const NotificationTemplatePage = () => {
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     Template Pesan
+                    <RequiredMark />
                   </label>
                     <textarea
                       ref={messageTemplateRef}
@@ -788,6 +795,7 @@ const NotificationTemplatePage = () => {
                     }
                   />
                   Aktifkan template
+                  <OptionalMark />
                 </label>
 
                 <div className="flex gap-2">

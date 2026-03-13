@@ -5,6 +5,7 @@ import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
 import { openIkPreviewWindow } from "../lib/ik-preview";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 type ProcedureSopItem = {
   sopId: string;
@@ -649,16 +650,25 @@ const ProcedureSopPage = () => {
         </div>
         <div className="bg-white/90 rounded-3xl p-4 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.25)] border border-slate-200/70 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-4">
-            <input
-              type="text"
-              placeholder="Cari SOP berdasarkan nama, nomor, atau file..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
-              focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-            />
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Pencarian
+                <OptionalMark />
+              </label>
+              <input
+                type="text"
+                placeholder="Cari SOP berdasarkan nama, nomor, atau file..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
+                focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+              />
+            </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-400">Filter Status</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                Filter Status
+                <OptionalMark />
+              </p>
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
@@ -988,6 +998,7 @@ const ProcedureSopPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Nama SOP
+                  <RequiredMark />
                 </label>
                 <input
                   type="text"
@@ -1003,6 +1014,7 @@ const ProcedureSopPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Nomor SOP
+                  <RequiredMark />
                 </label>
                 <input
                   type="text"
@@ -1021,6 +1033,7 @@ const ProcedureSopPage = () => {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Tanggal Efektif
+                  <RequiredMark />
                 </label>
                 <input
                   type="date"
@@ -1044,6 +1057,7 @@ const ProcedureSopPage = () => {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Status SOP
+                      <OptionalMark />
                     </p>
                     <p className="text-sm text-slate-600">
                       Aktifkan/Nonaktifkan SOP secara manual.
@@ -1078,6 +1092,7 @@ const ProcedureSopPage = () => {
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">
                 Upload File SOP (PDF)
+                {formMode === "add" ? <RequiredMark /> : <OptionalMark />}
               </p>
               <p className="text-xs text-slate-500 mt-3">
                 {formMode === "edit"

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/organisms/MessageToast';
+import { RequiredMark } from "../components/atoms/FormMarks";
 import { apiFetch } from "../lib/api";
 
 const LoginPage = () => {
@@ -102,7 +103,10 @@ const LoginPage = () => {
 
             {/* Username */}
             <div>
-              <label className="block text-gray-300 mb-1">Username</label>
+              <label className="block text-gray-300 mb-1">
+                Username
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 value={username}
@@ -116,7 +120,10 @@ const LoginPage = () => {
 
             {/* Badge Number */}
             <div>
-              <label className="block text-gray-300 mb-1">Badge Number</label>
+              <label className="block text-gray-300 mb-1">
+                Badge Number
+                <RequiredMark />
+              </label>
               <input
                 type="text"
                 value={badgeNumber}
@@ -129,7 +136,10 @@ const LoginPage = () => {
             {/* Password */}
             <div>
               <div className="flex justify-between items-center">
-                <label className="text-gray-300 mb-1">Password</label>
+                <label className="text-gray-300 mb-1">
+                  Password
+                  <RequiredMark />
+                </label>
                 {/* <Link to="/forgot-password" className="text-sm text-rose-400 hover:text-rose-300">
                   Forgot?
                 </Link> */}

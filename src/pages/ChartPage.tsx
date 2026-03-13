@@ -6,6 +6,7 @@ import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
 import { apiFetch } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
+import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 // Interfaces tetap sama
 interface ChartNode {
@@ -1200,56 +1201,80 @@ const ChartPage = () => {
                   handleSubmit();
                 }}
               >
-                <input
-                  type="text"
-                  placeholder="Posisi / Jabatan"
-                  value={formData.position}
-                  onChange={(e) =>
-                    setFormData({ ...formData, position: e.target.value })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
-                  required
-                />
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wide text-slate-400">
+                    Posisi / Jabatan
+                    <RequiredMark />
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Posisi / Jabatan"
+                    value={formData.position}
+                    onChange={(e) =>
+                      setFormData({ ...formData, position: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
+                    required
+                  />
+                </div>
 
-                <select
-                  value={formData.jabatan ?? ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      jabatan: e.target.value ? e.target.value : null,
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
-                >
-                  <option value="">Pilih Jabatan (opsional)</option>
-                  {activeJabatans.map((jabatan) => (
-                    <option key={jabatan.jabatanId} value={jabatan.jabatanId}>
-                      {jabatan.jabatanName}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wide text-slate-400">
+                    Jabatan
+                    <OptionalMark />
+                  </label>
+                  <select
+                    value={formData.jabatan ?? ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        jabatan: e.target.value ? e.target.value : null,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
+                  >
+                    <option value="">Pilih Jabatan (opsional)</option>
+                    {activeJabatans.map((jabatan) => (
+                      <option key={jabatan.jabatanId} value={jabatan.jabatanId}>
+                        {jabatan.jabatanName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                <textarea
-                  placeholder="Job Description (opsional)"
-                  value={formData.jobDesc}
-                  onChange={(e) =>
-                    setFormData({ ...formData, jobDesc: e.target.value })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
-                  rows={3}
-                />
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wide text-slate-400">
+                    Job Description
+                    <OptionalMark />
+                  </label>
+                  <textarea
+                    placeholder="Job Description (opsional)"
+                    value={formData.jobDesc}
+                    onChange={(e) =>
+                      setFormData({ ...formData, jobDesc: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
+                    rows={3}
+                  />
+                </div>
 
-                <input
-                  type="number"
-                  min={1}
-                  placeholder="Capacity (jumlah slot)"
-                  value={formData.capacity}
-                  onChange={(e) =>
-                    setFormData({ ...formData, capacity: Number(e.target.value) })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
-                  required
-                />
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wide text-slate-400">
+                    Capacity (Jumlah Slot)
+                    <RequiredMark />
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Capacity (jumlah slot)"
+                    value={formData.capacity}
+                    onChange={(e) =>
+                      setFormData({ ...formData, capacity: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-rose-400 outline-none"
+                    required
+                  />
+                </div>
 
                 {/* {formMode === "add" && employees.length > 0 && (
                   <select
@@ -1311,6 +1336,10 @@ const ChartPage = () => {
             <h3 className="font-semibold text-lg mb-3">
               Assign Slot #{slotAssign.slotIndex + 1}
             </h3>
+            <label className="text-xs uppercase tracking-wide text-slate-400">
+              Pilih Pegawai
+              <OptionalMark />
+            </label>
             <select
               onChange={(e) => {
                 const u = e.target.value ? Number(e.target.value) : null;
@@ -1348,7 +1377,10 @@ const ChartPage = () => {
             <h3 className="font-semibold text-lg mb-3">
               Job Description - {jobDescModal.name}
             </h3>
-
+            <label className="text-xs uppercase tracking-wide text-slate-400">
+              Job Description
+              <OptionalMark />
+            </label>
             <textarea
               value={jobDescModal.jobDesc}
               onChange={(e) => setJobDescModal({ ...jobDescModal, jobDesc: e.target.value })}
