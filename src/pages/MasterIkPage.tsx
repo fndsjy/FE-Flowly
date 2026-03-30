@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { openIkPreviewWindow } from "../lib/ik-preview";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -152,11 +152,7 @@ const MasterIkPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal memuat Master IK",
+          getApiErrorMessage(json, "Gagal memuat Master IK"),
           "error"
         );
         setIks([]);
@@ -179,11 +175,7 @@ const MasterIkPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal memuat data employee",
+          getApiErrorMessage(json, "Gagal memuat data employee"),
           "error"
         );
         setEmployees([]);
@@ -205,11 +197,7 @@ const MasterIkPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal memuat data SOP",
+          getApiErrorMessage(json, "Gagal memuat data SOP"),
           "error"
         );
         setSopOptions([]);
@@ -393,14 +381,10 @@ const MasterIkPage = () => {
 
         const json = await res.json();
         if (!res.ok) {
-          showToast(
-            json?.issues?.[0]?.message ||
-              json?.error ||
-              json?.errors ||
-              json?.message ||
-              "Gagal menambahkan IK",
-            "error"
-          );
+            showToast(
+              getApiErrorMessage(json, "Gagal menambahkan IK"),
+              "error"
+            );
           return;
         }
         showToast("Master IK berhasil ditambahkan", "success");
@@ -432,11 +416,7 @@ const MasterIkPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal memperbarui IK",
+          getApiErrorMessage(json, "Gagal memperbarui IK"),
           "error"
         );
         return;
@@ -465,11 +445,7 @@ const MasterIkPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal menghapus IK",
+          getApiErrorMessage(json, "Gagal menghapus IK"),
           "error"
         );
         return;

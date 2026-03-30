@@ -45,6 +45,18 @@ export type AccessSummary = {
   orgAccess: OrgAccessSummary;
 };
 
+type UseAccessSummaryOptions = {
+  enabled?: boolean;
+};
+
+type AccessSummaryStore = {
+  summary: AccessSummary;
+  loading: boolean;
+  initialized: boolean;
+  request: Promise<void> | null;
+  version: number;
+};
+
 const defaultOrgScope: OrgScopeSummary = {
   pilarRead: false,
   pilarCrud: false,
@@ -72,66 +84,134 @@ const defaultSummary: AccessSummary = {
   orgAccess: defaultOrgAccess,
 };
 
-export const useAccessSummary = () => {
-  const [summary, setSummary] = useState<AccessSummary>(defaultSummary);
-  const [loading, setLoading] = useState(true);
+const accessSummaryStore: AccessSummaryStore = {
+  summary: defaultSummary,
+  loading: false,
+  initialized: false,
+  request: null,
+  version: 0,
+};
+
+const accessSummaryListeners = new Set<() => void>();
+
+const emitAccessSummaryChange = () => {
+  for (const listener of accessSummaryListeners) {
+    listener();
+  }
+};
+
+const subscribeAccessSummary = (listener: () => void) => {
+  accessSummaryListeners.add(listener);
+  return () => {
+    accessSummaryListeners.delete(listener);
+  };
+};
+
+const normalizeIdList = (value: unknown) =>
+  Array.isArray(value)
+    ? value.map((id) => Number(id)).filter((id) => Number.isFinite(id))
+    : [];
+
+const getAccessSummaryLoading = () =>
+  accessSummaryStore.loading || !accessSummaryStore.initialized;
+
+const fetchAccessSummary = async () => {
+  if (accessSummaryStore.request) {
+    return accessSummaryStore.request;
+  }
+
+  if (accessSummaryStore.initialized) {
+    return Promise.resolve();
+  }
+
+  accessSummaryStore.loading = true;
+  emitAccessSummaryChange();
+
+  const requestVersion = accessSummaryStore.version;
+  accessSummaryStore.request = apiFetch("/access-role/me", { credentials: "include" })
+    .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+      if (requestVersion !== accessSummaryStore.version) {
+        return;
+      }
+
+      if (!ok || !data?.response) {
+        accessSummaryStore.summary = defaultSummary;
+        return;
+      }
+
+      const orgAccessResponse = data.response.orgAccess ?? {};
+      accessSummaryStore.summary = {
+        isAdmin: Boolean(data.response.isAdmin),
+        menuAccess: Array.isArray(data.response.menuAccess)
+          ? data.response.menuAccess
+          : [],
+        moduleAccess: Array.isArray(data.response.moduleAccess)
+          ? data.response.moduleAccess
+          : [],
+        focusPilarIds: normalizeIdList(data.response.focusPilarIds),
+        orgScope: {
+          ...defaultOrgScope,
+          ...(data.response.orgScope ?? {}),
+        },
+        orgAccess: {
+          pilarRead: normalizeIdList(orgAccessResponse.pilarRead),
+          pilarCrud: normalizeIdList(orgAccessResponse.pilarCrud),
+          sbuRead: normalizeIdList(orgAccessResponse.sbuRead),
+          sbuCrud: normalizeIdList(orgAccessResponse.sbuCrud),
+          sbuSubRead: normalizeIdList(orgAccessResponse.sbuSubRead),
+          sbuSubCrud: normalizeIdList(orgAccessResponse.sbuSubCrud),
+        },
+      };
+    })
+    .catch(() => {
+      if (requestVersion !== accessSummaryStore.version) {
+        return;
+      }
+
+      accessSummaryStore.summary = defaultSummary;
+    })
+    .finally(() => {
+      if (requestVersion !== accessSummaryStore.version) {
+        return;
+      }
+
+      accessSummaryStore.loading = false;
+      accessSummaryStore.initialized = true;
+      accessSummaryStore.request = null;
+      emitAccessSummaryChange();
+    });
+
+  return accessSummaryStore.request;
+};
+
+export const invalidateAccessSummary = () => {
+  accessSummaryStore.version += 1;
+  accessSummaryStore.summary = defaultSummary;
+  accessSummaryStore.loading = false;
+  accessSummaryStore.initialized = false;
+  accessSummaryStore.request = null;
+  emitAccessSummaryChange();
+};
+
+export const useAccessSummary = ({ enabled = true }: UseAccessSummaryOptions = {}) => {
+  const [, setRevision] = useState(0);
 
   useEffect(() => {
-    let isMounted = true;
+    if (!enabled) {
+      return undefined;
+    }
 
-    apiFetch("/access-role/me", { credentials: "include" })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (!isMounted) return;
-        if (!ok || !data?.response) {
-          setSummary(defaultSummary);
-          return;
-        }
+    const unsubscribe = subscribeAccessSummary(() => {
+      setRevision((value) => value + 1);
+    });
+    void fetchAccessSummary();
 
-        const orgAccessResponse = data.response.orgAccess ?? {};
-        const normalizeIdList = (value: unknown) =>
-          Array.isArray(value)
-            ? value.map((id) => Number(id)).filter((id) => Number.isFinite(id))
-            : [];
+    return unsubscribe;
+  }, [enabled]);
 
-        setSummary({
-          isAdmin: Boolean(data.response.isAdmin),
-          menuAccess: Array.isArray(data.response.menuAccess)
-            ? data.response.menuAccess
-            : [],
-          moduleAccess: Array.isArray(data.response.moduleAccess)
-            ? data.response.moduleAccess
-            : [],
-          focusPilarIds: normalizeIdList(data.response.focusPilarIds),
-          orgScope: {
-            ...defaultOrgScope,
-            ...(data.response.orgScope ?? {}),
-          },
-          orgAccess: {
-            pilarRead: normalizeIdList(orgAccessResponse.pilarRead),
-            pilarCrud: normalizeIdList(orgAccessResponse.pilarCrud),
-            sbuRead: normalizeIdList(orgAccessResponse.sbuRead),
-            sbuCrud: normalizeIdList(orgAccessResponse.sbuCrud),
-            sbuSubRead: normalizeIdList(orgAccessResponse.sbuSubRead),
-            sbuSubCrud: normalizeIdList(orgAccessResponse.sbuSubCrud),
-          },
-        });
-      })
-      .catch(() => {
-        if (isMounted) {
-          setSummary(defaultSummary);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const summary = enabled ? accessSummaryStore.summary : defaultSummary;
+  const loading = enabled ? getAccessSummaryLoading() : false;
 
   const menuAccessMap = useMemo(() => {
     const map = new Map<string, AccessLevel>();

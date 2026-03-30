@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -216,7 +216,7 @@ const SBUSUBPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json?.error || json?.errors || json?.issues?.[0]?.message, "error");
+        showToast(getApiErrorMessage(json, "Gagal menyimpan data SBU Sub"), "error");
         setIsSubmitting(false);
         return;
       }
@@ -261,7 +261,7 @@ const SBUSUBPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json?.error || json?.errors || json?.issues?.[0]?.message || "Gagal menghapus", "error");
+        showToast(getApiErrorMessage(json, "Gagal menghapus"), "error");
         setIsDeleting(false);
         return;
       }

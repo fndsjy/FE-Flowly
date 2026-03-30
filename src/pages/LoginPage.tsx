@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/organisms/MessageToast';
 import { RequiredMark } from "../components/atoms/FormMarks";
-import { apiFetch } from "../lib/api";
+import { invalidateAccessSummary } from "../hooks/useAccessSummary";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
-  const [badgeNumber, setBadgeNumber] = useState('');
+  const [cardNo, setCardNo] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -24,19 +25,19 @@ const LoginPage = () => {
 
     try {
       const trimmedUsername = username.trim();
-      const trimmedBadgeNumber = badgeNumber.trim();
+      const trimmedCardNo = cardNo.trim();
       const hasUsername = trimmedUsername.length > 0;
-      const hasBadgeNumber = trimmedBadgeNumber.length > 0;
+      const hasCardNo = trimmedCardNo.length > 0;
 
-      if (hasUsername === hasBadgeNumber) {
-        showToast('Isi salah satu: username atau badge number.', 'error');
+      if (hasUsername === hasCardNo) {
+        showToast('Isi salah satu: username atau card no.', 'error');
         setIsLoading(false);
         return;
       }
 
       const loginPayload = hasUsername
         ? { username: trimmedUsername, password }
-        : { badgeNumber: trimmedBadgeNumber, password };
+        : { cardNo: trimmedCardNo, password };
 
       const res = await apiFetch('/login', {
         method: 'POST',
@@ -47,7 +48,10 @@ const LoginPage = () => {
       const data = await res.json();
 
       if (!res.ok) {
-        const message = data?.issues?.[0]?.message || data.errors || data.message || 'Login gagal. Periksa username dan password Anda.';
+        const message = getApiErrorMessage(
+          data,
+          "Login gagal. Periksa username dan password Anda."
+        );
         showToast(message, 'error');
         setIsLoading(false);
         return;
@@ -58,6 +62,7 @@ const LoginPage = () => {
       // localStorage.setItem('tokenExpiry', (Date.now() + expiresIn * 1000).toString());
 
       showToast(`Login berhasil! 🎉`, 'success');
+      invalidateAccessSummary();
       navigate('/');
     } catch (err) {
       console.error(err);
@@ -118,7 +123,7 @@ const LoginPage = () => {
 
             <div className="text-center text-xs text-gray-400">atau</div>
 
-            {/* Badge Number */}
+            {/* Card No */}
             <div>
               <label className="block text-gray-300 mb-1">
                 Badge Number
@@ -126,9 +131,9 @@ const LoginPage = () => {
               </label>
               <input
                 type="text"
-                value={badgeNumber}
-                onChange={(e) => setBadgeNumber(e.target.value)}
-                placeholder="Enter badge number"
+                value={cardNo}
+                onChange={(e) => setCardNo(e.target.value)}
+                placeholder="Enter card number"
                 className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-rose-500 outline-none"
               />
             </div>

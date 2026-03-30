@@ -1,9 +1,8 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Sidebar from "../components/organisms/Sidebar";
-import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -256,12 +255,8 @@ const safeJson = async (res: Response) => {
   }
 };
 
-const getErrorMessage = (data: any) =>
-  data?.issues?.[0]?.message ||
-  data?.error ||
-  data?.errors ||
-  data?.message ||
-  "Terjadi kesalahan";
+const getErrorMessage = (data: unknown, fallback = "Terjadi kesalahan") =>
+  getApiErrorMessage(data, fallback);
 
 const formatCauseRanges = (causes: CaseFishboneItemCauseInfo[]) => {
   const numbers = Array.from(
@@ -3655,7 +3650,6 @@ const A3Page = () => {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex flex-row items-center justify-start gap-4">
-                <BackButton to="/a3" />
                 <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
                   A3 - Case
                 </h1>

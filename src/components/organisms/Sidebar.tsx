@@ -6,7 +6,12 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSignInAlt, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
 import { apiFetch } from "../../lib/api";
-import { useAccessSummary } from "../../hooks/useAccessSummary";
+import { hasMenuAccess } from "../../lib/access";
+import { normalizeAppRoute } from "../../lib/routes";
+import {
+  invalidateAccessSummary,
+  useAccessSummary,
+} from "../../hooks/useAccessSummary";
 
 /* ---------------- USER TYPE ---------------- */
 interface UserProfile {
@@ -46,20 +51,31 @@ interface MenuItem {
 interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
+  portalKey?: string;
 }
 
-const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
+const Sidebar = ({
+  isOpen,
+  onToggle,
+  portalKey = "EMPLOYEE",
+}: SidebarProps) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [moduleRoutesByParent, setModuleRoutesByParent] = useState<Map<string, string[]>>(
+    new Map()
+  );
   const {
     loading: accessLoading,
     isAdmin: accessIsAdmin,
-    menuAccessMap
+    menuAccessMap,
+    moduleAccessMap,
+    orgScope,
   } = useAccessSummary();
   const navigate = useNavigate();
 
   const location = useLocation();
   const publicMenuKeys = new Set(["PROSEDUR", "FISHBONE"]);
+  const normalizedPortalKey = portalKey.trim().toUpperCase();
 
   /* ---------------- FETCH USER PROFILE ---------------- */
   useEffect(() => {
@@ -83,16 +99,28 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   /* ---------------- FETCH MENU ---------------- */
   useEffect(() => {
     let isMounted = true;
+    const menuUrl = `/master-access-role?resourceType=MENU&portalKey=${encodeURIComponent(
+      normalizedPortalKey
+    )}`;
+    const moduleUrl = `/master-access-role?resourceType=MODULE&portalKey=${encodeURIComponent(
+      normalizedPortalKey
+    )}`;
 
-    apiFetch("/master-access-role?resourceType=MENU", {
-      method: "GET",
-      credentials: "include",
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted) return;
-        const response: MasterAccessRoleItem[] = Array.isArray(data?.response)
-          ? data.response
+    Promise.allSettled([
+      apiFetch(menuUrl, {
+        method: "GET",
+        credentials: "include",
+      }).then((res) => res.json()),
+      apiFetch(moduleUrl, {
+        method: "GET",
+        credentials: "include",
+      }).then((res) => res.json()),
+    ]).then(([menuResult, moduleResult]) => {
+      if (!isMounted) return;
+
+      if (menuResult.status === "fulfilled") {
+        const response: MasterAccessRoleItem[] = Array.isArray(menuResult.value?.response)
+          ? menuResult.value.response
           : [];
         const items = response
           .filter(
@@ -106,22 +134,49 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
             id: item.resourceKey,
             label: item.displayName,
             icon: getMenuIcon(item.resourceKey),
-            path: item.route as string,
+            path: normalizeAppRoute(item.route),
             resourceType: "MENU" as const,
             resourceKey: item.resourceKey,
           }));
         setMenuItems(items);
-      })
-      .catch(() => {
-        if (isMounted) {
-          setMenuItems([]);
-        }
-      });
+      } else {
+        setMenuItems([]);
+      }
+
+      if (moduleResult.status === "fulfilled") {
+        const response: MasterAccessRoleItem[] = Array.isArray(moduleResult.value?.response)
+          ? moduleResult.value.response
+          : [];
+        const nextRoutes = new Map<string, string[]>();
+
+        response
+          .filter(
+            (item) =>
+              item.resourceType === "MODULE" &&
+              item.isActive &&
+              !item.isDeleted &&
+              item.route &&
+              item.parentKey
+          )
+          .forEach((item) => {
+            const parentKey = item.parentKey?.toUpperCase();
+            if (!parentKey) return;
+
+            const routes = nextRoutes.get(parentKey) ?? [];
+            routes.push(normalizeAppRoute(item.route));
+            nextRoutes.set(parentKey, routes);
+          });
+
+        setModuleRoutesByParent(nextRoutes);
+      } else {
+        setModuleRoutesByParent(new Map());
+      }
+    });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [normalizedPortalKey]);
 
   /* ---------------- LOGOUT ---------------- */
   const handleLogout = async () => {
@@ -130,6 +185,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       credentials: "include",
     });
 
+    invalidateAccessSummary();
     setUser(null);
     navigate("/login", { replace: true });
   };
@@ -150,11 +206,35 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     if (normalizedKey === "ADMIN") {
       return false;
     }
-    if (publicMenuKeys.has(normalizedKey)) {
+    return hasMenuAccess({
+      menuKey: normalizedKey,
+      isAdmin,
+      menuAccessMap,
+      moduleAccessMap,
+      orgScope,
+      publicMenuKeys,
+    });
+  });
+
+  const isPathActive = (targetPath: string) =>
+    location.pathname === targetPath || location.pathname.startsWith(`${targetPath}/`);
+
+  const isMenuActive = (item: MenuItem) => {
+    if (isPathActive(item.path)) {
       return true;
     }
-    return menuAccessMap.has(normalizedKey);
-  });
+
+    const childRoutes = moduleRoutesByParent.get(item.resourceKey.toUpperCase()) ?? [];
+    return childRoutes.some((route) => isPathActive(route));
+  };
+
+  const handleMenuClick = (path: string) => {
+    const nextPath = normalizeAppRoute(path);
+    if (location.pathname === nextPath) {
+      return;
+    }
+    navigate(nextPath);
+  };
 
   return (
     <div
@@ -210,10 +290,12 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       <nav className="mt-6 pl-2">
         {visibleMenuItems.map((item) => (
             <div key={item.id} className="relative group overflow-hidden">
-              <Link
-                to={item.path}
+              <button
+                type="button"
+                onClick={() => handleMenuClick(item.path)}
+                aria-current={isMenuActive(item) ? "page" : undefined}
                 className={`flex items-center w-full p-3 rounded-lg transition-colors ${
-                  location.pathname.startsWith(item.path)
+                  isMenuActive(item)
                     ? "bg-gradient-to-r from-rose-400 via-gray-900 to-gray-900 text-white font-semibold border border-white"
                     : "hover:bg-gray-700 text-gray-300"
                 }`}
@@ -226,10 +308,10 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
                   {item.icon}
                 </span>
                 {isOpen && <span>{item.label}</span>}
-              </Link>
+              </button>
 
               {/* Pointer segitiga */}
-              {location.pathname.startsWith(item.path) && isOpen && (
+              {isMenuActive(item) && isOpen && (
                 <div
                   className="absolute right-0 top-1/2 -translate-y-1/2 w-0 h-0 
                     border-t-24 border-b-24 border-r-24 border-l-0 
@@ -311,10 +393,14 @@ const getMenuIcon = (resourceKey: string) => {
       return <A3Icon />;
     case "ABSENSI":
       return <AbsensiIcon />;
-    case "ADMIN":
-      return <AdministratorIcon />;
+    case "HRD":
+      return <HRDIcon />;
     case "FISHBONE":
       return <FishBoneIcon />;
+    case "ONBOARDING":
+      return <i className="fa-solid fa-graduation-cap h-5 w-5 mx-auto" aria-hidden="true"></i>;
+    case "ADMIN":
+      return <AdministratorIcon />;
     default:
       return <DefaultMenuIcon />;
   }
@@ -366,12 +452,16 @@ const AbsensiIcon = () => (
   <i className="fa-solid fa-fingerprint h-5 w-4 mx-auto ml-1"></i>
 );
 
-const AdministratorIcon = () => (
+const HRDIcon = () => (
   <i className="fa-solid fa-person h-5 w-4 mx-auto ml-1"></i>
 );
 
 const DefaultMenuIcon = () => (
   <i className="fa-solid fa-circle h-4 w-4 mx-auto ml-1"></i>
+);
+
+const AdministratorIcon = () => (
+  <i className="fa-solid fa-unlock h-4 w-4 mx-auto ml-1"></i>
 );
 
 export default Sidebar;

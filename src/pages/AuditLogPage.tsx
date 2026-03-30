@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { OptionalMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
@@ -123,11 +123,7 @@ const AuditLogPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json.errors ||
-            json.message ||
-            json?.error ||
-            "Gagal memuat audit log",
+          getApiErrorMessage(json, "Gagal memuat audit log"),
           "error"
         );
         setLogs([]);

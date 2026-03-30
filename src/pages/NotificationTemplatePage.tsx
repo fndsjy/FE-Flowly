@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
@@ -216,12 +216,8 @@ const safeJson = async (res: Response) => {
   }
 };
 
-const getErrorMessage = (data: any) =>
-  data?.issues?.[0]?.message ||
-  data?.error ||
-  data?.errors ||
-  data?.message ||
-  "Terjadi kesalahan";
+const getErrorMessage = (data: unknown, fallback = "Terjadi kesalahan") =>
+  getApiErrorMessage(data, fallback);
 
 const formatDateTime = (value: string | null | undefined) => {
   if (!value) return "-";
