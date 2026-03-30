@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
@@ -74,11 +74,7 @@ const JabatanListPage = () => {
 
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json.errors ||
-            json.message ||
-            json?.error ||
-            "Gagal memuat data jabatan",
+          getApiErrorMessage(json, "Gagal memuat data jabatan"),
           "error"
         );
         setJabatans([]);
@@ -220,11 +216,7 @@ const JabatanListPage = () => {
 
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json.errors ||
-            json.message ||
-            json?.error ||
-            "Gagal menyimpan data jabatan",
+          getApiErrorMessage(json, "Gagal menyimpan data jabatan"),
           "error"
         );
         return;
@@ -264,11 +256,7 @@ const JabatanListPage = () => {
 
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json.errors ||
-            json.message ||
-            json?.error ||
-            "Gagal menghapus jabatan",
+          getApiErrorMessage(json, "Gagal menghapus jabatan"),
           "error"
         );
         return;

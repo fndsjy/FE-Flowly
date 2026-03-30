@@ -4,7 +4,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -235,14 +235,11 @@ const SBUPage = () => {
 
       const json = await res.json();
 
-      if (!res.ok) {
-        showToast(
-          json?.error || json?.errors || json?.issues?.[0]?.message,
-          "error"
-        );
-        setIsSubmitting(false);
-        return;
-      }
+        if (!res.ok) {
+          showToast(getApiErrorMessage(json, "Gagal menyimpan data SBU"), "error");
+          setIsSubmitting(false);
+          return;
+        }
 
       showToast(
         formMode === "add"
@@ -284,7 +281,7 @@ const SBUPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json?.error || json?.errors || json?.issues?.[0]?.message || "Gagal menghapus", "error");
+        showToast(getApiErrorMessage(json, "Gagal menghapus"), "error");
         setIsDeleting(false);
         return;
       }

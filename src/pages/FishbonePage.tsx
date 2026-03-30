@@ -1,9 +1,8 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/organisms/Sidebar";
-import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
 type SbuSub = {
@@ -82,11 +81,8 @@ const safeJson = async (res: Response) => {
   }
 };
 
-const getErrorMessage = (data: any) =>
-  data?.issues?.[0]?.message ||
-  data?.error ||
-  data?.errors || data?.message ||
-  "Terjadi kesalahan";
+const getErrorMessage = (data: unknown, fallback = "Terjadi kesalahan") =>
+  getApiErrorMessage(data, fallback);
 
 const matchesStatus = (filter: StatusFilter, isActive: boolean) => {
   if (filter === "all") return true;
@@ -1872,7 +1868,6 @@ const FishbonePage = () => {
       >
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6 mt-3">
           <div className="flex items-center gap-4">
-            <BackButton />
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-3xl font-bold text-slate-900">Fishbone</h1>

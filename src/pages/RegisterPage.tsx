@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "../components/organisms/MessageToast";
 import { RequiredMark } from "../components/atoms/FormMarks";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 
 const RegisterPage = () => {
   const [form, setForm] = useState({
@@ -46,7 +46,7 @@ const RegisterPage = () => {
         }
 
       if (!res.ok) {
-        showToast(data?.issues?.[0]?.message || data.errors || data.message || "Gagal register", "error");
+        showToast(getApiErrorMessage(data, "Gagal register"), "error");
         setIsLoading(false);
         return;
       }

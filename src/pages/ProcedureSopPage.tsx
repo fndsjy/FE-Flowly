@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { openIkPreviewWindow } from "../lib/ik-preview";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -202,11 +202,7 @@ const ProcedureSopPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal memuat SOP",
+          getApiErrorMessage(json, "Gagal memuat SOP"),
           "error"
         );
         setSops([]);
@@ -231,11 +227,7 @@ const ProcedureSopPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal memuat IK",
+          getApiErrorMessage(json, "Gagal memuat IK"),
           "error"
         );
         return [];
@@ -474,14 +466,10 @@ const ProcedureSopPage = () => {
 
         const json = await res.json();
         if (!res.ok) {
-          showToast(
-            json?.issues?.[0]?.message ||
-              json?.error ||
-              json?.errors ||
-              json?.message ||
-              "Gagal menambahkan SOP",
-            "error"
-          );
+            showToast(
+              getApiErrorMessage(json, "Gagal menambahkan SOP"),
+              "error"
+            );
           return;
         }
         showToast("SOP berhasil ditambahkan", "success");
@@ -511,11 +499,7 @@ const ProcedureSopPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal memperbarui SOP",
+          getApiErrorMessage(json, "Gagal memperbarui SOP"),
           "error"
         );
         return;
@@ -544,11 +528,7 @@ const ProcedureSopPage = () => {
       const json = await res.json();
       if (!res.ok) {
         showToast(
-          json?.issues?.[0]?.message ||
-            json?.error ||
-            json?.errors ||
-            json?.message ||
-            "Gagal menghapus SOP",
+          getApiErrorMessage(json, "Gagal menghapus SOP"),
           "error"
         );
         return;

@@ -4,7 +4,7 @@ import { Tree, TreeNode } from "react-organizational-chart";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -386,11 +386,7 @@ const ChartPage = () => {
       const json = await res.json();
       if (!res.ok) {
         const msg =
-          json?.issues?.[0]?.message ||
-          json.errors ||
-          json.message ||
-          json?.error ||
-          "Gagal menyimpan data.";
+          getApiErrorMessage(json, "Gagal menyimpan data.");
         showToast(msg, "error");
         return;
       }
@@ -440,11 +436,7 @@ const ChartPage = () => {
       const json = await res.json();
       if (!res.ok) {
         const msg =
-          json?.issues?.[0]?.message ||
-          json.errors ||
-          json.message ||
-          json?.error ||
-          "Gagal menghapus node.";
+          getApiErrorMessage(json, "Gagal menghapus node.");
         showToast(msg, "error");
         return;
       }
@@ -475,7 +467,7 @@ const ChartPage = () => {
       });
       const json = await res.json();
       if (!res.ok) {
-        const msg = json?.issues?.[0]?.message || json.errors || json.message || json?.error || "Gagal assign member.";
+        const msg = getApiErrorMessage(json, "Gagal assign member.");
         showToast(msg, "error");
         return;
       }
@@ -516,7 +508,7 @@ const ChartPage = () => {
       });
       const json = await res.json();
       if (!res.ok) {
-        const msg = json?.issues?.[0]?.message || json.errors || json.message || json?.error || "Gagal update job desc.";
+        const msg = getApiErrorMessage(json, "Gagal update job desc.");
         showToast(msg, "error");
         return;
       }
@@ -812,7 +804,10 @@ const ChartPage = () => {
                           await fetchMembersForChart(node.chartId);
                         } else {
                           const j = await res.json();
-                          showToast(j.message || "Gagal clear slot", "error");
+                          showToast(
+                            getApiErrorMessage(j, "Gagal clear slot"),
+                            "error"
+                          );
                         }
                       } catch (err) {
                         console.error(err);

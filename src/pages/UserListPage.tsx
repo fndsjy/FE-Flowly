@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { OptionalMark } from "../components/atoms/FormMarks";
 
 const domasColor = "#272e79";
@@ -50,7 +50,7 @@ const UserListPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json?.issues?.[0]?.message || json.errors || json.message || json?.error || "Gagal memuat data user", "error");
+        showToast(getApiErrorMessage(json, "Gagal memuat data user"), "error");
         return;
       }
 
@@ -73,7 +73,7 @@ const UserListPage = () => {
 
       const json = await res.json();
       if (!res.ok) {
-        showToast(json?.issues?.[0]?.message || json.errors || json.message || json?.error || "Gagal memuat role", "error");
+        showToast(getApiErrorMessage(json, "Gagal memuat role"), "error");
         return;
       }
 
@@ -133,7 +133,7 @@ const UserListPage = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        showToast(json.message || "Gagal mengubah role", "error");
+        showToast(getApiErrorMessage(json, "Gagal mengubah role"), "error");
         return;
       }
 

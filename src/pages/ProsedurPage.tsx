@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark } from "../components/atoms/FormMarks";
 
@@ -81,7 +81,7 @@ const ProsedurPage = () => {
       if (!res.ok) {
         setData([]);
         showToast(
-          json?.error || json?.errors || json?.issues?.[0]?.message,
+          getApiErrorMessage(json, "Gagal memuat data SBU Sub."),
           "error"
         );
         return;

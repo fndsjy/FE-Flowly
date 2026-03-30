@@ -25,16 +25,6 @@ interface AdminMenuItem {
   icon: string;
 }
 
-const DEFAULT_ADMIN_ITEMS: AdminMenuItem[] = [
-  {
-    id: "ADMIN_NOTIFICATION_TEMPLATE",
-    title: "Template Notifikasi",
-    description: "Modul Template Notifikasi",
-    route: "/administrator/notification-template",
-    icon: "fa-solid fa-envelope-open-text",
-  },
-];
-
 const AdministratorPage = () => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
@@ -72,16 +62,11 @@ const AdministratorPage = () => {
             route: item.route as string,
             icon: getAdminModuleIcon(item.resourceKey),
           }));
-        const existingIds = new Set(items.map((item) => item.id));
-        const merged = [
-          ...items,
-          ...DEFAULT_ADMIN_ITEMS.filter((item) => !existingIds.has(item.id)),
-        ];
-        setMenuItems(merged);
+        setMenuItems(items);
       })
       .catch(() => {
         if (isMounted) {
-          setMenuItems(DEFAULT_ADMIN_ITEMS);
+          setMenuItems([]);
         }
       });
 
