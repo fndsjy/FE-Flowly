@@ -1,3 +1,12 @@
+export const isExternalRoute = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  return /^[a-z][a-z\d+.-]*:/i.test(trimmed);
+};
+
 const normalizeBasePath = (value?: string | null) => {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -18,6 +27,10 @@ export const normalizeAppRoute = (value?: string | null) => {
   const trimmed = value?.trim();
   if (!trimmed) {
     return "/";
+  }
+
+  if (isExternalRoute(trimmed)) {
+    return trimmed.replace(/\/+$/, "") || trimmed;
   }
 
   let normalized = trimmed.replace(/\/+$/, "");

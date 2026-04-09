@@ -29,11 +29,12 @@ import HRDPage from './pages/HRDPage';
 import HRDHomePage from './pages/HRDHomePage';
 import EmployeeOnboardingPage from './pages/EmployeeOnboardingPage';
 import OmsPortalPage from './pages/OmsPortalPage';
-import AffiliatePage from './affiliate';
-import CommunityPage from './community';
-import CustomerPage from './customer';
-import InfluencerPage from './influencer';
-import SupplierPage from './supplier';
+import AdministratorWorkspacePage from './administrator/pages/AdministratorWorkspacePage';
+import AffiliatePage from './affiliate/pages/AffiliatePage';
+import CommunityPage from './community/pages/CommunityPage';
+import CustomerPage from './customer/pages/CustomerPage';
+import InfluencerPage from './influencer/pages/InfluencerPage';
+import SupplierPage from './supplier/pages/SupplierPage';
 
 const App = () => {
   return (
@@ -61,6 +62,7 @@ const App = () => {
           <Route path="/affiliate/*" element={<ProtectedRoute><AffiliatePage /></ProtectedRoute>} />
           <Route path="/influencer/*" element={<ProtectedRoute><InfluencerPage /></ProtectedRoute>} />
           <Route path="/community/*" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>} />
+          <Route path="/portal-administrator/*" element={<ProtectedRoute adminOnly><AdministratorWorkspacePage /></ProtectedRoute>} />
           <Route path="/me" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
           <Route path="/administrator" element={<ProtectedRoute adminOnly><AdministratorPage /></ProtectedRoute>} />
           <Route path="/administrator/users" element={<ProtectedRoute adminOnly><UserListPage /></ProtectedRoute>} />

@@ -4,8 +4,10 @@ export type OnboardingPortalKey =
   | "CUSTOMER"
   | "AFFILIATE"
   | "INFLUENCER"
-  | "COMMUNITY";
+  | "COMMUNITY"
+  | "ADMINISTRATOR";
 
+export type OnboardingMaterialType = "ebook" | "ppt" | "pdf" | "worksheet";
 export type MaterialStatus = "pending" | "reading" | "completed";
 export type AssessmentStatus =
   | "locked"
@@ -46,6 +48,8 @@ export type OnboardingMaterial = {
   startedAt: string | null;
   completedAt: string | null;
   note: string;
+  resourceType: OnboardingMaterialType;
+  resourceUrl: string;
 };
 
 export type OnboardingAssessment = {
@@ -60,6 +64,7 @@ export type OnboardingAssessment = {
   remedialCount: number;
   maxRemedial: number;
   adminNote: string;
+  questionTypes: string[];
 };
 
 export type OnboardingStage = {
@@ -97,6 +102,8 @@ export type OnboardingPortalTheme = {
   badgeClass: string;
   buttonClass: string;
   heroClass: string;
+  progressBarClass: string;
+  progressDoneClass: string;
   softPanelClass: string;
   tabActiveClass: string;
 };
@@ -129,7 +136,11 @@ const material = (
   status: MaterialStatus,
   startedAt: string | null,
   completedAt: string | null,
-  note: string
+  note: string,
+  options?: {
+    resourceType?: OnboardingMaterialType;
+    resourceUrl?: string;
+  }
 ): OnboardingMaterial => ({
   id,
   title,
@@ -138,6 +149,8 @@ const material = (
   startedAt,
   completedAt,
   note,
+  resourceType: options?.resourceType ?? "ebook",
+  resourceUrl: options?.resourceUrl ?? "https://heyzine.com/flip-book/66896cb1c8.html",
 });
 
 const assessment = (
@@ -150,7 +163,8 @@ const assessment = (
   submittedAt: string | null,
   reviewedAt: string | null,
   remedialCount: number,
-  adminNote: string
+  adminNote: string,
+  questionTypes: string[] = ["Pilihan ganda", "True / False", "Essay"]
 ): OnboardingAssessment => ({
   title,
   durationMinutes,
@@ -163,6 +177,7 @@ const assessment = (
   remedialCount,
   maxRemedial: 3,
   adminNote,
+  questionTypes,
 });
 
 const themes: Record<OnboardingPortalKey, OnboardingPortalTheme> = {
@@ -173,6 +188,9 @@ const themes: Record<OnboardingPortalKey, OnboardingPortalTheme> = {
       "bg-[#272e79] text-white shadow-[0_20px_38px_-24px_rgba(39,46,121,0.45)] hover:bg-[#1f255f]",
     heroClass:
       "bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(39,46,121,0.92)_56%,_rgba(243,91,123,0.72)_100%)] text-white",
+    progressBarClass:
+      "bg-[linear-gradient(90deg,_#272e79_0%,_#3347b7_100%)]",
+    progressDoneClass: "border-[#3347b7] bg-[#272e79] text-white",
     softPanelClass: "border-[#dce3ff] bg-[#f7f9ff]",
     tabActiveClass: "border-[#dce3ff] bg-[#eef1ff] text-[#3347b7]",
   },
@@ -183,6 +201,9 @@ const themes: Record<OnboardingPortalKey, OnboardingPortalTheme> = {
       "bg-[#173246] text-white shadow-[0_20px_38px_-24px_rgba(23,50,70,0.45)] hover:bg-[#1c405b]",
     heroClass:
       "bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(23,50,70,0.92)_52%,_rgba(31,122,140,0.78)_100%)] text-white",
+    progressBarClass:
+      "bg-[linear-gradient(90deg,_#173246_0%,_#1f7a8c_100%)]",
+    progressDoneClass: "border-[#1f7a8c] bg-[#173246] text-white",
     softPanelClass: "border-[#d4e8ec] bg-[#f4fbfc]",
     tabActiveClass: "border-[#d2ecef] bg-[#eefafa] text-[#116c78]",
   },
@@ -193,6 +214,9 @@ const themes: Record<OnboardingPortalKey, OnboardingPortalTheme> = {
       "bg-[#1d3557] text-white shadow-[0_20px_38px_-24px_rgba(29,53,87,0.45)] hover:bg-[#274875]",
     heroClass:
       "bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(35,64,142,0.92)_56%,_rgba(96,165,250,0.72)_100%)] text-white",
+    progressBarClass:
+      "bg-[linear-gradient(90deg,_#1d3557_0%,_#23408e_100%)]",
+    progressDoneClass: "border-[#23408e] bg-[#1d3557] text-white",
     softPanelClass: "border-[#dbe6fb] bg-[#f7faff]",
     tabActiveClass: "border-[#d9e6ff] bg-[#eef4ff] text-[#23408e]",
   },
@@ -203,6 +227,9 @@ const themes: Record<OnboardingPortalKey, OnboardingPortalTheme> = {
       "bg-[#0f766e] text-white shadow-[0_20px_38px_-24px_rgba(15,118,110,0.45)] hover:bg-[#115e59]",
     heroClass:
       "bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(15,118,110,0.9)_54%,_rgba(45,212,191,0.72)_100%)] text-white",
+    progressBarClass:
+      "bg-[linear-gradient(90deg,_#0f766e_0%,_#14b8a6_100%)]",
+    progressDoneClass: "border-[#14b8a6] bg-[#0f766e] text-white",
     softPanelClass: "border-[#d9ece8] bg-[#f4fcfb]",
     tabActiveClass: "border-[#d8ece8] bg-[#eefaf8] text-[#0f766e]",
   },
@@ -213,6 +240,9 @@ const themes: Record<OnboardingPortalKey, OnboardingPortalTheme> = {
       "bg-[#c2410c] text-white shadow-[0_20px_38px_-24px_rgba(194,65,12,0.45)] hover:bg-[#9a3412]",
     heroClass:
       "bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(64,32,16,0.94)_48%,_rgba(194,65,12,0.84)_100%)] text-white",
+    progressBarClass:
+      "bg-[linear-gradient(90deg,_#7c2d12_0%,_#c2410c_100%)]",
+    progressDoneClass: "border-[#ea580c] bg-[#c2410c] text-white",
     softPanelClass: "border-[#f2dfd0] bg-[#fffaf6]",
     tabActiveClass: "border-[#f2dfd0] bg-[#fff7ef] text-[#b45309]",
   },
@@ -223,8 +253,24 @@ const themes: Record<OnboardingPortalKey, OnboardingPortalTheme> = {
       "bg-[#15803d] text-white shadow-[0_20px_38px_-24px_rgba(21,128,61,0.45)] hover:bg-[#166534]",
     heroClass:
       "bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(22,101,52,0.9)_54%,_rgba(74,222,128,0.72)_100%)] text-white",
+    progressBarClass:
+      "bg-[linear-gradient(90deg,_#166534_0%,_#22c55e_100%)]",
+    progressDoneClass: "border-[#22c55e] bg-[#15803d] text-white",
     softPanelClass: "border-[#d9ebde] bg-[#f5fbf7]",
     tabActiveClass: "border-[#d9ebde] bg-[#f4fbf6] text-[#166534]",
+  },
+  ADMINISTRATOR: {
+    accentTextClass: "text-[#334155]",
+    badgeClass: "border-[#dbe4ee] bg-[#f6f8fb] text-[#334155]",
+    buttonClass:
+      "bg-[#1f2937] text-white shadow-[0_20px_38px_-24px_rgba(31,41,55,0.45)] hover:bg-[#111827]",
+    heroClass:
+      "bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(31,41,55,0.92)_54%,_rgba(100,116,139,0.72)_100%)] text-white",
+    progressBarClass:
+      "bg-[linear-gradient(90deg,_#1f2937_0%,_#475569_100%)]",
+    progressDoneClass: "border-[#475569] bg-[#1f2937] text-white",
+    softPanelClass: "border-[#dbe4ee] bg-[#f8fafc]",
+    tabActiveClass: "border-[#dbe4ee] bg-[#f6f8fb] text-[#334155]",
   },
 };
 
@@ -488,15 +534,15 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
     portalLabel: "Affiliate",
     basePath: "/affiliate/onboarding",
     heroEyebrow: "Affiliate Marketer Onboarding",
-    heroTitle: "Affiliate onboarding menunjukkan skenario extension disetujui dan peserta kembali belajar di OMS.",
+    heroTitle: "Affiliate onboarding menunjukkan skenario extension disetujui dan user kembali membaca materi remedial di OMS.",
     heroDescription:
-      "Dummy flow ini memperlihatkan cabang ketika 3 bulan terlewati, atasan menyetujui perpanjangan training, dan user kembali masuk ke OMS untuk remedial lanjutan.",
+      "Dummy flow ini memperlihatkan cabang ketika 3 bulan terlewati, atasan menyetujui perpanjangan training, lalu user kembali ke OMS untuk membaca ulang materi sebelum remedial berikutnya.",
     trainingWindowMonths: 3,
     startedAt: "2025-12-15T08:00:00Z",
     deadlineAt: "2026-03-15T17:00:00Z",
     overallStatus: "returned_to_oms",
     statusSummary:
-      "Perpanjangan training disetujui. User kembali ke OMS dan wajib mengulang materi tertentu sebelum exam remedial berikutnya.",
+      "Perpanjangan training disetujui. User kembali ke OMS, sedang membaca ulang materi stage 2, lalu melanjutkan remedial.",
     mentorName: "Affiliate Growth Academy",
     managerName: "Lina Partner Supervisor",
     lmsStatus: "Returned to OMS after approved extension",
@@ -524,7 +570,7 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         title: "Selling mechanics, promo cycle, dan reporting",
         targetWindow: "Minggu 4-8",
         objective: "Peserta wajib lulus materi penjualan dan pelaporan.",
-        status: "remedial",
+        status: "reading",
         materials: [
           material("aff-book-3", "Selling script dan objection handling", 45, "completed", "2026-01-20T08:00:00Z", "2026-01-20T08:48:00Z", "Materi ini diulang pada masa extension."),
           material("aff-book-4", "Promo reporting dan conversion dashboard", 40, "reading", "2026-03-28T10:00:00Z", null, "Sedang dibaca ulang setelah extension disetujui."),
@@ -532,7 +578,7 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         assessment: assessment("Selling mastery exam", 40, 45, 78, 70, "remedial", "2026-02-25T10:00:00Z", "2026-02-25T16:00:00Z", 2, "Masih perlu satu remedial lagi. OMS menampilkan attempt tersisa."),
         checkpoints: [
           "Extension membawa user kembali ke OMS, bukan langsung ke LMS.",
-          "Materi yang gagal harus dipelajari ulang sebelum tombol mulai ujian aktif lagi.",
+          "Materi yang gagal harus dipelajari ulang sebelum tombol mulai remedial aktif secara real.",
         ],
       },
       {
@@ -540,8 +586,8 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         phase: "Tahap 3",
         title: "Final sales readiness",
         targetWindow: "Minggu 9-12",
-        objective: "Tahap final tetap dikunci sampai remedial tahap 2 lulus.",
-        status: "waiting_exam",
+        objective: "Tahap final belum aktif sampai remedial tahap 2 lulus.",
+        status: "pending",
         materials: [
           material("aff-book-5", "Partner success plan", 30, "pending", null, null, "Belum dibuka karena tahap sebelumnya belum lulus."),
         ],
@@ -593,10 +639,59 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         objective: "Talent memahami etika brand, disclosure, dan komunikasi campaign.",
         status: "passed",
         materials: [
-          material("inf-book-1", "Brand ethics playbook", 35, "completed", "2025-12-03T08:00:00Z", "2025-12-03T08:38:00Z", "Materi dasar influencer onboarding."),
-          material("inf-book-2", "Disclosure policy dan escalation channel", 32, "completed", "2025-12-04T08:20:00Z", "2025-12-04T08:55:00Z", "Menjadi prasyarat ujian tahap pertama."),
+          material(
+            "inf-book-1",
+            "Brand ethics playbook",
+            35,
+            "completed",
+            "2025-12-03T08:00:00Z",
+            "2025-12-03T08:38:00Z",
+            "Materi dasar influencer onboarding.",
+            { resourceType: "ebook" }
+          ),
+          material(
+            "inf-book-2",
+            "Kickoff campaign deck",
+            18,
+            "completed",
+            "2025-12-03T08:45:00Z",
+            "2025-12-03T09:05:00Z",
+            "Slide pembuka untuk memahami alur campaign dan target brand.",
+            { resourceType: "ppt" }
+          ),
+          material(
+            "inf-book-3",
+            "Disclosure policy dan escalation channel",
+            32,
+            "completed",
+            "2025-12-04T08:20:00Z",
+            "2025-12-04T08:55:00Z",
+            "Menjadi prasyarat ujian tahap pertama.",
+            { resourceType: "pdf" }
+          ),
+          material(
+            "inf-book-4",
+            "Checklist caption, hashtag, dan CTA",
+            14,
+            "completed",
+            "2025-12-04T09:10:00Z",
+            "2025-12-04T09:24:00Z",
+            "Checklist singkat yang wajib dibaca sebelum ujian.",
+            { resourceType: "worksheet" }
+          ),
         ],
-        assessment: assessment("Campaign ethics exam", 30, 30, 75, 80, "passed", "2025-12-05T10:00:00Z", "2025-12-05T13:00:00Z", 0, "Tahap awal lulus."),
+        assessment: assessment(
+          "Campaign ethics exam",
+          70,
+          30,
+          75,
+          80,
+          "passed",
+          "2025-12-05T10:00:00Z",
+          "2025-12-05T13:00:00Z",
+          0,
+          "Tahap awal lulus."
+        ),
         checkpoints: ["Score admin membuka akses ke materi eksekusi campaign."],
       },
       {
@@ -607,10 +702,69 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         objective: "Talent harus lulus materi eksekusi konten dan quality review.",
         status: "failed_window",
         materials: [
-          material("inf-book-3", "Content checklist dan script alignment", 45, "completed", "2026-01-10T09:00:00Z", "2026-01-10T09:47:00Z", "Materi remedial utama."),
-          material("inf-book-4", "Reporting metrics dan admin handoff", 40, "completed", "2026-01-12T08:00:00Z", "2026-01-12T08:44:00Z", "Sudah dibaca penuh, tetapi exam tetap gagal."),
+          material(
+            "inf-book-5",
+            "Content checklist dan script alignment",
+            45,
+            "completed",
+            "2026-01-10T09:00:00Z",
+            "2026-01-10T09:47:00Z",
+            "Materi remedial utama.",
+            { resourceType: "ebook" }
+          ),
+          material(
+            "inf-book-6",
+            "Campaign flow deck untuk review internal",
+            22,
+            "completed",
+            "2026-01-10T10:00:00Z",
+            "2026-01-10T10:24:00Z",
+            "PPT ini menjelaskan tahapan submit draft dan approval.",
+            { resourceType: "ppt" }
+          ),
+          material(
+            "inf-book-7",
+            "Reporting metrics dan admin handoff",
+            40,
+            "completed",
+            "2026-01-12T08:00:00Z",
+            "2026-01-12T08:44:00Z",
+            "Sudah dibaca penuh, tetapi exam tetap gagal.",
+            { resourceType: "pdf" }
+          ),
+          material(
+            "inf-book-8",
+            "Template reporting harian",
+            12,
+            "completed",
+            "2026-01-12T08:55:00Z",
+            "2026-01-12T09:08:00Z",
+            "Worksheet untuk latihan sebelum ujian.",
+            { resourceType: "worksheet" }
+          ),
+          material(
+            "inf-book-9",
+            "Failure case library",
+            26,
+            "completed",
+            "2026-01-12T09:15:00Z",
+            "2026-01-12T09:42:00Z",
+            "Kumpulan studi kasus gagal campaign yang ikut keluar di soal essay.",
+            { resourceType: "ebook" }
+          ),
         ],
-        assessment: assessment("Content execution exam", 45, 55, 78, 63, "failed_window", "2026-02-26T10:00:00Z", "2026-02-26T16:30:00Z", 3, "Remedial sudah 3 kali dan masih di bawah ambang lulus."),
+        assessment: assessment(
+          "Content execution exam",
+          75,
+          55,
+          78,
+          63,
+          "failed_window",
+          "2026-02-26T10:00:00Z",
+          "2026-02-26T16:30:00Z",
+          3,
+          "Remedial sudah 3 kali dan masih di bawah ambang lulus."
+        ),
         checkpoints: [
           "Jika 3 bulan terlewati dan remedial habis, sistem menandai gagal training.",
           "Atasan masih boleh mengajukan extension, tetapi keputusan akhir bisa ditolak.",
@@ -624,9 +778,29 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         objective: "Tahap final tidak pernah terbuka karena tahap 2 tidak lulus.",
         status: "pending",
         materials: [
-          material("inf-book-5", "Final capstone campaign", 35, "pending", null, null, "Tetap terkunci karena user gagal sebelum final gate."),
+          material(
+            "inf-book-10",
+            "Final capstone campaign",
+            35,
+            "pending",
+            null,
+            null,
+            "Tetap terkunci karena user gagal sebelum final gate.",
+            { resourceType: "ebook" }
+          ),
         ],
-        assessment: assessment("Final influencer readiness exam", 50, 65, 80, null, "locked", null, null, 0, "Tidak aktif karena user sudah gagal onboarding."),
+        assessment: assessment(
+          "Final influencer readiness exam",
+          75,
+          65,
+          80,
+          null,
+          "locked",
+          null,
+          null,
+          0,
+          "Tidak aktif karena user sudah gagal onboarding."
+        ),
         checkpoints: [
           "User tidak bisa lanjut ke LMS.",
           "Status akun berubah menjadi nonaktif.",
@@ -653,18 +827,18 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
     portalLabel: "Community",
     basePath: "/community/onboarding",
     heroEyebrow: "Community Partner Onboarding",
-    heroTitle: "Community onboarding memonitor materi, exam master, dan jalur remedial aktif.",
+    heroTitle: "Community onboarding menampilkan user yang sudah selesai membaca materi dan siap mulai ujian pertama.",
     heroDescription:
-      "Skenario ini masih berada di tengah program. User sudah selesai satu tahap, tahap berikutnya masuk remedial, dan semua histori remedial tetap terlihat di OMS.",
+      "Skenario ini menunjukkan cabang in-progress yang paling dasar: tahap pertama sudah lulus, tahap kedua seluruh materinya selesai, dan user tinggal menekan mulai ujian pertama.",
     trainingWindowMonths: 3,
     startedAt: "2026-02-10T08:00:00Z",
     deadlineAt: "2026-05-10T17:00:00Z",
-    overallStatus: "remedial",
+    overallStatus: "in_progress",
     statusSummary:
-      "Masih dalam jendela onboarding 3 bulan, tetapi stage kedua perlu remedial sebelum lanjut final gate.",
+      "Masih dalam jendela onboarding 3 bulan. Stage kedua sudah siap ujian pertama, sedangkan final gate masih menunggu hasil tahap ini.",
     mentorName: "Community Development Team",
     managerName: "Sari Partnership Lead",
-    lmsStatus: "Remain in OMS until remedial passes",
+    lmsStatus: "Remain in OMS until stage 2 exam passes",
     stages: [
       {
         id: "community-intro",
@@ -686,15 +860,15 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         title: "Activation planning, collaboration flow, dan documentation",
         targetWindow: "Minggu 4-8",
         objective: "Partner wajib paham activation plan, follow up, dan dokumentasi lapangan.",
-        status: "remedial",
+        status: "waiting_exam",
         materials: [
-          material("com-book-3", "Activation planning workbook", 40, "completed", "2026-03-01T09:00:00Z", "2026-03-01T09:44:00Z", "Sudah dibaca ulang untuk remedial pertama."),
+          material("com-book-3", "Activation planning workbook", 40, "completed", "2026-03-01T09:00:00Z", "2026-03-01T09:44:00Z", "Semua materi tahap 2 sudah selesai dibaca."),
           material("com-book-4", "Field documentation dan stakeholder update", 35, "completed", "2026-03-02T10:00:00Z", "2026-03-02T10:36:00Z", "Menjadi sumber soal master exam tahap 2."),
         ],
-        assessment: assessment("Activation mastery exam", 40, 42, 78, 72, "remedial", "2026-03-05T10:00:00Z", "2026-03-05T16:00:00Z", 1, "Admin publish score dan mewajibkan remedial pertama."),
+        assessment: assessment("Activation mastery exam", 40, 42, 78, null, "ready", null, null, 0, "Semua materi selesai. User belum pernah ujian dan siap memulai attempt pertama."),
         checkpoints: [
-          "OMS menampilkan remedial ke-1 dari maksimal 3 kali.",
-          "Jika lulus remedial, stage final akan terbuka otomatis.",
+          "Begitu semua materi selesai, tombol mulai ujian pertama langsung aktif.",
+          "Jika lulus ujian tahap 2, stage final akan terbuka otomatis.",
         ],
       },
       {
@@ -702,10 +876,10 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
         phase: "Tahap 3",
         title: "Final readiness dan LMS gate",
         targetWindow: "Minggu 9-12",
-        objective: "Tahap final masih terkunci menunggu remedial stage 2.",
-        status: "waiting_exam",
+        objective: "Tahap final masih terkunci menunggu ujian stage 2 selesai dan lulus.",
+        status: "pending",
         materials: [
-          material("com-book-5", "Community success blueprint", 30, "pending", null, null, "Belum aktif sampai remedial tahap 2 lulus."),
+          material("com-book-5", "Community success blueprint", 30, "pending", null, null, "Belum aktif sampai ujian stage 2 lulus."),
         ],
         assessment: assessment("Final community readiness exam", 45, 50, 80, null, "locked", null, null, 0, "Terkunci sampai stage 2 lulus."),
         checkpoints: ["LMS hanya terbuka setelah semua stage passed."],
@@ -713,7 +887,7 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
     ],
     certificates: [
       { id: "com-cert-1", title: "Community starter badge", owner: "Community Development Team", status: "issued", issuedAt: "2026-02-13T14:00:00Z", note: "Sertifikat stage 1." },
-      { id: "com-cert-2", title: "Activation mastery badge", owner: "Community Development Team", status: "pending", issuedAt: null, note: "Menunggu remedial stage 2 lulus." },
+      { id: "com-cert-2", title: "Activation mastery badge", owner: "Community Development Team", status: "pending", issuedAt: null, note: "Menunggu ujian stage 2 selesai dan lulus." },
       { id: "com-cert-3", title: "LMS activation certificate", owner: "LMS Gatekeeper", status: "blocked", issuedAt: null, note: "Belum dapat diterbitkan karena final gate masih terkunci." },
     ],
     extensionRequest: {
@@ -726,7 +900,344 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
     },
     theme: themes.COMMUNITY,
   },
+  ADMINISTRATOR: {
+    portalKey: "ADMINISTRATOR",
+    portalLabel: "Administrator",
+    basePath: "/portal-administrator/onboarding",
+    heroEyebrow: "OMS Administrator Workspace",
+    heroTitle:
+      "Kelola onboarding 6 portal dari satu workspace admin.",
+    heroDescription:
+      "Administrator memantau progres employee, supplier, influencer, affiliate, customer, dan community, lalu melihat materi existing mana yang dipakai di tahap onboarding tiap portal.",
+    trainingWindowMonths: 3,
+    startedAt: "2026-03-08T08:00:00Z",
+    deadlineAt: "2026-06-08T17:00:00Z",
+    overallStatus: "in_progress",
+    statusSummary:
+      "Fokus workspace ini adalah monitoring progres lintas portal dan pemetaan materi existing ke tahap onboarding satu portal atau beberapa portal sekaligus.",
+    mentorName: "Dina Governance Lead",
+    managerName: "Raka System Owner",
+    lmsStatus: "Tidak relevan di workspace admin",
+    stages: [
+      {
+        id: "administrator-foundation",
+        phase: "Tahap 1",
+        title: "Portal landscape, role matrix, dan kontrol akses dasar",
+        targetWindow: "Minggu 1-2",
+        objective:
+          "Administrator memahami peta portal, hirarki role, dan prinsip pemberian akses minimum.",
+        status: "passed",
+        materials: [
+          material(
+            "admin-book-1",
+            "OMS admin handbook dan governance primer",
+            40,
+            "completed",
+            "2026-03-09T08:10:00Z",
+            "2026-03-09T08:56:00Z",
+            "Materi dasar untuk memahami ruang kerja administrator.",
+            { resourceType: "pdf" }
+          ),
+          material(
+            "admin-book-2",
+            "Portal mapping, access role, dan approval path",
+            35,
+            "completed",
+            "2026-03-10T09:00:00Z",
+            "2026-03-10T09:41:00Z",
+            "Materi ini wajib selesai sebelum exam tahap fondasi."
+          ),
+        ],
+        assessment: assessment(
+          "Administrator foundation exam",
+          30,
+          32,
+          78,
+          86,
+          "passed",
+          "2026-03-11T08:00:00Z",
+          "2026-03-11T10:30:00Z",
+          0,
+          "Lulus tanpa remedial. Lanjut ke kontrol operasional admin."
+        ),
+        checkpoints: [
+          "Admin wajib paham struktur portal dan parent-child akses.",
+          "Pemberian akses harus mengikuti prinsip least privilege.",
+        ],
+      },
+      {
+        id: "administrator-control",
+        phase: "Tahap 2",
+        title: "Access governance, audit discipline, dan notification control",
+        targetWindow: "Minggu 3-6",
+        objective:
+          "Administrator menyiapkan pengelolaan role, audit trail, dan template notifikasi operasional.",
+        status: "waiting_exam",
+        materials: [
+          material(
+            "admin-book-3",
+            "Hak akses, approval escalation, dan review berkala",
+            45,
+            "completed",
+            "2026-03-17T13:00:00Z",
+            "2026-03-17T13:51:00Z",
+            "Semua materi wajib selesai sebelum ujian tata kelola akses."
+          ),
+          material(
+            "admin-book-4",
+            "Audit log, template notifikasi, dan incident trace",
+            42,
+            "completed",
+            "2026-03-18T14:05:00Z",
+            "2026-03-18T14:53:00Z",
+            "Materi ini menjadi dasar soal audit dan komunikasi sistem.",
+            { resourceType: "worksheet" }
+          ),
+        ],
+        assessment: assessment(
+          "Administrator control exam",
+          45,
+          44,
+          80,
+          null,
+          "ready",
+          null,
+          null,
+          0,
+          "Belum pernah ujian. Admin siap memulai attempt pertama."
+        ),
+        checkpoints: [
+          "Ujian baru aktif setelah materi akses dan audit selesai seluruhnya.",
+          "Nilai minimal 80 untuk lanjut ke tahap publishing dan release gate.",
+        ],
+      },
+      {
+        id: "administrator-release",
+        phase: "Tahap 3",
+        title: "Release readiness, approval hygiene, dan closing governance",
+        targetWindow: "Minggu 7-12",
+        objective:
+          "Tahap final berfokus pada kesiapan release, checklist approval, dan penutupan governance cycle.",
+        status: "pending",
+        materials: [
+          material(
+            "admin-book-5",
+            "Release gate, rollback notes, dan final governance checklist",
+            38,
+            "pending",
+            null,
+            null,
+            "Belum aktif sampai tahap 2 dinyatakan lulus.",
+            { resourceType: "ppt" }
+          ),
+        ],
+        assessment: assessment(
+          "Administrator release exam",
+          40,
+          40,
+          82,
+          null,
+          "locked",
+          null,
+          null,
+          0,
+          "Terkunci sampai admin lulus tahap governance control."
+        ),
+        checkpoints: [
+          "Tahap final hanya terbuka setelah tahap 2 lulus.",
+          "Checklist release harus sinkron dengan approval hygiene.",
+        ],
+      },
+    ],
+    certificates: [
+      {
+        id: "admin-cert-1",
+        title: "Administrator foundation badge",
+        owner: "OMS Governance Team",
+        status: "issued",
+        issuedAt: "2026-03-11T15:00:00Z",
+        note: "Sertifikat fondasi admin sudah terbit.",
+      },
+      {
+        id: "admin-cert-2",
+        title: "Administrator control badge",
+        owner: "OMS Governance Team",
+        status: "pending",
+        issuedAt: null,
+        note: "Menunggu ujian tahap 2 selesai dan lulus.",
+      },
+      {
+        id: "admin-cert-3",
+        title: "Administrator release certificate",
+        owner: "OMS Governance Team",
+        status: "blocked",
+        issuedAt: null,
+        note: "Belum aktif karena tahap final masih terkunci.",
+      },
+    ],
+    extensionRequest: {
+      status: "not_needed",
+      requestedBy: null,
+      requestedAt: null,
+      decidedBy: null,
+      decidedAt: null,
+      note: "Masih dalam window normal onboarding admin.",
+    },
+    theme: themes.ADMINISTRATOR,
+  },
 };
 
+const stageFourBlueprints: Record<
+  OnboardingPortalKey,
+  {
+    idSuffix: string;
+    title: string;
+    targetWindow: string;
+    objective: string;
+    materialTitle: string;
+    assessmentTitle: string;
+    checkpoint: string;
+    resourceType?: OnboardingMaterialType;
+  }
+> = {
+  EMPLOYEE: {
+    idSuffix: "handoff",
+    title: "Role readiness, handoff, dan 30-day alignment",
+    targetWindow: "Minggu 9-12",
+    objective:
+      "Peserta menutup onboarding dengan handoff ke atasan, rencana 30 hari, dan kesiapan kerja mandiri.",
+    materialTitle: "30-day readiness checklist dan handoff notes",
+    assessmentTitle: "Role readiness final validation",
+    checkpoint: "Tahap 4 menjadi penutup onboarding sebelum handoff dinyatakan final.",
+    resourceType: "worksheet",
+  },
+  SUPPLIER: {
+    idSuffix: "service-readiness",
+    title: "Service readiness, handoff, dan vendor sign-off",
+    targetWindow: "Minggu 9-12",
+    objective:
+      "Partner supplier memastikan standard service, sign-off akhir, dan kesiapan operasional pasca onboarding.",
+    materialTitle: "Vendor sign-off pack dan service readiness guide",
+    assessmentTitle: "Supplier readiness validation",
+    checkpoint: "Tahap 4 memastikan partner siap masuk fase layanan rutin.",
+    resourceType: "pdf",
+  },
+  CUSTOMER: {
+    idSuffix: "go-live",
+    title: "Go-live readiness, handoff, dan success guardrail",
+    targetWindow: "Minggu 9-12",
+    objective:
+      "Customer menutup onboarding dengan kesiapan go-live, handoff, dan guardrail pasca aktivasi.",
+    materialTitle: "Go-live checklist dan customer success guardrail",
+    assessmentTitle: "Customer go-live validation",
+    checkpoint: "Tahap 4 menandai readiness akhir sebelum handoff penuh.",
+    resourceType: "pdf",
+  },
+  AFFILIATE: {
+    idSuffix: "growth-handoff",
+    title: "Growth handoff, payout readiness, dan closing review",
+    targetWindow: "Minggu 9-12",
+    objective:
+      "Affiliate menutup onboarding dengan kesiapan payout, handoff ke tim growth, dan closing review.",
+    materialTitle: "Affiliate payout readiness dan closing playbook",
+    assessmentTitle: "Affiliate closing validation",
+    checkpoint: "Tahap 4 dipakai untuk memastikan aktivitas growth siap dijalankan stabil.",
+    resourceType: "ppt",
+  },
+  INFLUENCER: {
+    idSuffix: "publishing-readiness",
+    title: "Campaign closure, handoff, dan publishing readiness",
+    targetWindow: "Minggu 9-12",
+    objective:
+      "Influencer memastikan campaign close-out, disiplin dokumentasi, dan kesiapan publishing pasca onboarding.",
+    materialTitle: "Campaign closure pack dan publishing readiness deck",
+    assessmentTitle: "Influencer publishing validation",
+    checkpoint: "Tahap 4 mengunci kesiapan akhir sebelum user sepenuhnya aktif.",
+    resourceType: "ppt",
+  },
+  COMMUNITY: {
+    idSuffix: "program-handoff",
+    title: "Program handoff, reporting close-out, dan final alignment",
+    targetWindow: "Minggu 9-12",
+    objective:
+      "Partner komunitas menyelesaikan handoff program, close-out reporting, dan alignment akhir lintas tim.",
+    materialTitle: "Program handoff kit dan close-out reporting sheet",
+    assessmentTitle: "Community final alignment validation",
+    checkpoint: "Tahap 4 menjadi penutup alignment sebelum onboarding dianggap tuntas.",
+    resourceType: "worksheet",
+  },
+  ADMINISTRATOR: {
+    idSuffix: "workspace-stewardship",
+    title: "Publishing governance, rollout sign-off, dan workspace stewardship",
+    targetWindow: "Minggu 9-12",
+    objective:
+      "Administrator menutup onboarding dengan kesiapan publishing, sign-off rollout, dan stewardship workspace.",
+    materialTitle: "Admin rollout sign-off dan stewardship checklist",
+    assessmentTitle: "Administrator stewardship validation",
+    checkpoint: "Tahap 4 memastikan admin siap menjaga workspace secara berkelanjutan.",
+    resourceType: "worksheet",
+  },
+};
+
+const buildStageFour = (scenario: OnboardingScenario): OnboardingStage => {
+  const blueprint = stageFourBlueprints[scenario.portalKey];
+  const lastStage = scenario.stages.at(-1);
+  const isCompleted = scenario.overallStatus === "passed_to_lms";
+  const completedAt =
+    lastStage?.assessment.reviewedAt ??
+    lastStage?.assessment.submittedAt ??
+    scenario.deadlineAt;
+
+  return {
+    id: `${scenario.portalKey.toLowerCase()}-${blueprint.idSuffix}`,
+    phase: "Tahap 4",
+    title: blueprint.title,
+    targetWindow: blueprint.targetWindow,
+    objective: blueprint.objective,
+    status: isCompleted ? "passed" : "pending",
+    materials: [
+      material(
+        `${scenario.portalKey.toLowerCase()}-book-6`,
+        blueprint.materialTitle,
+        30,
+        isCompleted ? "completed" : "pending",
+        isCompleted ? completedAt : null,
+        isCompleted ? completedAt : null,
+        isCompleted
+          ? "Tahap 4 sudah selesai sebagai penutup onboarding."
+          : "Belum aktif sampai tahap sebelumnya dinyatakan lulus.",
+        { resourceType: blueprint.resourceType }
+      ),
+    ],
+    assessment: assessment(
+      blueprint.assessmentTitle,
+      35,
+      25,
+      80,
+      isCompleted ? lastStage?.assessment.score ?? 88 : null,
+      isCompleted ? "passed" : "locked",
+      isCompleted ? completedAt : null,
+      isCompleted ? completedAt : null,
+      0,
+      isCompleted
+        ? "Tahap penutup sudah tervalidasi."
+        : "Terkunci sampai tahap sebelumnya selesai dan lulus."
+    ),
+    checkpoints: [blueprint.checkpoint],
+  };
+};
+
+const scenariosWithFourStages = Object.fromEntries(
+  Object.entries(scenarios).map(([portalKey, scenario]) => [
+    portalKey,
+    scenario.stages.length >= 4
+      ? scenario
+      : {
+          ...scenario,
+          stages: [...scenario.stages, buildStageFour(scenario)],
+        },
+  ])
+) as Record<OnboardingPortalKey, OnboardingScenario>;
+
 export const getOnboardingScenario = (portalKey: OnboardingPortalKey) =>
-  scenarios[portalKey];
+  scenariosWithFourStages[portalKey];

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
+import { invalidateProfile } from "./useProfile";
 
 export type AccessLevel = "READ" | "CRUD";
 
@@ -191,6 +192,7 @@ export const invalidateAccessSummary = () => {
   accessSummaryStore.loading = false;
   accessSummaryStore.initialized = false;
   accessSummaryStore.request = null;
+  invalidateProfile();
   emitAccessSummaryChange();
 };
 

@@ -11,7 +11,6 @@ type MasterAccessRoleItem = {
   displayName: string;
   route: string | null;
   parentKey: string | null;
-  orderIndex: number;
   isActive: boolean;
   isDeleted: boolean;
 };

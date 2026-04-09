@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../lib/api";
+import { useMemo } from "react";
 import {
   canChooseOmsProgram,
   getOmsProgramPath,
   resolveDefaultOmsProgram,
-  type OmsUserProfile,
 } from "../lib/oms-portal";
+import { useProfile } from "./useProfile";
 
 type UseOmsProgramAccessOptions = {
   enabled?: boolean;
@@ -15,50 +14,7 @@ export const useOmsProgramAccess = (
   targetProgram?: string,
   { enabled = true }: UseOmsProgramAccessOptions = {}
 ) => {
-  const [profile, setProfile] = useState<OmsUserProfile | null>(null);
-  const [loading, setLoading] = useState(enabled);
-
-  useEffect(() => {
-    if (!enabled) {
-      setProfile(null);
-      setLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    apiFetch("/profile", {
-      method: "GET",
-      credentials: "include",
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (!isMounted) {
-          return;
-        }
-
-        if (ok && data?.response) {
-          setProfile(data.response as OmsUserProfile);
-          return;
-        }
-
-        setProfile(null);
-      })
-      .catch(() => {
-        if (isMounted) {
-          setProfile(null);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [enabled]);
+  const { profile, loading } = useProfile({ enabled });
 
   const canChooseProgram = useMemo(
     () => (enabled ? canChooseOmsProgram(profile) : false),
