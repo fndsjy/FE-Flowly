@@ -1,8 +1,12 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import isOnboardingExamPath from "../../features/onboarding/isOnboardingExamPath";
 import OnboardingPortalWorkspace from "../../features/onboarding/OnboardingPortalWorkspace";
+import PortalOnboardingDashboard from "../../features/onboarding/PortalOnboardingDashboard";
 import { invalidateAccessSummary } from "../../hooks/useAccessSummary";
+import { useResponsiveSidebar } from "../../hooks/useResponsiveSidebar";
 import { apiFetch } from "../../lib/api";
+import ProtectedRoute from "../../ProtectedRoute";
 import SupplierSidebar, {
   type SupplierUserProfile,
 } from "../components/SupplierSidebar";
@@ -117,9 +121,17 @@ const supplierPicFields: SupplierProfileField[] = [
 ];
 
 const SupplierPage = () => {
-  const [isOpen, setIsOpen] = useState(true);
   const [user, setUser] = useState<SupplierUserProfile | null>(null);
+  const location = useLocation();
+  const {
+    isDesktop,
+    isSidebarOpen,
+    isDesktopExpanded,
+    toggleSidebar,
+    closeMobileSidebar,
+  } = useResponsiveSidebar();
   const navigate = useNavigate();
+  const isExamMode = isOnboardingExamPath(location.pathname);
 
   useEffect(() => {
     let isMounted = true;
@@ -165,23 +177,47 @@ const SupplierPage = () => {
     }
   };
 
+  if (isExamMode) {
+    return (
+      <Routes>
+        <Route
+          path="onboarding/*"
+          element={<OnboardingPortalWorkspace portalKey="SUPPLIER" />}
+        />
+        <Route path="*" element={<Navigate to="/supplier/onboarding" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-[#f3f8fb] text-slate-900">
       <SupplierSidebar
-        isOpen={isOpen}
-        onToggle={() => setIsOpen((current) => !current)}
+        isOpen={isSidebarOpen}
+        isDesktop={isDesktop}
+        onToggle={toggleSidebar}
+        onCloseMobile={closeMobileSidebar}
         user={user}
         onLogout={handleLogout}
       />
 
       <main
-        className={`min-h-screen flex-1 transition-all duration-300 ${
-          isOpen ? "ml-64" : "ml-16"
+        className={`min-h-screen min-w-0 flex-1 transition-[margin] duration-300 ${
+          isDesktop ? (isDesktopExpanded ? "lg:ml-64" : "lg:ml-16") : ""
         }`}
       >
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(42,168,161,0.14),_transparent_32%),linear-gradient(180deg,_#f7fbfb_0%,_#edf3ff_100%)] px-6 py-6 md:px-8">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(42,168,161,0.14),_transparent_32%),linear-gradient(180deg,_#f7fbfb_0%,_#edf3ff_100%)] px-4 pb-6 pt-16 sm:px-6 md:px-8 lg:pt-6 2xl:px-10">
           <Routes>
-            <Route index element={<SupplierOverview user={user} />} />
+            <Route
+              index
+              element={
+                <PortalOnboardingDashboard
+                  portalKey="SUPPLIER"
+                  userName={user?.name ?? null}
+                  userRole={user?.roleName ?? null}
+                  workspaceLabel="Supplier Workspace"
+                />
+              }
+            />
             <Route
               path="onboarding/*"
               element={<OnboardingPortalWorkspace portalKey="SUPPLIER" />}
@@ -272,11 +308,19 @@ const SupplierPage = () => {
             <Route path="profile" element={<SupplierProfile user={user} />} />
             <Route
               path="administrator"
-              element={<SupplierAdministratorPage user={user} />}
+              element={
+                <ProtectedRoute adminOnly>
+                  <SupplierAdministratorPage user={user} />
+                </ProtectedRoute>
+              }
             />
             <Route
               path="administrator/suppliers"
-              element={<SupplierAdministratorSuppliersPage user={user} />}
+              element={
+                <ProtectedRoute adminOnly>
+                  <SupplierAdministratorSuppliersPage user={user} />
+                </ProtectedRoute>
+              }
             />
             <Route path="*" element={<Navigate to="/supplier" replace />} />
           </Routes>
@@ -527,105 +571,6 @@ const SupplierProfileSectionCard = ({
       ) : null}
       <div className={description ? "mt-5" : "mt-4"}>{children}</div>
     </section>
-  );
-};
-
-const SupplierOverview = ({ user }: { user: SupplierUserProfile | null }) => {
-  return (
-    <div className="space-y-6">
-      <PageHero
-        eyebrow="Supplier Workspace"
-        title="Sidebar supplier sekarang punya konteks sendiri"
-        description="Konteks supplier saya pisahkan dari employee. Jadi profile di footer tetap ada di bawah sidebar, tetapi saat diklik tetap tinggal di area `/supplier/*`."
-        chips={[
-          "Namespace /supplier/*",
-          "Static sidebar for draft",
-          user?.name ? `Signed in as ${user.name}` : "Memuat user",
-        ]}
-      />
-
-      <StatsGrid
-        items={[
-          {
-            label: "Context",
-            value: "Supplier Only",
-            helper: "Tidak lagi membaca menu employee atau route /me.",
-          },
-          {
-            label: "Footer",
-            value: "Profile + Logout",
-            helper: "Tetap berada di bawah seperti permintaan awal.",
-          },
-          {
-            label: "Mode",
-            value: "Draft UI",
-            helper: "Bisa review tampilan dulu walau backend belum ada.",
-          },
-          {
-            label: "Future",
-            value: "Ready for forms",
-            helper: "Isi menu dan layar supplier bebas dikembangkan sendiri.",
-          },
-        ]}
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className={`${cardClass} p-6 md:p-7`}>
-          <SectionTitle
-            eyebrow="Blueprint"
-            title="Ruang kerja supplier"
-            description="Empat section ini sekarang sudah dipetakan sebagai rancangan supplier sehingga nanti form, table, dan state-nya tidak menempel ke employee."
-          />
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <BulletCard
-              title="Onboarding"
-              items={[
-                "Form intake supplier baru",
-                "Legal dan finance review lane",
-                "PIC internal dan eksternal",
-              ]}
-            />
-            <BulletCard
-              title="Directory"
-              items={[
-                "List supplier dengan filter kategori",
-                "Quick view supplier card",
-                "Status active, review, dan hold",
-              ]}
-            />
-            <BulletCard
-              title="Documents"
-              items={[
-                "Legal, commercial, quality pack",
-                "Reminder expiry dokumen",
-                "Approval timeline dan revision notes",
-              ]}
-            />
-            <BulletCard
-              title="Performance"
-              items={[
-                "Scorecard SLA supplier",
-                "Issue breakdown dan action queue",
-                "Priority matrix strategic dan recover",
-              ]}
-            />
-          </div>
-        </section>
-
-        <section className={`${cardClass} p-6 md:p-7`}>
-          <SectionTitle
-            eyebrow="Why this fix"
-            title="Kenapa lebih aman"
-            description="Masalah sebelumnya muncul karena footer profile melempar ke `/me`. Sekarang profile supplier hidup di route sendiri."
-          />
-          <div className="mt-6 space-y-3 text-sm leading-7 text-slate-700">
-            <p>Avatar dan nama di footer mengarah ke `/supplier/profile`.</p>
-            <p>Menu di sidebar bersifat statis dulu, jadi belum tergantung access-role employee.</p>
-            <p>Ruang supplier tetap bisa dikembangkan walau backend supplier belum tersedia.</p>
-          </div>
-        </section>
-      </div>
-    </div>
   );
 };
 

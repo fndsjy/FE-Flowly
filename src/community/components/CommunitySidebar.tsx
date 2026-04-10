@@ -18,7 +18,9 @@ export type CommunityUserProfile = {
 
 type CommunitySidebarProps = {
   isOpen: boolean;
+  isDesktop: boolean;
   onToggle: () => void;
+  onCloseMobile: () => void;
   user: CommunityUserProfile | null;
   onLogout: () => void;
 };
@@ -56,6 +58,10 @@ const getCommunityMenuIcon = (resourceKey: string) => {
     return <i className="fa-solid fa-graduation-cap h-5 w-5" aria-hidden="true"></i>;
   }
 
+  if (normalized === "COMMUNITY_LEARNING" || normalized.includes("LEARNING")) {
+    return <i className="fa-solid fa-book-open-reader h-5 w-5" aria-hidden="true"></i>;
+  }
+
   if (
     normalized === "COMMUNITY_ADMIN" ||
     normalized === "ADMIN" ||
@@ -73,7 +79,9 @@ const getCommunityMenuIcon = (resourceKey: string) => {
 
 const CommunitySidebar = ({
   isOpen,
+  isDesktop,
   onToggle,
+  onCloseMobile,
   user,
   onLogout,
 }: CommunitySidebarProps) => {
@@ -130,16 +138,69 @@ const CommunitySidebar = ({
   const isProfileActive =
     location.pathname === "/community/profile" ||
     location.pathname.startsWith("/community/profile/");
+  const isAdminUser = user?.roleLevel === 1;
+  const visibleMenuItems = menuItems.filter(
+    (item) => isAdminUser || !item.resourceKey.toUpperCase().includes("ADMIN")
+  );
+  const dismissMobileSidebar = () => {
+    if (!isDesktop) {
+      onCloseMobile();
+    }
+  };
 
   return (
-    <aside
-      className={`fixed left-0 top-0 z-50 h-screen bg-gray-950 text-white transition-all duration-300 ${
-        isOpen ? "w-64" : "w-16"
-      }`}
-    >
+    <>
+      {!isDesktop && !isOpen ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="fixed left-4 top-4 z-[60] inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-[0_20px_40px_-24px_rgba(15,23,42,0.8)]"
+          aria-label="Buka sidebar community"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+        </button>
+      ) : null}
+
+      {!isDesktop && isOpen ? (
+        <button
+          type="button"
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[1px]"
+          aria-label="Tutup sidebar community"
+        />
+      ) : null}
+
+      <aside
+        className={`fixed left-0 top-0 z-50 h-[100dvh] bg-gray-950 text-white transition-all duration-300 ease-out ${
+          isDesktop
+            ? isOpen
+              ? "w-64 translate-x-0"
+              : "w-16 translate-x-0"
+            : isOpen
+              ? "w-[calc(100vw-1rem)] max-w-[18rem] translate-x-0 shadow-[0_32px_80px_-36px_rgba(15,23,42,0.85)]"
+              : "w-[calc(100vw-1rem)] max-w-[18rem] -translate-x-full"
+        }`}
+      >
       <div className="flex items-center justify-between border-b border-white/10 p-4">
         {isOpen ? (
-          <Link to="/community" className="mx-auto transition-transform hover:scale-[1.03]">
+          <Link
+            to="/"
+            onClick={dismissMobileSidebar}
+            className="mx-auto transition-transform hover:scale-[1.03]"
+          >
             <img
               src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
               alt="Logo Domas"
@@ -182,18 +243,21 @@ const CommunitySidebar = ({
         </button>
       </div>
 
-      <nav className="mt-6 pb-32 pl-2">
-        {menuItems.map((item) => {
+      <nav className={`mt-6 overflow-y-auto pb-32 ${isDesktop ? "pl-2" : "px-2"}`}>
+        {visibleMenuItems.map((item) => {
           const active = isItemActive(item);
 
           return (
             <div key={item.id} className="group relative overflow-hidden">
               <Link
                 to={item.path}
+                onClick={dismissMobileSidebar}
                 aria-current={active ? "page" : undefined}
                 className={`flex w-full items-center rounded-lg p-3 transition-colors ${
                   active
-                    ? "rounded-l-lg rounded-r-none border border-r-0 border-white/35 bg-gradient-to-r from-[#16a34a] via-gray-950 to-gray-950 font-semibold text-white"
+                    ? isOpen
+                      ? "border border-white/35 bg-gradient-to-r from-[#16a34a] via-gray-950 to-gray-950 pr-8 font-semibold text-white"
+                      : "rounded-lg border border-white/35 bg-gradient-to-r from-[#16a34a] via-gray-950 to-gray-950 font-semibold text-white"
                     : "text-gray-300 hover:bg-white/8"
                 }`}
               >
@@ -219,9 +283,9 @@ const CommunitySidebar = ({
 
               {active && isOpen ? (
                 <div
-                  className="absolute right-0 top-1/2 h-0 w-0 -translate-y-1/2 border-b-[24px] border-r-[24px] border-t-[24px] border-b-gray-950 border-r-[#f0fdf4] border-t-gray-950"
                   aria-hidden="true"
-                ></div>
+                  className="pointer-events-none absolute right-0 top-1/2 h-0 w-0 -translate-y-1/2 border-b-[24px] border-l-0 border-r-[24px] border-t-[24px] border-b-gray-950 border-r-gray-50 border-t-gray-950"
+                />
               ) : null}
 
               {!isOpen ? (
@@ -239,7 +303,10 @@ const CommunitySidebar = ({
           <div className={`flex gap-3 px-2 ${isOpen ? "items-start" : "flex-col items-center"}`}>
             <button
               type="button"
-              onClick={() => navigate("/community/profile")}
+              onClick={() => {
+                dismissMobileSidebar();
+                navigate("/community/profile");
+              }}
               className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white shadow-md transition ${
                 isProfileActive
                   ? "bg-[#16a34a] ring-2 ring-white/25"
@@ -254,6 +321,7 @@ const CommunitySidebar = ({
               <div className="min-w-0 flex-1">
                 <Link
                   to="/community/profile"
+                  onClick={dismissMobileSidebar}
                   className={`block truncate font-semibold leading-tight transition-colors ${
                     isProfileActive ? "text-white" : "text-slate-100 hover:text-white"
                   }`}
@@ -266,7 +334,10 @@ const CommunitySidebar = ({
 
                 <button
                   type="button"
-                  onClick={onLogout}
+                  onClick={() => {
+                    dismissMobileSidebar();
+                    onLogout();
+                  }}
                   className="mt-2 flex items-center gap-2 text-sm text-gray-300 transition-colors hover:text-emerald-300"
                 >
                   <i className="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
@@ -282,6 +353,7 @@ const CommunitySidebar = ({
         ) : (
           <Link
             to="/login"
+            onClick={dismissMobileSidebar}
             className="mx-2 flex items-center gap-2 rounded-lg p-3 text-gray-300 transition-colors hover:bg-white/8"
           >
             <i className="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
@@ -289,7 +361,8 @@ const CommunitySidebar = ({
           </Link>
         )}
       </div>
-    </aside>
+      </aside>
+    </>
   );
 };
 

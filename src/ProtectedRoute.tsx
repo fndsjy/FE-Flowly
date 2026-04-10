@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAccessSummary } from "./hooks/useAccessSummary";
-import { apiFetch } from "./lib/api";
+import { useProfile } from "./hooks/useProfile";
 import { hasMenuAccess } from "./lib/access";
 
 interface Props {
@@ -10,11 +10,13 @@ interface Props {
   adminOnly?: boolean;
 }
 
-type UserProfile = {
-  roleLevel?: number;
-};
-
-const PUBLIC_MENU_KEYS = new Set(["PROSEDUR", "FISHBONE"]);
+const PUBLIC_MENU_KEYS = new Set([
+  "EMPLOYEE_DASHBOARD",
+  "EMPLOYEE_LEARNING",
+  "PROSEDUR",
+  "FISHBONE",
+  "ONBOARDING",
+]);
 
 const ProtectedRoute = ({ children, menuKey, adminOnly = false }: Props) => {
   const normalizedMenuKey = (menuKey ?? "").trim().toUpperCase();
@@ -22,8 +24,7 @@ const ProtectedRoute = ({ children, menuKey, adminOnly = false }: Props) => {
     !adminOnly &&
     normalizedMenuKey.length > 0 &&
     !PUBLIC_MENU_KEYS.has(normalizedMenuKey);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const { profile, loading: authLoading } = useProfile();
   const {
     loading: accessLoading,
     isAdmin,
@@ -33,38 +34,6 @@ const ProtectedRoute = ({ children, menuKey, adminOnly = false }: Props) => {
   } = useAccessSummary({
     enabled: requiresAccessSummary,
   });
-
-  useEffect(() => {
-    let isMounted = true;
-
-    apiFetch("/profile", {
-      method: "GET",
-      credentials: "include",
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (!isMounted) return;
-        if (ok && data?.response) {
-          setProfile(data.response);
-        } else {
-          setProfile(null);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setProfile(null);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setAuthLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const isLoggedIn = Boolean(profile);
   const isAdminUser = isAdmin || profile?.roleLevel === 1;

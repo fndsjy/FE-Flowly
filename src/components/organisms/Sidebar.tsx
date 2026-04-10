@@ -1,29 +1,25 @@
-// src/components/organisms/Sidebar.tsx
-
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSignInAlt, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
 import { apiFetch } from "../../lib/api";
 import { hasMenuAccess } from "../../lib/access";
-import { normalizeAppRoute } from "../../lib/routes";
+import { isExternalRoute, normalizeAppRoute } from "../../lib/routes";
 import {
   invalidateAccessSummary,
   useAccessSummary,
 } from "../../hooks/useAccessSummary";
+import { useProfile } from "../../hooks/useProfile";
 
-/* ---------------- USER TYPE ---------------- */
-interface UserProfile {
-  userId: string;
-  username: string;
-  name: string;
-  badgeNumber: string;
-  department: string | null;
-  roleId: string;
-  roleName: string;
-  roleLevel: number;
-}
+const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
+
+const getIsDesktopViewport = () => {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.matchMedia(DESKTOP_BREAKPOINT_QUERY).matches;
+};
 
 type ResourceType = "MENU" | "MODULE" | "SYSTEM";
 
@@ -34,7 +30,6 @@ interface MasterAccessRoleItem {
   displayName: string;
   route: string | null;
   parentKey: string | null;
-  orderIndex: number;
   isActive: boolean;
   isDeleted: boolean;
 }
@@ -52,18 +47,24 @@ interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   portalKey?: string;
+  isDesktop?: boolean;
+  onCloseMobile?: () => void;
 }
 
 const Sidebar = ({
   isOpen,
   onToggle,
   portalKey = "EMPLOYEE",
+  isDesktop,
+  onCloseMobile,
 }: SidebarProps) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [internalIsDesktop, setInternalIsDesktop] = useState(getIsDesktopViewport);
+  const [fallbackMobileOpen, setFallbackMobileOpen] = useState(false);
   const [moduleRoutesByParent, setModuleRoutesByParent] = useState<Map<string, string[]>>(
     new Map()
   );
+  const { profile: user } = useProfile();
   const {
     loading: accessLoading,
     isAdmin: accessIsAdmin,
@@ -72,31 +73,60 @@ const Sidebar = ({
     orgScope,
   } = useAccessSummary();
   const navigate = useNavigate();
-
   const location = useLocation();
-  const publicMenuKeys = new Set(["PROSEDUR", "FISHBONE"]);
+  const usesExternalViewportControl = typeof isDesktop === "boolean";
+  const isDesktopLayout = isDesktop ?? internalIsDesktop;
+  const isSidebarVisible = isDesktopLayout
+    ? isOpen
+    : usesExternalViewportControl
+      ? isOpen
+      : fallbackMobileOpen;
   const normalizedPortalKey = portalKey.trim().toUpperCase();
+  const publicMenuKeys = new Set([
+    "EMPLOYEE_DASHBOARD",
+    "EMPLOYEE_LEARNING",
+    "PROSEDUR",
+    "FISHBONE",
+    "ONBOARDING",
+  ]);
 
-  /* ---------------- FETCH USER PROFILE ---------------- */
   useEffect(() => {
-    apiFetch("/profile", {
-      method: "GET",
-      credentials: "include", // penting agar cookies session ikut dikirim
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.response) {
-          setUser(data.response);
-        } else {
-          setUser(null);
-        }
-      })
-      .catch(() => {
-        setUser(null);
-      });
+    const mediaQuery = window.matchMedia(DESKTOP_BREAKPOINT_QUERY);
+    const handleViewportChange = (event: MediaQueryListEvent) => {
+      setInternalIsDesktop(event.matches);
+      if (event.matches) {
+        setFallbackMobileOpen(false);
+      }
+    };
+
+    setInternalIsDesktop(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleViewportChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleViewportChange);
+    };
   }, []);
 
-  /* ---------------- FETCH MENU ---------------- */
+  const handleSidebarToggle = () => {
+    if (isDesktopLayout || usesExternalViewportControl) {
+      onToggle();
+      return;
+    }
+
+    setFallbackMobileOpen((current) => !current);
+  };
+
+  const dismissMobileSidebar = () => {
+    if (!isDesktopLayout) {
+      if (usesExternalViewportControl) {
+        onCloseMobile?.();
+        return;
+      }
+
+      setFallbackMobileOpen(false);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     const menuUrl = `/master-access-role?resourceType=MENU&portalKey=${encodeURIComponent(
@@ -116,7 +146,9 @@ const Sidebar = ({
         credentials: "include",
       }).then((res) => res.json()),
     ]).then(([menuResult, moduleResult]) => {
-      if (!isMounted) return;
+      if (!isMounted) {
+        return;
+      }
 
       if (menuResult.status === "fulfilled") {
         const response: MasterAccessRoleItem[] = Array.isArray(menuResult.value?.response)
@@ -160,7 +192,9 @@ const Sidebar = ({
           )
           .forEach((item) => {
             const parentKey = item.parentKey?.toUpperCase();
-            if (!parentKey) return;
+            if (!parentKey) {
+              return;
+            }
 
             const routes = nextRoutes.get(parentKey) ?? [];
             routes.push(normalizeAppRoute(item.route));
@@ -178,7 +212,6 @@ const Sidebar = ({
     };
   }, [normalizedPortalKey]);
 
-  /* ---------------- LOGOUT ---------------- */
   const handleLogout = async () => {
     await apiFetch("/logout", {
       method: "POST",
@@ -186,26 +219,28 @@ const Sidebar = ({
     });
 
     invalidateAccessSummary();
-    setUser(null);
     navigate("/login", { replace: true });
   };
 
-  /* ---------------- FILTER MENU BY ROLE ---------------- */
   const visibleMenuItems = menuItems.filter((item) => {
     if (item.resourceType !== "MENU") {
       return false;
     }
+
     if (accessLoading) {
       return false;
     }
+
     const isAdmin = accessIsAdmin || user?.roleLevel === 1;
     if (isAdmin) {
       return true;
     }
+
     const normalizedKey = item.resourceKey.toUpperCase();
     if (normalizedKey === "ADMIN") {
       return false;
     }
+
     return hasMenuAccess({
       menuKey: normalizedKey,
       isAdmin,
@@ -217,7 +252,8 @@ const Sidebar = ({
   });
 
   const isPathActive = (targetPath: string) =>
-    location.pathname === targetPath || location.pathname.startsWith(`${targetPath}/`);
+    !isExternalRoute(targetPath) &&
+    (location.pathname === targetPath || location.pathname.startsWith(`${targetPath}/`));
 
   const isMenuActive = (item: MenuItem) => {
     if (isPathActive(item.path)) {
@@ -230,35 +266,28 @@ const Sidebar = ({
 
   const handleMenuClick = (path: string) => {
     const nextPath = normalizeAppRoute(path);
+    dismissMobileSidebar();
+
+    if (isExternalRoute(nextPath)) {
+      window.location.assign(nextPath);
+      return;
+    }
+
     if (location.pathname === nextPath) {
       return;
     }
+
     navigate(nextPath);
   };
 
   return (
-    <div
-      className={`fixed left-0 top-0 h-screen bg-gray-900 text-white transition-all duration-300 ${
-        isOpen ? "w-64" : "w-16"
-      } z-50`}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        {isOpen && (
-          <Link to="/" className="mx-auto hover:scale-110">
-            <img
-              src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
-              alt="Logo Domas"
-              width={80}
-            />
-          </Link>
-        )}
-
+    <>
+      {!isDesktopLayout && !isSidebarVisible ? (
         <button
-          onClick={onToggle}
-          className={`p-2 rounded text-white hover:bg-gray-800 transition-colors ${
-            isOpen ? "" : "ml-auto"
-          }`}
+          type="button"
+          onClick={handleSidebarToggle}
+          className="fixed left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))] z-[60] inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-950 text-white shadow-[0_20px_40px_-24px_rgba(15,23,42,0.8)]"
+          aria-label="Buka sidebar employee"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -267,124 +296,207 @@ const Sidebar = ({
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
-            {isOpen ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            ) : (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            )}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </button>
-      </div>
+      ) : null}
 
-      {/* Menu */}
-      <nav className="mt-6 pl-2">
-        {visibleMenuItems.map((item) => (
-            <div key={item.id} className="relative group overflow-hidden">
-              <button
-                type="button"
-                onClick={() => handleMenuClick(item.path)}
-                aria-current={isMenuActive(item) ? "page" : undefined}
-                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
-                  isMenuActive(item)
-                    ? "bg-gradient-to-r from-rose-400 via-gray-900 to-gray-900 text-white font-semibold border border-white"
-                    : "hover:bg-gray-700 text-gray-300"
-                }`}
+      {!isDesktopLayout && isSidebarVisible ? (
+        <button
+          type="button"
+          onClick={dismissMobileSidebar}
+          className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[1px]"
+          aria-label="Tutup sidebar employee"
+        />
+      ) : null}
+
+      <aside
+        className={`fixed left-0 top-0 z-50 h-[100dvh] bg-[#111827] text-white transition-all duration-300 ease-out ${
+          isDesktopLayout
+            ? isSidebarVisible
+              ? "w-64 translate-x-0"
+              : "w-16 translate-x-0"
+            : isSidebarVisible
+              ? "w-[min(20rem,calc(100vw-1rem))] translate-x-0 shadow-[0_32px_80px_-36px_rgba(15,23,42,0.85)]"
+              : "w-[min(20rem,calc(100vw-1rem))] -translate-x-full"
+        }`}
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between border-b border-gray-700 p-4">
+            {isSidebarVisible ? (
+              <Link
+                to="/"
+                onClick={dismissMobileSidebar}
+                className="mx-auto transition-transform hover:scale-105"
               >
-                <span
-                  className={`flex items-center justify-center flex-shrink-0 transition-transform duration-200 ${
-                    isOpen ? "mr-3" : "mx-auto scale-90"
+                <img
+                  src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+                  alt="Logo Domas"
+                  width={80}
+                />
+              </Link>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={handleSidebarToggle}
+              className={`rounded p-2 text-white transition-colors hover:bg-gray-800 ${
+                isSidebarVisible ? "" : "ml-auto"
+              }`}
+              aria-label={
+                isSidebarVisible ? "Tutup sidebar employee" : "Buka sidebar employee"
+              }
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                {isSidebarVisible ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                )}
+              </svg>
+            </button>
+          </div>
+
+          <nav className="mt-6 flex-1 overflow-y-auto pb-36 pl-2 pr-0">
+            {visibleMenuItems.map((item) => (
+              <div key={item.id} className="group relative overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => handleMenuClick(item.path)}
+                  aria-current={isMenuActive(item) ? "page" : undefined}
+                  className={`flex min-h-[48px] w-full items-center rounded-lg p-3 transition-colors ${
+                    isMenuActive(item)
+                      ? isSidebarVisible
+                        ? "border border-white bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] pr-8 font-semibold text-white"
+                        : "border border-white bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] font-semibold text-white"
+                      : "text-gray-300 hover:bg-gray-700"
                   }`}
                 >
-                  {item.icon}
-                </span>
-                {isOpen && <span>{item.label}</span>}
-              </button>
+                  <span
+                    className={`flex flex-shrink-0 items-center justify-center transition-transform duration-200 ${
+                      isSidebarVisible ? "mr-3" : "mx-auto scale-90"
+                    }`}
+                  >
+                    {item.icon}
+                  </span>
+                  {isSidebarVisible ? <span className="truncate">{item.label}</span> : null}
+                </button>
 
-              {/* Pointer segitiga */}
-              {isMenuActive(item) && isOpen && (
-                <div
-                  className="absolute right-0 top-1/2 -translate-y-1/2 w-0 h-0 
-                    border-t-24 border-b-24 border-r-24 border-l-0 
-                    border-t-gray-900 border-b-gray-900 border-r-gray-50"
-                ></div>
-              )}
+                {isMenuActive(item) && isSidebarVisible ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-0 top-1/2 h-0 w-0 -translate-y-1/2 border-b-[24px] border-l-0 border-r-[24px] border-t-[24px] border-b-[#111827] border-r-gray-50 border-t-[#111827]"
+                  ></div>
+                ) : null}
 
-              {/* Tooltip ketika tertutup */}
-              {!isOpen && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                  {item.label}
-                </div>
-              )}
-            </div>
-          ))}
-      </nav>
+                {!isSidebarVisible && isDesktopLayout ? (
+                  <div className="pointer-events-none absolute left-full ml-2 rounded bg-gray-800 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    {item.label}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </nav>
 
-      {/* USER FOOTER */}
-      <div className="absolute bottom-0 left-0 w-full py-2 border-t border-gray-700">
-        <div
-          className={`flex items-center gap-3 transition-all ${
-            isOpen ? "" : "flex-col"
-          }`}
-        >
-          {/* Avatar hanya muncul jika login */}
-          {user && (
-            <div className="ms-2 w-10 h-10 rounded-full bg-rose-400 flex items-center justify-center text-white text-xl font-semibold shadow-md" onClick={() => navigate("/me")}>
-              {user.name.charAt(0).toUpperCase()}
-            </div>
-          )}
-
-          {/* Jika user login → tampilkan nama + logout */}
-          {user && isOpen && (
-            <div className="flex-1">
-              <Link to="/me" className="space-y-4 font-medium leading-tight">
-                {user.name}
-              </Link>
-
-              <button
-                onClick={handleLogout}
-                className="my-1 text-sm w-full flex items-center gap-2 text-gray-300 hover:text-rose-700 transition-colors"
+          <div className="border-t border-gray-700 py-2">
+            {user ? (
+              <div
+                className={`flex gap-3 px-2 ${
+                  isSidebarVisible ? "items-start" : "flex-col items-center"
+                }`}
               >
-                <FontAwesomeIcon icon={faSignOutAlt} />
-                Logout
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissMobileSidebar();
+                    navigate("/me");
+                  }}
+                  className="ms-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-rose-400 text-xl font-semibold text-white shadow-md"
+                  aria-label="Buka profil employee"
+                >
+                  {user.name.charAt(0).toUpperCase()}
+                </button>
+
+                {isSidebarVisible ? (
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      to="/me"
+                      onClick={dismissMobileSidebar}
+                      className="block truncate text-base font-medium leading-tight text-white"
+                    >
+                      {user.name}
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dismissMobileSidebar();
+                        handleLogout();
+                      }}
+                      className="mt-1 flex items-center gap-2 text-sm text-gray-300 transition-colors hover:text-white"
+                    >
+                      <FontAwesomeIcon icon={faSignOutAlt} />
+                      Logout
+                    </button>
+                  </div>
+                ) : (
+                  <span className="max-w-full truncate text-[10px] text-gray-400">
+                    {user.name}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  dismissMobileSidebar();
+                  navigate("/login");
+                }}
+                className={`ml-2 flex w-full items-center gap-2 p-3 text-gray-300 transition-colors hover:bg-gray-700 ${
+                  isSidebarVisible ? "" : "justify-center pl-0"
+                }`}
+                aria-label="Login"
+              >
+                <FontAwesomeIcon icon={faSignInAlt} />
+                {isSidebarVisible ? "Login" : null}
               </button>
-            </div>
-          )}
-
-          {/* Nama kecil saat sidebar tertutup */}
-          {user && !isOpen && (
-            <span className="text-[10px] text-gray-400 mt-1">{user.name}</span>
-          )}
-
-          {/* Jika belum login → tampil tombol LOGIN */}
-          {!user && (
-            <button
-              onClick={() => navigate("/login")}
-              className="ml-2 w-full flex items-center gap-2 p-3 text-gray-300 hover:bg-gray-700 transition-colors"
-            >
-              <FontAwesomeIcon icon={faSignInAlt} />
-              {isOpen && "Login"}
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </aside>
+    </>
   );
 };
 
-/* ---------------- ICONS ---------------- */
-
 const getMenuIcon = (resourceKey: string) => {
   switch (resourceKey) {
+    case "EMPLOYEE_DASHBOARD":
+      return <i className="fa-solid fa-house h-5 w-5 mx-auto" aria-hidden="true"></i>;
+    case "EMPLOYEE_LEARNING":
+      return (
+        <i className="fa-solid fa-book-open-reader h-5 w-5 mx-auto" aria-hidden="true"></i>
+      );
     case "ORGANISASI":
       return <OrganizationIcon />;
     case "PROSEDUR":
@@ -424,11 +536,11 @@ const OrganizationIcon = () => (
 );
 
 const ProsedurIcon = () => (
-  <i className="fa-solid fa-file h-5 w-4 mx-auto ml-1"></i>
+  <i className="fa-solid fa-file h-5 w-4 mx-auto ml-1" aria-hidden="true"></i>
 );
 
 const FishBoneIcon = () => (
-  <i className="fa-solid fa-fish fa-rotate-180 h-5 w-4 mx-auto ml-1"></i>
+  <i className="fa-solid fa-fish fa-rotate-180 h-5 w-4 mx-auto ml-1" aria-hidden="true"></i>
 );
 
 const A3Icon = () => (
@@ -449,19 +561,19 @@ const A3Icon = () => (
 );
 
 const AbsensiIcon = () => (
-  <i className="fa-solid fa-fingerprint h-5 w-4 mx-auto ml-1"></i>
+  <i className="fa-solid fa-fingerprint h-5 w-4 mx-auto ml-1" aria-hidden="true"></i>
 );
 
 const HRDIcon = () => (
-  <i className="fa-solid fa-person h-5 w-4 mx-auto ml-1"></i>
+  <i className="fa-solid fa-person h-5 w-4 mx-auto ml-1" aria-hidden="true"></i>
 );
 
 const DefaultMenuIcon = () => (
-  <i className="fa-solid fa-circle h-4 w-4 mx-auto ml-1"></i>
+  <i className="fa-solid fa-circle h-4 w-4 mx-auto ml-1" aria-hidden="true"></i>
 );
 
 const AdministratorIcon = () => (
-  <i className="fa-solid fa-unlock h-4 w-4 mx-auto ml-1"></i>
+  <i className="fa-solid fa-unlock h-4 w-4 mx-auto ml-1" aria-hidden="true"></i>
 );
 
 export default Sidebar;

@@ -30,7 +30,6 @@ export type OmsPortalSource = {
   resourceKey: string;
   displayName?: string | null;
   route?: string | null;
-  orderIndex?: number | null;
   isActive?: boolean;
   isDeleted?: boolean;
 };
@@ -140,19 +139,44 @@ const OMS_PROGRAM_PRESETS: Record<string, OmsProgramPreset> = {
     maintenanceDescription:
       "Program community akan menjadi hub aktivitas komunitas, follow up event, dan komunikasi terstruktur di OMS.",
   },
+  ADMINISTRATOR: {
+    description:
+      "Workspace administrator disiapkan untuk onboarding admin, pengelolaan akses, audit, dan standar kontrol operasional OMS.",
+    blurb: "Kontrol administrator",
+    icon: "fa-solid fa-shield-halved",
+    accentClass: "from-[#1f2937] via-[#334155] to-[#64748b]",
+    accentSoftClass: "bg-[#f1f5f9]",
+    glowClass: "shadow-slate-500/15",
+    highlights: ["Onboarding admin", "Hak akses", "Audit trail"],
+    maintenanceTitle: "Workspace administrator sedang disiapkan",
+    maintenanceDescription:
+      "Program administrator akan menjadi ruang onboarding admin untuk akses, audit, dan governance OMS.",
+  },
 };
 
 const DEFAULT_OMS_PORTAL_SOURCES: OmsPortalSource[] = [
-  { resourceKey: "EMPLOYEE", displayName: "Employee", route: "/employee", orderIndex: 10 },
-  { resourceKey: "SUPPLIER", displayName: "Supplier", route: "/supplier", orderIndex: 20 },
-  { resourceKey: "CUSTOMER", displayName: "Customer", route: "/customer", orderIndex: 30 },
-  { resourceKey: "AFFILIATE", displayName: "Affiliate", route: "/affiliate", orderIndex: 40 },
-  { resourceKey: "INFLUENCER", displayName: "Influencer", route: "/influencer", orderIndex: 50 },
-  { resourceKey: "COMMUNITY", displayName: "Community", route: "/community", orderIndex: 60 },
+  { resourceKey: "EMPLOYEE", displayName: "Employee", route: "/employee" },
+  { resourceKey: "SUPPLIER", displayName: "Supplier", route: "/supplier" },
+  { resourceKey: "CUSTOMER", displayName: "Customer", route: "/customer" },
+  { resourceKey: "AFFILIATE", displayName: "Affiliate", route: "/affiliate" },
+  { resourceKey: "INFLUENCER", displayName: "Influencer", route: "/influencer" },
+  { resourceKey: "COMMUNITY", displayName: "Community", route: "/community" },
+  {
+    resourceKey: "ADMINISTRATOR",
+    displayName: "Administrator",
+    route: "/portal-administrator",
+  },
 ];
 
 const normalizeProgramKey = (value?: string | null) =>
   value?.trim().toUpperCase() ?? "";
+
+const DEFAULT_OMS_PORTAL_ORDER = new Map(
+  DEFAULT_OMS_PORTAL_SOURCES.map((item, index) => [
+    normalizeProgramKey(item.resourceKey),
+    index,
+  ])
+);
 
 const normalizeProgramRoute = (value?: string | null) => {
   const trimmed = value?.trim();
@@ -230,7 +254,29 @@ export const buildOmsProgramsFromAccessRoles = (
         item.isActive !== false &&
         item.isDeleted !== true
     )
-    .sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0))
+    .sort((left, right) => {
+      const leftOrder =
+        DEFAULT_OMS_PORTAL_ORDER.get(normalizeProgramKey(left.resourceKey)) ??
+        Number.MAX_SAFE_INTEGER;
+      const rightOrder =
+        DEFAULT_OMS_PORTAL_ORDER.get(normalizeProgramKey(right.resourceKey)) ??
+        Number.MAX_SAFE_INTEGER;
+
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      const leftName = left.displayName?.trim() ?? "";
+      const rightName = right.displayName?.trim() ?? "";
+      const displayCompare = leftName.localeCompare(rightName);
+      if (displayCompare !== 0) {
+        return displayCompare;
+      }
+
+      return normalizeProgramKey(left.resourceKey).localeCompare(
+        normalizeProgramKey(right.resourceKey)
+      );
+    })
     .map(createOmsProgramDefinition);
 
   return programs.length > 0 ? programs : DEFAULT_OMS_PROGRAMS;
@@ -247,8 +293,16 @@ export const canChooseOmsProgram = (
 ) => OMS_CHOOSER_ROLE_NAMES.has(normalizeRoleName(profile?.roleName));
 
 export const resolveDefaultOmsProgram = (
-  _profile?: OmsUserProfile | null
-): OmsProgramKey => EMPLOYEE_PROGRAM_KEY;
+  profile?: OmsUserProfile | null
+): OmsProgramKey => {
+  const normalizedRole = normalizeRoleName(profile?.roleName);
+
+  if (normalizedRole && OMS_PROGRAM_PRESETS[normalizedRole]) {
+    return normalizedRole;
+  }
+
+  return EMPLOYEE_PROGRAM_KEY;
+};
 
 export const getOmsProgramDefinition = (
   programKey?: OmsProgramKey | null,

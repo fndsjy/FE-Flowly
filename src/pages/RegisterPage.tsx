@@ -89,7 +89,7 @@ const RegisterPage = () => {
           <img
             src={`${import.meta.env.BASE_URL}images/register.png`}
             alt="Register Illustration"
-            className="w-64 drop-shadow-2xl animate-float"
+            className="w-80 drop-shadow-2xl animate-float"
           />
         </div>
 

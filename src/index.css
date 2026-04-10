@@ -13,6 +13,17 @@ body {
     color: black;
   }
 
+#root {
+  min-height: 100dvh;
+}
+
+@media (max-width: 1023px) {
+  .ml-16,
+  .ml-64 {
+    margin-left: 0 !important;
+  }
+}
+
 .chart-level-group > ul {
   flex-direction: column;
   align-items: center;

@@ -49,7 +49,6 @@ interface MasterAccessItem {
   resourceKey: string;
   displayName: string;
   parentKey: string | null;
-  orderIndex: number;
   isActive: boolean;
   isDeleted: boolean;
 }
@@ -104,7 +103,21 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   SBU_SUB: "SBU Sub",
 };
 
-const hiddenAccessKeys = new Set(["PROSEDUR", "FISHBONE", "A3", "ABSENSI", "ADMIN"]);
+const hiddenAccessKeys = new Set([
+  "EMPLOYEE_DASHBOARD",
+  "EMPLOYEE_LEARNING",
+  "PROSEDUR",
+  "FISHBONE",
+  "ONBOARDING",
+  "A3",
+  "ABSENSI",
+  "ADMIN",
+  "SUPPLIER_LEARNING",
+  "CUSTOMER_LEARNING",
+  "AFFILIATE_LEARNING",
+  "INFLUENCER_LEARNING",
+  "COMMUNITY_LEARNING",
+]);
 
 const buildAccessKey = (resourceType: ResourceType, resourceKey: string) =>
   `${resourceType}::${resourceKey}`;
@@ -120,6 +133,15 @@ const normalizeRoleName = (value?: string | null) => {
 };
 
 const normalizeKey = (value?: string | null) => (value ?? "").trim().toUpperCase();
+
+const compareMasterAccessItems = (left: MasterAccessItem, right: MasterAccessItem) => {
+  const displayCompare = left.displayName.localeCompare(right.displayName);
+  if (displayCompare !== 0) {
+    return displayCompare;
+  }
+
+  return left.resourceKey.localeCompare(right.resourceKey);
+};
 
 const formatEmployeeLabel = (employee?: EmployeeData | null) => {
   if (!employee) return "-";
@@ -246,7 +268,7 @@ const AccessRolePage = () => {
       .filter((item) => !item.isDeleted)
       .filter((item) => !shouldHide(item.resourceKey))
       .filter((item) => !hideOrgResources || normalizeKey(item.resourceKey) !== "ORGANISASI")
-      .sort((a, b) => a.orderIndex - b.orderIndex);
+      .sort(compareMasterAccessItems);
     for (const menu of menuList) {
       list.push({
         resourceType: "MENU",
@@ -268,7 +290,7 @@ const AccessRolePage = () => {
           && key !== "CHART"
           && key !== "CHART_MEMBER";
       })
-      .sort((a, b) => a.orderIndex - b.orderIndex);
+      .sort(compareMasterAccessItems);
     for (const moduleItem of moduleList) {
       list.push({
         resourceType: "MODULE",
@@ -537,7 +559,7 @@ const AccessRolePage = () => {
           : [];
         const cleaned = list
           .filter((item: MasterAccessItem) => item.resourceType === "MENU" && !item.isDeleted)
-          .sort((a: MasterAccessItem, b: MasterAccessItem) => a.orderIndex - b.orderIndex);
+          .sort(compareMasterAccessItems);
         setMenus(cleaned);
       }
 
@@ -556,7 +578,7 @@ const AccessRolePage = () => {
           : [];
         const cleaned = list
           .filter((item: MasterAccessItem) => item.resourceType === "MODULE" && !item.isDeleted)
-          .sort((a: MasterAccessItem, b: MasterAccessItem) => a.orderIndex - b.orderIndex);
+          .sort(compareMasterAccessItems);
         setModules(cleaned);
       }
 

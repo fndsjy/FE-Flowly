@@ -1,6 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/apioms";
 
-const buildApiUrl = (path: string) => {
+export const buildApiUrl = (path: string) => {
   if (/^https?:\/\//i.test(path)) {
     return path;
   }

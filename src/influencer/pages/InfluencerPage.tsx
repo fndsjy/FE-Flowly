@@ -1,8 +1,12 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { invalidateAccessSummary } from "../../hooks/useAccessSummary";
+import isOnboardingExamPath from "../../features/onboarding/isOnboardingExamPath";
+import { useResponsiveSidebar } from "../../hooks/useResponsiveSidebar";
 import OnboardingPortalWorkspace from "../../features/onboarding/OnboardingPortalWorkspace";
+import PortalOnboardingDashboard from "../../features/onboarding/PortalOnboardingDashboard";
 import { apiFetch } from "../../lib/api";
+import ProtectedRoute from "../../ProtectedRoute";
 import InfluencerSidebar, {
   type InfluencerUserProfile,
 } from "../components/InfluencerSidebar";
@@ -16,9 +20,6 @@ type InfluencerProfileField = {
   value: string;
   helper?: string;
 };
-
-const cardClass =
-  "rounded-[28px] border border-white/80 bg-white/88 shadow-[0_28px_80px_-50px_rgba(15,23,42,0.28)] backdrop-blur";
 
 const influencerPersonalFields: InfluencerProfileField[] = [
   { label: "Nama Lengkap", value: "Belum diisi" },
@@ -127,9 +128,17 @@ const influencerPicFields: InfluencerProfileField[] = [
 ];
 
 const InfluencerPage = () => {
-  const [isOpen, setIsOpen] = useState(true);
   const [user, setUser] = useState<InfluencerUserProfile | null>(null);
+  const location = useLocation();
+  const {
+    isDesktop,
+    isSidebarOpen,
+    isDesktopExpanded,
+    toggleSidebar,
+    closeMobileSidebar,
+  } = useResponsiveSidebar();
   const navigate = useNavigate();
+  const isExamMode = isOnboardingExamPath(location.pathname);
 
   useEffect(() => {
     let isMounted = true;
@@ -175,23 +184,47 @@ const InfluencerPage = () => {
     }
   };
 
+  if (isExamMode) {
+    return (
+      <Routes>
+        <Route
+          path="onboarding/*"
+          element={<OnboardingPortalWorkspace portalKey="INFLUENCER" />}
+        />
+        <Route path="*" element={<Navigate to="/influencer/onboarding" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-[#f6f7fb] text-slate-900">
       <InfluencerSidebar
-        isOpen={isOpen}
-        onToggle={() => setIsOpen((current) => !current)}
+        isOpen={isSidebarOpen}
+        isDesktop={isDesktop}
+        onToggle={toggleSidebar}
+        onCloseMobile={closeMobileSidebar}
         user={user}
         onLogout={handleLogout}
       />
 
       <main
-        className={`min-h-screen flex-1 transition-all duration-300 ${
-          isOpen ? "ml-64" : "ml-16"
+        className={`min-h-screen min-w-0 flex-1 transition-[margin] duration-300 ${
+          isDesktop ? (isDesktopExpanded ? "lg:ml-64" : "lg:ml-16") : ""
         }`}
       >
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.12),_transparent_24%),linear-gradient(180deg,_#fafafb_0%,_#f3f4f6_100%)] px-6 py-6 md:px-8">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.12),_transparent_24%),linear-gradient(180deg,_#fafafb_0%,_#f3f4f6_100%)] px-4 pb-6 pt-16 sm:px-6 md:px-8 lg:pt-6 2xl:px-10">
           <Routes>
-            <Route index element={<InfluencerDashboard user={user} />} />
+            <Route
+              index
+              element={
+                <PortalOnboardingDashboard
+                  portalKey="INFLUENCER"
+                  userName={user?.name ?? null}
+                  userRole={user?.roleName ?? null}
+                  workspaceLabel="Influencer Workspace"
+                />
+              }
+            />
             <Route
               path="onboarding/*"
               element={<OnboardingPortalWorkspace portalKey="INFLUENCER" />}
@@ -199,137 +232,24 @@ const InfluencerPage = () => {
             <Route path="profile" element={<InfluencerProfile user={user} />} />
             <Route
               path="administrator"
-              element={<InfluencerAdministratorPage user={user} />}
+              element={
+                <ProtectedRoute adminOnly>
+                  <InfluencerAdministratorPage user={user} />
+                </ProtectedRoute>
+              }
             />
             <Route
               path="administrator/influencers"
-              element={<InfluencerAdministratorInfluencersPage user={user} />}
+              element={
+                <ProtectedRoute adminOnly>
+                  <InfluencerAdministratorInfluencersPage user={user} />
+                </ProtectedRoute>
+              }
             />
             <Route path="*" element={<Navigate to="/influencer" replace />} />
           </Routes>
         </div>
       </main>
-    </div>
-  );
-};
-
-const PageHero = ({
-  eyebrow,
-  title,
-  description,
-  chips,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  chips: string[];
-}) => {
-  return (
-    <section className="overflow-hidden rounded-[34px] border border-white/80 bg-[linear-gradient(135deg,_rgba(15,23,42,0.98)_0%,_rgba(31,41,55,0.96)_54%,_rgba(249,115,22,0.9)_100%)] px-6 py-8 text-white shadow-[0_34px_100px_-48px_rgba(15,23,42,0.58)] md:px-8 md:py-10">
-      <p className="text-xs font-semibold uppercase tracking-[0.32em] text-white/70">
-        {eyebrow}
-      </p>
-      <h1 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight md:text-5xl">
-        {title}
-      </h1>
-      <p className="mt-4 max-w-3xl text-sm leading-8 text-white/80 md:text-base">
-        {description}
-      </p>
-      <div className="mt-6 flex flex-wrap gap-2">
-        {chips.map((chip) => (
-          <span
-            key={chip}
-            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/85"
-          >
-            {chip}
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-};
-
-const SectionTitle = ({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) => {
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-        {eyebrow}
-      </p>
-      <h2 className="mt-3 text-[28px] font-semibold tracking-[-0.03em] text-slate-900">
-        {title}
-      </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">{description}</p>
-    </div>
-  );
-};
-
-const StatsGrid = ({
-  items,
-}: {
-  items: Array<{ label: string; value: string; helper: string }>;
-}) => {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {items.map((item) => (
-        <article
-          key={item.label}
-          className="rounded-[26px] border border-[#e5e7eb] bg-[linear-gradient(180deg,_rgba(255,255,255,0.99)_0%,_rgba(249,250,251,0.98)_100%)] px-5 py-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)]"
-        >
-          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-400">
-            {item.label}
-          </p>
-          <p className="mt-3 text-[30px] font-semibold tracking-[-0.04em] text-slate-900">
-            {item.value}
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{item.helper}</p>
-        </article>
-      ))}
-    </div>
-  );
-};
-
-const BulletCard = ({ title, items }: { title: string; items: string[] }) => {
-  return (
-    <article className="rounded-[26px] border border-[#e5e7eb] bg-white/94 px-5 py-5 shadow-[0_18px_36px_-30px_rgba(15,23,42,0.18)]">
-      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-      <ul className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-        {items.map((item) => (
-          <li key={item} className="flex gap-3">
-            <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-[#f97316]"></span>
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </article>
-  );
-};
-
-const ValueGrid = ({
-  items,
-}: {
-  items: Array<{ label: string; value: string }>;
-}) => {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {items.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-[22px] border border-[#e5e7eb] bg-white/96 px-4 py-4 shadow-[0_14px_28px_-28px_rgba(15,23,42,0.2)]"
-        >
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-            {item.label}
-          </p>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-800">{item.value}</p>
-        </div>
-      ))}
     </div>
   );
 };
@@ -374,137 +294,6 @@ const ProfileSectionCard = ({
       <h2 className="mt-2 text-[28px] font-semibold leading-tight text-slate-900">{title}</h2>
       <div className="mt-5">{children}</div>
     </section>
-  );
-};
-
-const InfluencerDashboard = ({ user }: { user: InfluencerUserProfile | null }) => {
-  const campaignRows = [
-    ["Education", "Nadia Pramesti", "Instagram Reels", "Review produk lensa blue light"],
-    ["Conversion", "Rama Aditya", "TikTok", "Bundle frame fashion + diskon kode"],
-    ["Event", "Tasya Lestari", "YouTube", "Siap hadir di offline launching"],
-  ];
-
-  return (
-    <div className="space-y-6">
-      <PageHero
-        eyebrow="Influencer Workspace"
-        title="Portal influencer dipisah untuk talent, persona, dan campaign fit"
-        description="Workspace ini saya buat khusus untuk intake influencer, pemetaan audiens, dan readiness campaign supaya tidak tercampur dengan portal supplier atau customer."
-        chips={[
-          "Namespace /influencer/*",
-          "UI-only draft",
-          user?.name ? `Signed in as ${user.name}` : "Memuat user",
-        ]}
-      />
-
-      <StatsGrid
-        items={[
-          { label: "Talent", value: "86", helper: "Contoh total talent aktif dalam workspace." },
-          { label: "Tier", value: "3 lane", helper: "Nano, Micro, dan Macro." },
-          { label: "Campaign", value: "12 brief", helper: "Campaign yang siap dijalankan." },
-          { label: "Offline-ready", value: "78%", helper: "Talent yang bersedia hadir di event offline." },
-        ]}
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <section className={`${cardClass} p-6 md:p-7`}>
-          <SectionTitle
-            eyebrow="Talent Mapping"
-            title="Area utama portal influencer"
-            description="Struktur dashboard fokus ke persona audiens, campaign fit, performance signal, dan kesiapan kolaborasi."
-          />
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <BulletCard
-              title="Personal intake"
-              items={[
-                "Akun sosial media dan link platform utama",
-                "Domisili, bahasa, dan kontak langsung",
-                "Followers per platform untuk baseline reach",
-              ]}
-            />
-            <BulletCard
-              title="Audience fit"
-              items={[
-                "Topik utama konten dan gender audiens",
-                "Range usia mayoritas dari insight",
-                "Kota dengan interaksi tertinggi",
-              ]}
-            />
-            <BulletCard
-              title="Campaign proof"
-              items={[
-                "Riwayat brand collaboration",
-                "Best performing campaign dan metric",
-                "Riwayat kerja sama dengan brand optik",
-              ]}
-            />
-            <BulletCard
-              title="Collaboration readiness"
-              items={[
-                "Target posting per minggu dan story per hari",
-                "Willing hadir di event offline",
-                "Fee rate per campaign",
-              ]}
-            />
-          </div>
-        </section>
-
-        <section className={`${cardClass} p-6 md:p-7`}>
-          <SectionTitle
-            eyebrow="Workspace Notes"
-            title="Arah UI influencer"
-            description="Secara visual saya dorong lebih editorial dan campaign-oriented agar portal ini terasa berbeda dari customer dan supplier."
-          />
-          <div className="mt-6 space-y-3 text-sm leading-7 text-slate-700">
-            <p>Sidebar influencer baca menu dari `master_access_role` dan `portal_menu_map`.</p>
-            <p>Halaman profile memuat semua field intake dari form yang Anda lampirkan.</p>
-            <p>Administrator dipisah untuk list talent dan form entry ringan.</p>
-          </div>
-          <div className="mt-6">
-            <ValueGrid
-              items={[
-                { label: "Profile scope", value: "Personal, audience, portfolio, collaboration" },
-                { label: "Admin scope", value: "List influencer dan status readiness" },
-                { label: "Best fit", value: "Campaign brief, launch event, creator education" },
-                { label: "Next step", value: "Bisa lanjut ke analytics, brief, dan kontrak" },
-              ]}
-            />
-          </div>
-        </section>
-      </div>
-
-      <section className={`${cardClass} overflow-hidden`}>
-        <div className="border-b border-[#f1e0d5] px-6 py-5">
-          <SectionTitle
-            eyebrow="Campaign Preview"
-            title="Contoh board talent"
-            description="Table ini saya siapkan untuk preview talent yang siap dipakai campaign berdasarkan objective."
-          />
-        </div>
-        <div className="overflow-x-auto px-4 py-4 md:px-6">
-          <table className="min-w-full text-left">
-            <thead>
-              <tr className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                <th className="pb-3 pr-4">Objective</th>
-                <th className="pb-3 pr-4">Talent</th>
-                <th className="pb-3 pr-4">Platform</th>
-                <th className="pb-3">Brief</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaignRows.map((row) => (
-                <tr key={row[1]} className="border-t border-[#f3e4da] text-sm text-slate-700">
-                  <td className="py-4 pr-4 font-semibold text-slate-900">{row[0]}</td>
-                  <td className="py-4 pr-4">{row[1]}</td>
-                  <td className="py-4 pr-4">{row[2]}</td>
-                  <td className="py-4">{row[3]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
   );
 };
 
