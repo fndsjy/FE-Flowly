@@ -5,7 +5,7 @@ export type UserProfile = {
   userId: string;
   username: string;
   name: string;
-  badgeNumber: string | null;
+  cardNumber: string | null;
   department: string | null;
   departmentId?: number | null;
   employeeUserId?: number | null;
@@ -14,6 +14,7 @@ export type UserProfile = {
   roleLevel: number;
   email?: string | null;
   phone?: string | null;
+  mustChangePassword?: boolean;
 };
 
 type UseProfileOptions = {

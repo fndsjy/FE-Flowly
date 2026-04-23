@@ -540,7 +540,7 @@ const PilarPage = () => {
       {deleteConfirm.open && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white p-6 rounded-xl shadow-xl w-96">
-            <img src={`${import.meta.env.BASE_URL}images/delete-confirm.png`} alt="Delete Confirmation" className="w-40 mx-auto" />
+            <img src={`${import.meta.env.BASE_URL}images/delete-confirm.png`} alt="Delete Confirmation" className="w-80 mx-auto" />
             <h2 className="text-lg text-center font-semibold mt-4 mb-1">
               Hapus <span className="text-rose-500">{deleteConfirm.pilarName}</span>?
             </h2>

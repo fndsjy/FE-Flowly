@@ -10,6 +10,7 @@ import {
   useAccessSummary,
 } from "../../hooks/useAccessSummary";
 import { useProfile } from "../../hooks/useProfile";
+import { useToast } from "./MessageToast";
 
 const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
 
@@ -72,6 +73,7 @@ const Sidebar = ({
     moduleAccessMap,
     orgScope,
   } = useAccessSummary();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const usesExternalViewportControl = typeof isDesktop === "boolean";
@@ -82,6 +84,8 @@ const Sidebar = ({
       ? isOpen
       : fallbackMobileOpen;
   const normalizedPortalKey = portalKey.trim().toUpperCase();
+  const isPasswordResetRequired = Boolean(user?.mustChangePassword);
+  const homeLinkTarget = isPasswordResetRequired ? "/me" : "/";
   const publicMenuKeys = new Set([
     "EMPLOYEE_DASHBOARD",
     "EMPLOYEE_LEARNING",
@@ -222,6 +226,15 @@ const Sidebar = ({
     navigate("/login", { replace: true });
   };
 
+  const handleLockedNavigationAttempt = () => {
+    dismissMobileSidebar();
+    navigate("/me");
+    showToast(
+      "Selesaikan ganti password onboarding dulu. Menu lain akan aktif setelah password berhasil disimpan.",
+      "error"
+    );
+  };
+
   const visibleMenuItems = menuItems.filter((item) => {
     if (item.resourceType !== "MENU") {
       return false;
@@ -256,7 +269,13 @@ const Sidebar = ({
     (location.pathname === targetPath || location.pathname.startsWith(`${targetPath}/`));
 
   const isMenuActive = (item: MenuItem) => {
-    if (isPathActive(item.path)) {
+    const isAdmin = accessIsAdmin || user?.roleLevel === 1;
+    const targetPath =
+      isAdmin && item.resourceKey.toUpperCase() === "ONBOARDING"
+        ? "/portal-administrator/onboarding"
+        : item.path;
+
+    if (isPathActive(targetPath)) {
       return true;
     }
 
@@ -264,20 +283,25 @@ const Sidebar = ({
     return childRoutes.some((route) => isPathActive(route));
   };
 
-  const handleMenuClick = (path: string) => {
+  const handleMenuClick = (path: string, resourceKey?: string) => {
+    const isAdmin = accessIsAdmin || user?.roleLevel === 1;
     const nextPath = normalizeAppRoute(path);
+    const resolvedPath =
+      isAdmin && resourceKey?.toUpperCase() === "ONBOARDING"
+        ? "/portal-administrator/onboarding"
+        : nextPath;
     dismissMobileSidebar();
 
-    if (isExternalRoute(nextPath)) {
-      window.location.assign(nextPath);
+    if (isExternalRoute(resolvedPath)) {
+      window.location.assign(resolvedPath);
       return;
     }
 
-    if (location.pathname === nextPath) {
+    if (location.pathname === resolvedPath) {
       return;
     }
 
-    navigate(nextPath);
+    navigate(resolvedPath);
   };
 
   return (
@@ -330,7 +354,7 @@ const Sidebar = ({
           <div className="flex items-center justify-between border-b border-gray-700 p-4">
             {isSidebarVisible ? (
               <Link
-                to="/"
+                to={homeLinkTarget}
                 onClick={dismissMobileSidebar}
                 className="mx-auto transition-transform hover:scale-105"
               >
@@ -378,30 +402,64 @@ const Sidebar = ({
             </button>
           </div>
 
-          <nav className="mt-6 flex-1 overflow-y-auto pb-36 pl-2 pr-0">
+          <nav className="mt-6 flex-1 overflow-hidden pb-36 pl-2 pr-0">
+            {isPasswordResetRequired && isSidebarVisible ? (
+              <div className="mx-2 mb-4 rounded-[22px] border border-amber-300/20 bg-amber-400/10 px-4 py-4 text-sm leading-6 text-amber-100">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-100/70">
+                  Langkah Wajib
+                </p>
+                <p className="mt-2 font-semibold">
+                  Ganti password dulu sebelum membuka menu OMS lainnya.
+                </p>
+                <p className="mt-1 text-amber-100/80">
+                  Gunakan password sementara dari notifikasi onboarding, lalu simpan password baru Anda di halaman ini.
+                </p>
+              </div>
+            ) : null}
+
             {visibleMenuItems.map((item) => (
               <div key={item.id} className="group relative overflow-hidden">
+                {(() => {
+                  const isNavigationLocked = isPasswordResetRequired;
+
+                  return (
                 <button
                   type="button"
-                  onClick={() => handleMenuClick(item.path)}
+                  onClick={() =>
+                    isNavigationLocked
+                      ? handleLockedNavigationAttempt()
+                      : handleMenuClick(item.path, item.resourceKey)
+                  }
+                  aria-disabled={isNavigationLocked}
                   aria-current={isMenuActive(item) ? "page" : undefined}
                   className={`flex min-h-[48px] w-full items-center rounded-lg p-3 transition-colors ${
-                    isMenuActive(item)
+                    isNavigationLocked
+                      ? "cursor-not-allowed border border-white/5 bg-white/[0.03] text-gray-500"
+                      : isMenuActive(item)
                       ? isSidebarVisible
                         ? "border border-white bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] pr-8 font-semibold text-white"
                         : "border border-white bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] font-semibold text-white"
                       : "text-gray-300 hover:bg-gray-700"
                   }`}
-                >
-                  <span
-                    className={`flex flex-shrink-0 items-center justify-center transition-transform duration-200 ${
-                      isSidebarVisible ? "mr-3" : "mx-auto scale-90"
-                    }`}
                   >
-                    {item.icon}
-                  </span>
-                  {isSidebarVisible ? <span className="truncate">{item.label}</span> : null}
+                    <span
+                      className={`flex flex-shrink-0 items-center justify-center transition-transform duration-200 ${
+                        isSidebarVisible ? "mr-3" : "mx-auto scale-90"
+                      }`}
+                    >
+                      {item.icon}
+                    </span>
+                    {isSidebarVisible ? (
+                      <span className="truncate">{item.label}</span>
+                    ) : null}
+                    {isNavigationLocked && isSidebarVisible ? (
+                      <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/70">
+                        Kunci
+                      </span>
+                    ) : null}
                 </button>
+                  );
+                })()}
 
                 {isMenuActive(item) && isSidebarVisible ? (
                   <div
@@ -445,8 +503,14 @@ const Sidebar = ({
                       onClick={dismissMobileSidebar}
                       className="block truncate text-base font-medium leading-tight text-white"
                     >
-                      {user.name}
+                      {isPasswordResetRequired ? "Aktivasi akun OMS" : user.name}
                     </Link>
+
+                    {isPasswordResetRequired ? (
+                      <p className="mt-1 text-xs leading-5 text-amber-200">
+                        Menu lain dikunci sampai password onboarding diganti.
+                      </p>
+                    ) : null}
 
                     <button
                       type="button"

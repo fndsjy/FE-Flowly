@@ -630,7 +630,7 @@ const SBUPage = () => {
             <img
               src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
               alt="Delete Confirmation"
-              className="w-40 mx-auto"
+              className="w-80 mx-auto"
             />
             <h2 className="text-lg text-center font-semibold mt-4 mb-1">
               Hapus <span className="text-rose-500">{deleteConfirm.name}</span>?

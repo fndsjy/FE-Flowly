@@ -44,6 +44,43 @@ const formatDateTime = (value?: string | null) =>
       })
     : "-";
 
+const formatGapDuration = (
+  startedAt?: string | null,
+  referenceAt?: string | null
+) => {
+  if (!startedAt || !referenceAt) {
+    return "-";
+  }
+
+  const startedTime = new Date(startedAt).getTime();
+  const referenceTime = new Date(referenceAt).getTime();
+
+  if (Number.isNaN(startedTime) || Number.isNaN(referenceTime)) {
+    return "-";
+  }
+
+  const diffMinutes = Math.max(
+    0,
+    Math.round((startedTime - referenceTime) / (1000 * 60))
+  );
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} menit`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    const minutes = diffMinutes % 60;
+    return minutes > 0 ? `${diffHours} jam ${minutes} menit` : `${diffHours} jam`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  const remainingHours = diffHours % 24;
+  return remainingHours > 0
+    ? `${diffDays} hari ${remainingHours} jam`
+    : `${diffDays} hari`;
+};
+
 const formatCountdown = (totalSeconds: number) => {
   const safeSeconds = Math.max(0, totalSeconds);
   const hours = Math.floor(safeSeconds / 3600);
@@ -181,6 +218,24 @@ const getDependency = (stages: OnboardingStage[], index: number) => {
   return stages[index - 1]?.phase ?? null;
 };
 
+const getStageReference = (scenario: OnboardingScenario, index: number) => {
+  if (index <= 0) {
+    return {
+      label: "Start onboarding",
+      value: scenario.startedAt,
+    };
+  }
+
+  const previousStage = scenario.stages[index - 1];
+  const previousCompletedAt =
+    previousStage?.completedAt ?? previousStage?.passedAt ?? null;
+
+  return {
+    label: `Selesai ${previousStage?.phase ?? "tahap sebelumnya"}`,
+    value: previousCompletedAt,
+  };
+};
+
 const countRemedials = (scenario: OnboardingScenario) =>
   scenario.stages.reduce((sum, stage) => sum + stage.assessment.remedialCount, 0);
 
@@ -268,7 +323,7 @@ const PageShell = ({
               <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">1. Lihat alur tahapan dari atas ke bawah.</div>
               <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">2. Klik tahap aktif untuk membuka daftar materi di dalamnya.</div>
               <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">3. Tekan Mulai baca untuk membuka file di tab baru.</div>
-              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">4. Untuk demo UI, tombol mulai ujian tetap bisa dibuka agar alurnya bisa dicoba.</div>
+              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">{scenario.isRuntime ? "4. Materi di halaman ini sudah diambil dari setting onboarding aktual per tahap." : "4. Untuk demo UI, tombol mulai ujian tetap bisa dibuka agar alurnya bisa dicoba."}</div>
             </div>
           </div>
         </div>
@@ -334,16 +389,18 @@ const MaterialCard = ({
   item,
   scenario,
   order,
+  onRuntimeRefresh,
 }: {
   item: OnboardingMaterial;
   scenario: OnboardingScenario;
   order: number;
+  onRuntimeRefresh?: () => void;
 }) => (
   <article
     className={`rounded-[22px] border p-5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.16)] ${scenario.theme.softPanelClass}`}
   >
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div className="flex min-w-0 items-start gap-4">
+        <div className="flex min-w-0 items-start gap-4">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-lg font-semibold text-slate-900 shadow-[0_12px_24px_-18px_rgba(15,23,42,0.35)]">
           {order}
         </div>
@@ -354,17 +411,29 @@ const MaterialCard = ({
           <h3 className="mt-3 text-lg font-semibold leading-7 text-slate-900">
             {item.title}
           </h3>
+          <p className="mt-2 text-sm leading-7 text-slate-600">{item.note}</p>
         </div>
       </div>
 
-      <a
-        href={item.resourceUrl}
-        target="_blank"
-        rel="noreferrer"
-        className={`inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
-      >
-        Mulai baca
-      </a>
+      {item.resourceUrl ? (
+        <a
+          href={item.resourceUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => {
+            if (scenario.isRuntime) {
+              onRuntimeRefresh?.();
+            }
+          }}
+          className={`inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
+        >
+          Mulai baca
+        </a>
+      ) : (
+        <span className="inline-flex shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
+          File belum tersedia
+        </span>
+      )}
     </div>
   </article>
 );
@@ -386,8 +455,11 @@ const ExamPanel = ({
   const ready =
     doneMaterials === stage.materials.length && stage.materials.length > 0;
   const assessment = stage.assessment;
+  const runtimeExamDisabled = Boolean(scenario.isRuntime);
   const canPreviewExam =
-    flowState !== "locked" && assessment.status !== "failed_window";
+    !runtimeExamDisabled &&
+    flowState !== "locked" &&
+    assessment.status !== "failed_window";
   const startLabel =
     assessment.status === "remedial" ? "Mulai remedial" : "Mulai ujian";
 
@@ -442,6 +514,8 @@ const ExamPanel = ({
         <h4 className="text-sm font-semibold text-slate-900">
           {flowState === "locked"
             ? "Tahap ini belum bisa ujian"
+            : runtimeExamDisabled
+              ? "Ujian belum tersedia di halaman ini"
             : !ready
               ? "Selesaikan semua materi dulu"
               : assessment.status === "submitted"
@@ -457,12 +531,14 @@ const ExamPanel = ({
         <p className="mt-2 text-sm leading-7 text-slate-600">
           {flowState === "locked"
             ? `Tahap ini terkunci. Selesaikan ${dependency ?? "tahap sebelumnya"} sampai lulus.`
+            : runtimeExamDisabled
+              ? "Halaman onboarding ini sudah memakai data real untuk tahap dan materi. Fitur ujian online belum diaktifkan dari workspace ini."
             : !ready
-              ? "Untuk demo UI, tombol mulai ujian tetap bisa dibuka walau semua file pada tahap ini belum selesai dibaca."
+              ? "Selesaikan semua file pada tahap ini sebelum lanjut ke ujian."
               : assessment.status === "submitted"
-                ? "Status aslinya sedang menunggu nilai dipublish. Untuk demo UI, halaman ujian masih bisa dibuka lagi."
+                ? "Status aslinya sedang menunggu nilai dipublish."
                 : assessment.status === "passed"
-                  ? "Tahap ini sudah lulus. Untuk demo UI, halaman ujian tetap bisa dibuka agar alurnya bisa dicoba."
+                  ? "Tahap ini sudah lulus."
                   : assessment.status === "remedial"
                     ? "Nilai sebelumnya belum lulus. Tombol remedial muncul agar user bisa mengulang."
                     : assessment.status === "failed_window"
@@ -493,6 +569,10 @@ const ExamPanel = ({
               </span>
             ) : null}
           </>
+        ) : runtimeExamDisabled ? (
+          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
+            Ujian belum tersedia
+          </span>
         ) : assessment.status === "failed_window" ? (
           <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">
             Tunggu keputusan atasan
@@ -511,13 +591,17 @@ const StageTimelineCard = ({
   scenario,
   stage,
   index,
+  onRuntimeRefresh,
 }: {
   scenario: OnboardingScenario;
   stage: OnboardingStage;
   index: number;
+  onRuntimeRefresh?: () => void;
 }) => {
   const flowState = getFlowState(scenario.stages, index);
   const dependency = getDependency(scenario.stages, index);
+  const stageReference = getStageReference(scenario, index);
+  const stageGap = formatGapDuration(stage.startedAt, stageReference.value);
   const doneMaterials = stage.materials.filter(
     (item) => item.status === "completed"
   ).length;
@@ -601,8 +685,37 @@ const StageTimelineCard = ({
                 </span>{" "}
                 sampai lulus.
               </div>
-            ) : (
+              ) : (
               <>
+                <section className="grid gap-3 md:grid-cols-3">
+                  <article className="rounded-[22px] border border-slate-200 bg-white px-4 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                      Mulai tahap
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+                      {stage.startedAt ? formatDateTime(stage.startedAt) : "Belum mulai"}
+                    </p>
+                  </article>
+                  <article className="rounded-[22px] border border-slate-200 bg-white px-4 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                      {stageReference.label}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+                      {stageReference.value
+                        ? formatDateTime(stageReference.value)
+                        : "Belum ada"}
+                    </p>
+                  </article>
+                  <article className="rounded-[22px] border border-slate-200 bg-white px-4 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                      Selisih mulai
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+                      {stage.startedAt ? stageGap : "Belum mulai"}
+                    </p>
+                  </article>
+                </section>
+
                 <section className="rounded-[26px] border border-slate-200 bg-slate-50/70 p-5">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -625,6 +738,7 @@ const StageTimelineCard = ({
                         item={item}
                         scenario={scenario}
                         order={materialIndex + 1}
+                        onRuntimeRefresh={onRuntimeRefresh}
                       />
                     ))}
                   </div>
@@ -645,7 +759,13 @@ const StageTimelineCard = ({
   );
 };
 
-const StagesPage = ({ scenario }: { scenario: OnboardingScenario }) => (
+const StagesPage = ({
+  scenario,
+  onRuntimeRefresh,
+}: {
+  scenario: OnboardingScenario;
+  onRuntimeRefresh?: () => void;
+}) => (
   <PageShell scenario={scenario}>
     <section className="space-y-6">
       {scenario.stages.map((stage, index) => (
@@ -654,6 +774,7 @@ const StagesPage = ({ scenario }: { scenario: OnboardingScenario }) => (
           scenario={scenario}
           stage={stage}
           index={index}
+          onRuntimeRefresh={onRuntimeRefresh}
         />
       ))}
     </section>
@@ -1256,13 +1377,19 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
                 User telah menyelesaikan tahap ini dan hasil akhirnya lulus, jadi
                 sertifikat bisa dibuka sebagai preview dummy di tab baru.
               </p>
-              <button
-                type="button"
-                onClick={() => openCertificatePreview(scenario, stage, issuedAt)}
-                className={`mt-5 inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
-              >
-                Buka sertifikat
-              </button>
+              {scenario.isRuntime ? (
+                <span className="mt-5 inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
+                  Preview sertifikat belum tersedia
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openCertificatePreview(scenario, stage, issuedAt)}
+                  className={`mt-5 inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
+                >
+                  Buka sertifikat
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -1273,10 +1400,14 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
 
 export const OnboardingPortalWorkspace = ({
   portalKey,
+  scenarioOverride,
+  onRuntimeRefresh,
 }: {
   portalKey: OnboardingPortalKey;
+  scenarioOverride?: OnboardingScenario;
+  onRuntimeRefresh?: () => void;
 }) => {
-  const scenario = getOnboardingScenario(portalKey);
+  const scenario = scenarioOverride ?? getOnboardingScenario(portalKey);
   const isAdministrator = portalKey === "ADMINISTRATOR";
 
   return (
@@ -1287,7 +1418,10 @@ export const OnboardingPortalWorkspace = ({
           isAdministrator ? (
             <AdminOverviewPage scenario={scenario} />
           ) : (
-            <StagesPage scenario={scenario} />
+            <StagesPage
+              scenario={scenario}
+              onRuntimeRefresh={onRuntimeRefresh}
+            />
           )
         }
       />
@@ -1324,7 +1458,16 @@ export const OnboardingPortalWorkspace = ({
           />
         </>
       ) : null}
-      <Route path="exam/:stageId" element={<ExamPage scenario={scenario} />} />
+      <Route
+        path="exam/:stageId"
+        element={
+          scenario.isRuntime ? (
+            <Navigate to={scenario.basePath} replace />
+          ) : (
+            <ExamPage scenario={scenario} />
+          )
+        }
+      />
       <Route path="*" element={<Navigate to={scenario.basePath} replace />} />
     </Routes>
   );

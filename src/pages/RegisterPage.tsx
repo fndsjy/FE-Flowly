@@ -9,7 +9,7 @@ const RegisterPage = () => {
     username: "",
     name: "",
     password: "",
-    badgeNumber: "",
+    cardNumber: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -133,16 +133,16 @@ const RegisterPage = () => {
               />
             </div>
 
-            {/* Badge Number */}
+            {/* Card Number */}
             <div>
               <label className="block text-gray-300 mb-1">
-                Badge Number
+                Card Number
                 <RequiredMark />
               </label>
               <input
                 type="text"
-                value={form.badgeNumber}
-                onChange={(e) => handleChange("badgeNumber", e.target.value)}
+                value={form.cardNumber}
+                onChange={(e) => handleChange("cardNumber", e.target.value)}
                 required
                 placeholder="e.g. 03454"
                 className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none"

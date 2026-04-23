@@ -1,5 +1,5 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAccessSummary } from "./hooks/useAccessSummary";
 import { useProfile } from "./hooks/useProfile";
 import { hasMenuAccess } from "./lib/access";
@@ -19,6 +19,7 @@ const PUBLIC_MENU_KEYS = new Set([
 ]);
 
 const ProtectedRoute = ({ children, menuKey, adminOnly = false }: Props) => {
+  const location = useLocation();
   const normalizedMenuKey = (menuKey ?? "").trim().toUpperCase();
   const requiresAccessSummary =
     !adminOnly &&
@@ -46,6 +47,19 @@ const ProtectedRoute = ({ children, menuKey, adminOnly = false }: Props) => {
 
   if (!isLoggedIn) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (profile?.mustChangePassword && location.pathname !== "/me") {
+    return (
+      <Navigate
+        to="/me"
+        replace
+        state={{
+          forcedByFirstLogin: true,
+          from: `${location.pathname}${location.search}${location.hash}`,
+        }}
+      />
+    );
   }
 
   if (adminOnly) {

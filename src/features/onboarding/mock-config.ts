@@ -45,8 +45,10 @@ export type OnboardingMaterial = {
   title: string;
   estimatedMinutes: number;
   status: MaterialStatus;
-  startedAt: string | null;
+  readAt: string | null;
+  lastReadAt?: string | null;
   completedAt: string | null;
+  openCount?: number;
   note: string;
   resourceType: OnboardingMaterialType;
   resourceUrl: string;
@@ -62,7 +64,6 @@ export type OnboardingAssessment = {
   submittedAt: string | null;
   reviewedAt: string | null;
   remedialCount: number;
-  maxRemedial: number;
   adminNote: string;
   questionTypes: string[];
 };
@@ -74,6 +75,10 @@ export type OnboardingStage = {
   targetWindow: string;
   objective: string;
   status: StageStatus;
+  startedAt?: string | null;
+  passedAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
   materials: OnboardingMaterial[];
   assessment: OnboardingAssessment;
   checkpoints: string[];
@@ -127,6 +132,7 @@ export type OnboardingScenario = {
   certificates: OnboardingCertificate[];
   extensionRequest: OnboardingExtensionRequest;
   theme: OnboardingPortalTheme;
+  isRuntime?: boolean;
 };
 
 const material = (
@@ -134,7 +140,7 @@ const material = (
   title: string,
   estimatedMinutes: number,
   status: MaterialStatus,
-  startedAt: string | null,
+  readAt: string | null,
   completedAt: string | null,
   note: string,
   options?: {
@@ -146,7 +152,8 @@ const material = (
   title,
   estimatedMinutes,
   status,
-  startedAt,
+  readAt,
+  lastReadAt: null,
   completedAt,
   note,
   resourceType: options?.resourceType ?? "ebook",
@@ -175,7 +182,6 @@ const assessment = (
   submittedAt,
   reviewedAt,
   remedialCount,
-  maxRemedial: 3,
   adminNote,
   questionTypes,
 });
@@ -620,7 +626,7 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
     heroEyebrow: "Influencer Campaign Onboarding",
     heroTitle: "Influencer onboarding menampilkan skenario gagal training dan user menjadi nonaktif.",
     heroDescription:
-      "Contoh dummy ini menunjukkan outcome terberat: gagal lulus dalam 3 bulan, remedial sudah penuh, permintaan extension ditolak, dan status user menjadi nonaktif serta tidak lulus onboarding.",
+      "Contoh dummy ini menunjukkan outcome terberat: gagal lulus dalam 3 bulan, remedial berulang masih belum memenuhi passing score, permintaan extension ditolak, dan status user menjadi nonaktif serta tidak lulus onboarding.",
     trainingWindowMonths: 3,
     startedAt: "2025-12-01T08:00:00Z",
     deadlineAt: "2026-03-01T17:00:00Z",
@@ -763,7 +769,7 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
           "2026-02-26T10:00:00Z",
           "2026-02-26T16:30:00Z",
           3,
-          "Remedial sudah 3 kali dan masih di bawah ambang lulus."
+          "Sudah beberapa kali remedial dan nilai masih di bawah ambang lulus."
         ),
         checkpoints: [
           "Jika 3 bulan terlewati dan remedial habis, sistem menandai gagal training.",
@@ -809,7 +815,7 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
     ],
     certificates: [
       { id: "inf-cert-1", title: "Campaign ethics badge", owner: "Campaign Enablement Team", status: "issued", issuedAt: "2025-12-05T14:00:00Z", note: "Stage 1 lulus." },
-      { id: "inf-cert-2", title: "Execution mastery badge", owner: "Campaign Enablement Team", status: "blocked", issuedAt: null, note: "Blocked karena stage 2 gagal walau remedial sudah 3 kali." },
+      { id: "inf-cert-2", title: "Execution mastery badge", owner: "Campaign Enablement Team", status: "blocked", issuedAt: null, note: "Blocked karena stage 2 gagal walau sudah beberapa kali remedial." },
       { id: "inf-cert-3", title: "LMS activation certificate", owner: "LMS Gatekeeper", status: "blocked", issuedAt: null, note: "Ditolak. User tidak lulus onboarding dan dinonaktifkan." },
     ],
     extensionRequest: {
@@ -818,7 +824,7 @@ const scenarios: Record<OnboardingPortalKey, OnboardingScenario> = {
       requestedAt: "2026-03-02T09:30:00Z",
       decidedBy: "Head of Marketing Academy",
       decidedAt: "2026-03-04T15:15:00Z",
-      note: "Extension ditolak karena remedial sudah penuh dan score tidak membaik. User dinyatakan gagal onboarding.",
+      note: "Extension ditolak karena remedial berulang tidak memperbaiki score sebelum deadline. User dinyatakan gagal onboarding.",
     },
     theme: themes.INFLUENCER,
   },

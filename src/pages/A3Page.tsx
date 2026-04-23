@@ -1,6 +1,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Sidebar from "../components/organisms/Sidebar";
+import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
@@ -38,7 +39,7 @@ type UserProfile = {
   userId: string;
   username: string;
   name: string;
-  badgeNumber: string | null;
+  cardNumber: string | null;
   department: string | null;
   roleId: string;
   roleName: string;
@@ -578,6 +579,13 @@ const A3Page = () => {
     item: CaseAttachment | null;
   }>({ open: false, item: null });
   const [attachmentDeleting, setAttachmentDeleting] = useState(false);
+  const [fishboneDeleteConfirm, setFishboneDeleteConfirm] = useState<{
+    open: boolean;
+    type: "" | "fishbone" | "cause" | "item";
+    id: string;
+    label: string;
+  }>({ open: false, type: "", id: "", label: "" });
+  const [fishboneDeleting, setFishboneDeleting] = useState(false);
 
   const [caseFishbones, setCaseFishbones] = useState<CaseFishbone[]>([]);
   const [caseFishbonesLoading, setCaseFishbonesLoading] = useState(true);
@@ -2721,6 +2729,60 @@ const A3Page = () => {
     setAttachmentDeleteConfirm({ open: true, item });
   };
 
+  const requestCaseFishboneDelete = (caseFishboneId: string) => {
+    const fishbone = caseFishbones.find(
+      (item) => item.caseFishboneId === caseFishboneId
+    );
+    if (fishbone && !canManageFishboneBySbuSub(fishbone.sbuSubId)) {
+      showToast("Tidak ada akses untuk menghapus fishbone ini", "error");
+      return;
+    }
+    setFishboneDeleteConfirm({
+      open: true,
+      type: "fishbone",
+      id: caseFishboneId,
+      label: fishbone?.fishboneName ?? "fishbone ini",
+    });
+  };
+
+  const requestCaseFishboneCauseDelete = (caseFishboneCauseId: string) => {
+    if (
+      !selectedCaseFishbone ||
+      !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)
+    ) {
+      showToast("Tidak ada akses untuk menghapus sumber masalah", "error");
+      return;
+    }
+    const cause = caseFishboneCauses.find(
+      (item) => item.caseFishboneCauseId === caseFishboneCauseId
+    );
+    setFishboneDeleteConfirm({
+      open: true,
+      type: "cause",
+      id: caseFishboneCauseId,
+      label: cause?.causeText ?? "sumber masalah ini",
+    });
+  };
+
+  const requestCaseFishboneItemDelete = (caseFishboneItemId: string) => {
+    if (
+      !selectedCaseFishbone ||
+      !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)
+    ) {
+      showToast("Tidak ada akses untuk menghapus item fishbone", "error");
+      return;
+    }
+    const item = caseFishboneItems.find(
+      (entry) => entry.caseFishboneItemId === caseFishboneItemId
+    );
+    setFishboneDeleteConfirm({
+      open: true,
+      type: "item",
+      id: caseFishboneItemId,
+      label: item?.problemText ?? "item fishbone ini",
+    });
+  };
+
   const handleAttachmentDelete = async () => {
     const target = attachmentDeleteConfirm.item;
     if (!target) return;
@@ -2853,9 +2915,8 @@ const A3Page = () => {
     );
     if (fishbone && !canManageFishboneBySbuSub(fishbone.sbuSubId)) {
       showToast("Tidak ada akses untuk menghapus fishbone ini", "error");
-      return;
+      return false;
     }
-    if (!confirm("Hapus fishbone ini?")) return;
     try {
       const res = await apiFetch("/case-fishbone", {
         method: "DELETE",
@@ -2866,14 +2927,16 @@ const A3Page = () => {
       const json = await safeJson(res);
       if (!res.ok) {
         showToast(getErrorMessage(json), "error");
-        return;
+        return false;
       }
       showToast("Fishbone dihapus", "success");
       if (selectedCaseId) {
         fetchCaseFishbones(selectedCaseId);
       }
+      return true;
     } catch (error) {
       showToast("Gagal menghapus fishbone", "error");
+      return false;
     }
   };
 
@@ -2964,9 +3027,8 @@ const A3Page = () => {
   const handleCaseFishboneCauseDelete = async (caseFishboneCauseId: string) => {
     if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
       showToast("Tidak ada akses untuk menghapus sumber masalah", "error");
-      return;
+      return false;
     }
-    if (!confirm("Hapus sumber masalah ini?")) return;
     try {
       const res = await apiFetch("/case-fishbone-cause", {
         method: "DELETE",
@@ -2977,15 +3039,17 @@ const A3Page = () => {
       const json = await safeJson(res);
       if (!res.ok) {
         showToast(getErrorMessage(json), "error");
-        return;
+        return false;
       }
       showToast("Sumber masalah dihapus", "success");
       if (selectedCaseFishboneId) {
         fetchCaseFishboneCauses(selectedCaseFishboneId);
         fetchCaseFishboneItems(selectedCaseFishboneId);
       }
+      return true;
     } catch (error) {
       showToast("Gagal menghapus sumber masalah", "error");
+      return false;
     }
   };
 
@@ -3093,9 +3157,8 @@ const A3Page = () => {
   const handleCaseFishboneItemDelete = async (caseFishboneItemId: string) => {
     if (!selectedCaseFishbone || !canManageFishboneBySbuSub(selectedCaseFishbone.sbuSubId)) {
       showToast("Tidak ada akses untuk menghapus item fishbone", "error");
-      return;
+      return false;
     }
-    if (!confirm("Hapus item fishbone ini?")) return;
     try {
       const res = await apiFetch("/case-fishbone-item", {
         method: "DELETE",
@@ -3106,14 +3169,36 @@ const A3Page = () => {
       const json = await safeJson(res);
       if (!res.ok) {
         showToast(getErrorMessage(json), "error");
-        return;
+        return false;
       }
       showToast("Item fishbone dihapus", "success");
       if (selectedCaseFishboneId) {
         fetchCaseFishboneItems(selectedCaseFishboneId);
       }
+      return true;
     } catch (error) {
       showToast("Gagal menghapus item fishbone", "error");
+      return false;
+    }
+  };
+
+  const handleFishboneDeleteConfirm = async () => {
+    if (!fishboneDeleteConfirm.id || !fishboneDeleteConfirm.type) return;
+    setFishboneDeleting(true);
+    try {
+      let deleted = false;
+      if (fishboneDeleteConfirm.type === "fishbone") {
+        deleted = await handleCaseFishboneDelete(fishboneDeleteConfirm.id);
+      } else if (fishboneDeleteConfirm.type === "cause") {
+        deleted = await handleCaseFishboneCauseDelete(fishboneDeleteConfirm.id);
+      } else if (fishboneDeleteConfirm.type === "item") {
+        deleted = await handleCaseFishboneItemDelete(fishboneDeleteConfirm.id);
+      }
+      if (deleted) {
+        setFishboneDeleteConfirm({ open: false, type: "", id: "", label: "" });
+      }
+    } finally {
+      setFishboneDeleting(false);
     }
   };
 
@@ -4930,7 +5015,7 @@ const A3Page = () => {
                                         </button>
                                         <button
                                           onClick={() =>
-                                            handleCaseFishboneDelete(
+                                            requestCaseFishboneDelete(
                                               selectedCaseFishbone.caseFishboneId
                                             )
                                           }
@@ -4988,7 +5073,7 @@ const A3Page = () => {
                                                   </button>
                                                   <button
                                                     onClick={() =>
-                                                      handleCaseFishboneCauseDelete(
+                                                      requestCaseFishboneCauseDelete(
                                                         item.caseFishboneCauseId
                                                       )
                                                     }
@@ -5058,7 +5143,7 @@ const A3Page = () => {
                                                   </button>
                                                   <button
                                                     onClick={() =>
-                                                      handleCaseFishboneItemDelete(
+                                                      requestCaseFishboneItemDelete(
                                                         item.caseFishboneItemId
                                                       )
                                                     }
@@ -5696,7 +5781,7 @@ const A3Page = () => {
             <img
               src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
               alt="Delete Confirmation"
-              className="w-40 mx-auto"
+              className="w-80 mx-auto"
             />
             <h2 className="text-lg text-center font-semibold mt-4 mb-1">
               Hapus{" "}
@@ -5734,6 +5819,20 @@ const A3Page = () => {
             </div>
           </div>
         )}
+      <DeleteConfirmDialog
+        open={fishboneDeleteConfirm.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{fishboneDeleteConfirm.label}</span>?
+          </>
+        }
+        onClose={() =>
+          setFishboneDeleteConfirm({ open: false, type: "", id: "", label: "" })
+        }
+        onConfirm={handleFishboneDeleteConfirm}
+        isLoading={fishboneDeleting}
+        loadingLabel="Deleting..."
+      />
       {showCaseForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-2xl shadow-xl w-[520px] max-h-[90vh] overflow-auto">

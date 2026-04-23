@@ -1414,7 +1414,7 @@ const ChartPage = () => {
             <img
               src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
               alt="Delete Confirmation"
-              className="w-40 mx-auto"
+              className="w-80 mx-auto"
             />
 
             {/* Judul */}
