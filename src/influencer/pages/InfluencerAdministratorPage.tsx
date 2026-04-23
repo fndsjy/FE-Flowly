@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../../components/atoms/BackButton";
+import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
 import type { InfluencerUserProfile } from "../components/InfluencerSidebar";
 
 type InfluencerAdminRecord = {
@@ -251,6 +252,11 @@ export const InfluencerAdministratorInfluencersPage = ({
   >("full_name_asc");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    recordId: string;
+    label: string;
+  }>({ open: false, recordId: "", label: "" });
   const [form, setForm] = useState<InfluencerAdminFormState>(emptyInfluencerForm);
 
   const filteredRecords = useMemo(() => {
@@ -342,8 +348,19 @@ export const InfluencerAdministratorInfluencersPage = ({
     closeModal();
   };
 
-  const handleDelete = (id: string) => {
-    setRecords((current) => current.filter((record) => record.id !== id));
+  const requestDelete = (record: InfluencerAdminRecord) => {
+    setDeleteConfirm({
+      open: true,
+      recordId: record.id,
+      label: record.fullName,
+    });
+  };
+
+  const handleDelete = () => {
+    setRecords((current) =>
+      current.filter((record) => record.id !== deleteConfirm.recordId)
+    );
+    setDeleteConfirm({ open: false, recordId: "", label: "" });
   };
 
   return (
@@ -469,7 +486,7 @@ export const InfluencerAdministratorInfluencersPage = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(record.id)}
+                        onClick={() => requestDelete(record)}
                         className="rounded-full border border-[#fecaca] px-3 py-1.5 text-xs font-semibold text-[#b91c1c] transition hover:bg-[#fff1f2]"
                       >
                         Delete
@@ -574,6 +591,16 @@ export const InfluencerAdministratorInfluencersPage = ({
           </div>
         </div>
       ) : null}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{deleteConfirm.label}</span>?
+          </>
+        }
+        onClose={() => setDeleteConfirm({ open: false, recordId: "", label: "" })}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 };

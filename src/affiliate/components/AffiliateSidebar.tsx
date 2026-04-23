@@ -9,7 +9,7 @@ export type AffiliateUserProfile = {
   userId: string;
   username: string;
   name: string;
-  badgeNumber: string | null;
+  cardNumber: string | null;
   department: string | null;
   roleId: string;
   roleName: string;
@@ -243,7 +243,11 @@ const AffiliateSidebar = ({
         </button>
       </div>
 
-      <nav className={`mt-6 overflow-y-auto pb-32 ${isDesktop ? "pl-2" : "px-2"}`}>
+      <nav
+        className={`sidebar-scrollbar mt-6 overflow-y-auto pb-32 ${
+          isDesktop ? "pl-2" : "px-2"
+        }`}
+      >
         {visibleMenuItems.map((item) => {
           const active = isItemActive(item);
 

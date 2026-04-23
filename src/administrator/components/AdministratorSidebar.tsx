@@ -9,7 +9,7 @@ export type AdministratorWorkspaceUserProfile = {
   userId: string;
   username: string;
   name: string;
-  badgeNumber: string | null;
+  cardNumber: string | null;
   department: string | null;
   roleId: string;
   roleName: string;
@@ -47,6 +47,13 @@ const localMenuItems: PortalSidebarItem[] = [
     icon: <i className="fa-solid fa-file-circle-check h-5 w-5" aria-hidden="true"></i>,
     resourceKey: "ADMINISTRATOR_ONBOARDING_EXAMS",
   },
+  {
+    id: "ADMINISTRATOR_NOTIF_TEMPLATE",
+    label: "Template Notif",
+    path: "/portal-administrator/notification-template",
+    icon: <i className="fa-solid fa-envelope-open-text h-5 w-5" aria-hidden="true"></i>,
+    resourceKey: "ADMINISTRATOR_NOTIF_TEMPLATE",
+  },
 ];
 
 const mergeMenuItems = (items: PortalSidebarItem[]) => {
@@ -62,6 +69,7 @@ const mergeMenuItems = (items: PortalSidebarItem[]) => {
   return [...map.values()].sort((left, right) => {
     const order = [
       "ADMINISTRATOR_ONBOARDING",
+      "ADMINISTRATOR_NOTIFICATION_TEMPLATE",
       "ADMINISTRATOR_ONBOARDING_MATERIALS",
       "ADMINISTRATOR_ONBOARDING_EXAMS",
     ];
@@ -108,6 +116,14 @@ const getAdministratorMenuIcon = (resourceKey: string) => {
 
   if (normalized.includes("AUDIT")) {
     return <i className="fa-solid fa-clock-rotate-left h-5 w-5" aria-hidden="true"></i>;
+  }
+
+  if (
+    normalized.includes("NOTIFICATION") ||
+    normalized.includes("WHATSAPP") ||
+    normalized.includes("TEMPLATE")
+  ) {
+    return <i className="fa-solid fa-envelope-open-text h-5 w-5" aria-hidden="true"></i>;
   }
 
   return <i className="fa-solid fa-grid-2 h-5 w-5" aria-hidden="true"></i>;
@@ -271,7 +287,11 @@ const AdministratorSidebar = ({
           </button>
         </div>
 
-        <nav className={`mt-6 overflow-y-auto pb-8 ${isDesktop ? "pl-2" : "px-2"}`}>
+        <nav
+          className={`sidebar-scrollbar mt-6 overflow-y-auto pb-8 ${
+            isDesktop ? "pl-2" : "px-2"
+          }`}
+        >
           {menuItems.map((item) => {
             const active = isItemActive(item);
 

@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../../components/atoms/BackButton";
+import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
 import type { CommunityUserProfile } from "../components/CommunitySidebar";
 
 type CommunityAdminRecord = {
@@ -261,6 +262,11 @@ export const CommunityAdministratorCommunitiesPage = ({
   >("community_name_asc");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    recordId: string;
+    label: string;
+  }>({ open: false, recordId: "", label: "" });
   const [form, setForm] = useState<CommunityAdminFormState>(emptyCommunityForm);
 
   const filteredRecords = useMemo(() => {
@@ -356,8 +362,19 @@ export const CommunityAdministratorCommunitiesPage = ({
     closeModal();
   };
 
-  const handleDelete = (id: string) => {
-    setRecords((current) => current.filter((record) => record.id !== id));
+  const requestDelete = (record: CommunityAdminRecord) => {
+    setDeleteConfirm({
+      open: true,
+      recordId: record.id,
+      label: record.communityName,
+    });
+  };
+
+  const handleDelete = () => {
+    setRecords((current) =>
+      current.filter((record) => record.id !== deleteConfirm.recordId)
+    );
+    setDeleteConfirm({ open: false, recordId: "", label: "" });
   };
 
   return (
@@ -483,7 +500,7 @@ export const CommunityAdministratorCommunitiesPage = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(record.id)}
+                        onClick={() => requestDelete(record)}
                         className="rounded-full border border-[#fecaca] px-3 py-1.5 text-xs font-semibold text-[#b91c1c] transition hover:bg-[#fff1f2]"
                       >
                         Delete
@@ -589,6 +606,16 @@ export const CommunityAdministratorCommunitiesPage = ({
           </div>
         </div>
       ) : null}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{deleteConfirm.label}</span>?
+          </>
+        }
+        onClose={() => setDeleteConfirm({ open: false, recordId: "", label: "" })}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 };

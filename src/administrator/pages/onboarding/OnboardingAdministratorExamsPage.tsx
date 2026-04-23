@@ -3,6 +3,7 @@ import {
   getOnboardingScenario,
   type OnboardingPortalKey,
 } from "../../../features/onboarding/mock-config";
+import DeleteConfirmDialog from "../../../components/organisms/DeleteConfirmDialog";
 import { onboardingAdminMaterialPortals } from "../../lib/onboarding/onboarding-admin-materials-mock";
 import {
   onboardingAdminExamAssignments,
@@ -212,7 +213,7 @@ const AssignedQuestionListItem = ({
   onRemove,
 }: {
   row: QuestionAssignmentEntry;
-  onRemove?: (assignmentId: string) => void;
+  onRemove?: (row: QuestionAssignmentEntry) => void;
 }) => {
   const [expanded, setExpanded] = useState(false);
 
@@ -246,7 +247,7 @@ const AssignedQuestionListItem = ({
           {row.assignmentSource === "draft" && onRemove ? (
             <button
               type="button"
-              onClick={() => onRemove(row.assignmentId)}
+              onClick={() => onRemove(row)}
               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
             >
               Hapus
@@ -291,6 +292,11 @@ const OnboardingAdministratorExamsPage = () => {
     []
   );
   const [draftAssignments, setDraftAssignments] = useState<QuestionAssignmentEntry[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    assignmentId: string;
+    label: string;
+  }>({ open: false, assignmentId: "", label: "" });
   const [portalFilter, setPortalFilter] = useState("ALL");
   const [searchInput, setSearchInput] = useState("");
   const [portalPickerOpen, setPortalPickerOpen] = useState(false);
@@ -761,10 +767,19 @@ const OnboardingAdministratorExamsPage = () => {
     closeQuestionPicker();
   };
 
-  const handleRemoveDraftAssignment = (assignmentId: string) => {
+  const requestRemoveDraftAssignment = (row: QuestionAssignmentEntry) => {
+    setDeleteConfirm({
+      open: true,
+      assignmentId: row.assignmentId,
+      label: row.subjectTitle,
+    });
+  };
+
+  const handleRemoveDraftAssignment = () => {
     setDraftAssignments((current) =>
-      current.filter((row) => row.assignmentId !== assignmentId)
+      current.filter((row) => row.assignmentId !== deleteConfirm.assignmentId)
     );
+    setDeleteConfirm({ open: false, assignmentId: "", label: "" });
   };
 
   return (
@@ -1145,7 +1160,7 @@ const OnboardingAdministratorExamsPage = () => {
                       <AssignedQuestionListItem
                         key={row.assignmentId}
                         row={row}
-                        onRemove={handleRemoveDraftAssignment}
+                        onRemove={requestRemoveDraftAssignment}
                       />
                     ))}
                   </div>
@@ -1155,6 +1170,16 @@ const OnboardingAdministratorExamsPage = () => {
           </div>
         </>
       ) : null}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{deleteConfirm.label}</span>?
+          </>
+        }
+        onClose={() => setDeleteConfirm({ open: false, assignmentId: "", label: "" })}
+        onConfirm={handleRemoveDraftAssignment}
+      />
 
       {pickerTarget ? (
         <>

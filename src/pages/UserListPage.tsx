@@ -12,7 +12,7 @@ interface UserData {
   userId: string;
   username: string;
   name: string;
-  badgeNumber: string | null;
+  cardNumber: string | null;
   department: string | null;
   isActive: boolean;
   isDeleted: boolean;
@@ -230,9 +230,9 @@ const UserListPage = () => {
 
                 <div className="mt-4 text-xs text-gray-500 space-y-1">
                   <p>
-                    Badge:{" "}
+                    Card Number:{" "}
                     <span className="text-gray-700">
-                      {u.badgeNumber || "-"}
+                      {u.cardNumber || "-"}
                     </span>
                   </p>
                   <p>

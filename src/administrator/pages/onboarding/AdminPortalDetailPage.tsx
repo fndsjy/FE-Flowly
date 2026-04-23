@@ -1,17 +1,21 @@
 import { Navigate, useParams } from "react-router-dom";
+import type { OnboardingScenario } from "../../../features/onboarding/mock-config";
 import {
-  getOnboardingScenario,
-  type OnboardingScenario,
-} from "../../../features/onboarding/mock-config";
-import { ParticipantCard, getPortalTone } from "../../components/onboarding/AdminOnboardingCards";
+  ParticipantCard,
+  getPortalTone,
+} from "../../components/onboarding/AdminOnboardingCards";
 import AdminOnboardingHeader from "../../components/onboarding/AdminOnboardingHeader";
-import { getAdministratorParticipants } from "../../lib/onboarding/onboarding-admin-monitoring";
 import {
   adminAccentTextClass,
+  adminPanelClass,
+  formatDateTime,
   getParticipantProgress,
   getPortalMetrics,
-  isManagedPortalKey,
 } from "../../lib/onboarding/adminOnboardingUtils";
+import {
+  isManagedPortalKey,
+  useAdministratorOnboardingMonitoring,
+} from "../../lib/onboarding/onboarding-admin-monitoring";
 
 const CompactStat = ({
   label,
@@ -40,40 +44,82 @@ const CompactStat = ({
   </article>
 );
 
+const StatePanel = ({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) => (
+  <section className={`rounded-[32px] border p-6 md:p-8 ${adminPanelClass}`}>
+    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8a6d4b]">
+      Portal monitoring
+    </p>
+    <h2 className="mt-3 text-[32px] font-semibold tracking-[-0.05em] text-[#1b2238]">
+      {title}
+    </h2>
+    <p className="mt-4 max-w-3xl text-sm leading-7 text-[#6b6258]">{description}</p>
+  </section>
+);
+
 const AdminPortalDetailPage = ({
   scenario,
 }: {
   scenario: OnboardingScenario;
 }) => {
   const { managedPortalKey } = useParams<{ managedPortalKey: string }>();
+  const { portals, loading, error } = useAdministratorOnboardingMonitoring();
 
   if (!isManagedPortalKey(managedPortalKey)) {
     return <Navigate to={scenario.basePath} replace />;
   }
 
-  const portalScenario = getOnboardingScenario(managedPortalKey);
-  const participants = getAdministratorParticipants(managedPortalKey);
-  const metrics = getPortalMetrics(portalScenario, participants);
-  const tone = getPortalTone(portalScenario.portalKey);
-  const sortedParticipants = [...participants].sort(
-    (left, right) =>
-      getParticipantProgress(portalScenario, left) - getParticipantProgress(portalScenario, right)
-  );
+  if (loading) {
+    return (
+      <StatePanel
+        title="Memuat detail portal..."
+        description="Sistem sedang mengambil peserta, progres tahap, dan aktivitas baca materi untuk portal ini."
+      />
+    );
+  }
+
+  if (error) {
+    return <StatePanel title="Detail portal gagal dimuat" description={error} />;
+  }
+
+  const portal =
+    portals.find((item) => item.portalKey === managedPortalKey) ?? null;
+
+  if (!portal) {
+    return <Navigate to={scenario.basePath} replace />;
+  }
+
+  const metrics = getPortalMetrics(portal);
+  const tone = getPortalTone(portal.portalKey);
+  const sortedParticipants = [...portal.participants].sort((left, right) => {
+    const progressDiff =
+      getParticipantProgress(left) - getParticipantProgress(right);
+    if (progressDiff !== 0) {
+      return progressDiff;
+    }
+
+    return left.participantName.localeCompare(right.participantName);
+  });
 
   const busiestStageIndex = metrics.pendingByStage.reduce(
     (bestIndex, count, index, values) => (count > values[bestIndex] ? index : bestIndex),
     0
   );
-  const busiestStage = portalScenario.stages[busiestStageIndex];
+  const busiestStage = portal.stages[busiestStageIndex] ?? null;
 
   return (
     <div className="space-y-6 md:space-y-8">
       <AdminOnboardingHeader
-        title={`Detail portal ${portalScenario.portalLabel}`}
-        subtitle="Halaman ini dirancang untuk baca cepat: lihat titik macet, tentukan siapa yang perlu disentuh, lalu lanjut ke detail user tanpa tenggelam di scroll panjang."
+        title={`Detail portal ${portal.portalName}`}
+        subtitle="Halaman ini fokus ke portal tertentu: lihat tahap mana yang paling padat, siapa yang belum bergerak, dan kapan aktivitas baca terakhir terjadi."
         items={[
           { label: "Dashboard admin", to: scenario.basePath },
-          { label: portalScenario.portalLabel },
+          { label: portal.portalName },
         ]}
         backTo={scenario.basePath}
       />
@@ -94,21 +140,23 @@ const AdminPortalDetailPage = ({
               <span
                 className={`rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] ${tone.chipClass}`}
               >
-                {portalScenario.portalLabel}
+                {portal.portalName}
               </span>
               <span className="rounded-full border border-[#e2d2bf] bg-[#fffaf2] px-4 py-2 text-xs font-semibold text-[#6a6258]">
-                {portalScenario.stages.length} tahap onboarding
+                {portal.stages.length} tahap onboarding
               </span>
             </div>
 
             <h1 className={`mt-5 text-[38px] font-semibold leading-[0.94] tracking-[-0.07em] md:text-[52px] ${adminAccentTextClass}`}>
-              Fokuskan perhatian ke bottleneck, bukan ke daftar panjang.
+              Baca bottleneck portal dari aktivitas baca, bukan dari asumsi.
             </h1>
             <p className="mt-5 max-w-3xl text-[15px] leading-8 text-[#615a52] md:text-base">
-              Portal {portalScenario.portalLabel.toLowerCase()} sekarang menampung{" "}
+              Portal {portal.portalName.toLowerCase()} menampung{" "}
               {metrics.totalParticipants} peserta. Tahap paling padat ada di{" "}
-              <span className="font-semibold text-[#1b2238]">{busiestStage?.phase}</span>, dan{" "}
-              {metrics.needsAttentionCount} user masih butuh follow-up dari admin.
+              <span className="font-semibold text-[#1b2238]">
+                {busiestStage ? `Tahap ${busiestStage.stageOrder}` : "-"}
+              </span>
+              , dan ada {metrics.needsAttentionCount} peserta yang perlu intervensi admin.
             </p>
           </div>
 
@@ -116,10 +164,7 @@ const AdminPortalDetailPage = ({
             <CompactStat label="Total peserta" value={`${metrics.totalParticipants}`} />
             <CompactStat label="Rata-rata progres" value={`${metrics.averageProgress}%`} />
             <CompactStat label="Perlu follow-up" value={`${metrics.needsAttentionCount}`} tone="ink" />
-            <CompactStat
-              label="Masih aktif"
-              value={`${metrics.totalParticipants - metrics.completedCount}`}
-            />
+            <CompactStat label="Total baca materi" value={`${metrics.totalOpenCount}`} />
           </div>
         </div>
       </section>
@@ -135,35 +180,35 @@ const AdminPortalDetailPage = ({
             </h2>
           </div>
           <p className="max-w-2xl text-sm leading-7 text-[#6a6258]">
-            Dibuat horizontal supaya cepat dipindai. Fokus lihat tahap mana yang paling
-            ramai dan mana yang sudah mulai longgar.
+            Lihat tahap mana yang masih ramai, berapa peserta aktif di situ, dan kapan
+            aktivitas baca terakhir muncul.
           </p>
         </div>
 
         <div className="overflow-x-auto pb-2">
           <div className="flex min-w-max gap-4">
-            {portalScenario.stages.map((stage, index) => (
+            {portal.stages.map((stage, index) => (
               <article
-                key={stage.id}
+                key={stage.onboardingStageTemplateId}
                 className={`w-[18.5rem] rounded-[26px] border p-5 shadow-[0_16px_36px_-28px_rgba(74,53,31,0.2)] ${tone.stageClass}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8a6d4b]">
-                      {stage.phase}
+                      Tahap {stage.stageOrder}
                     </p>
                     <h3 className="mt-2 text-[26px] font-semibold leading-[1.02] tracking-[-0.05em] text-[#1b2238]">
-                      {metrics.pendingByStage[index]}
+                      {metrics.pendingByStage[index] ?? 0}
                     </h3>
                     <p className="mt-1 text-sm font-semibold text-[#5f584f]">
-                      user belum selesai
+                      peserta belum selesai
                     </p>
                   </div>
                   <span className={`mt-1 h-3 w-3 rounded-full ${tone.markerClass}`}></span>
                 </div>
 
                 <h4 className="mt-5 text-lg font-semibold leading-7 text-[#1b2238]">
-                  {stage.title}
+                  {stage.stageName}
                 </h4>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-[#5f584f]">
                   <div className="rounded-[18px] border border-[#e7d8c6] bg-[#fffaf2] px-3 py-3">
@@ -171,15 +216,15 @@ const AdminPortalDetailPage = ({
                       Aktif
                     </div>
                     <div className="mt-1 font-semibold text-[#1b2238]">
-                      {metrics.activeByStage[index]} user
+                      {metrics.activeByStage[index] ?? 0} peserta
                     </div>
                   </div>
                   <div className="rounded-[18px] border border-[#e7d8c6] bg-[#fffaf2] px-3 py-3">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8a6d4b]">
-                      Pending
+                      Materi
                     </div>
                     <div className="mt-1 font-semibold text-[#1b2238]">
-                      {metrics.pendingByStage[index]} user
+                      {stage.materialCount} materi
                     </div>
                   </div>
                 </div>
@@ -196,21 +241,31 @@ const AdminPortalDetailPage = ({
               Participants
             </p>
             <h2 className={`mt-2 text-[28px] font-semibold tracking-[-0.05em] ${adminAccentTextClass}`}>
-              Daftar user yang perlu dibaca cepat
+              Daftar peserta portal
             </h2>
           </div>
           <p className="max-w-2xl text-sm leading-7 text-[#6a6258]">
-            Urutan ditampilkan dari progres terendah lebih dulu, jadi admin bisa langsung
-            lihat siapa yang paling rawan tertahan.
+            Urutan ditampilkan dari progres terendah lebih dulu, jadi admin bisa
+            langsung lihat siapa yang paling rawan tertahan.
           </p>
         </div>
+
+        {portal.lastReadAt ? (
+          <div className="rounded-[24px] border border-[#dcccb8] bg-[#fffaf2] px-5 py-4 text-sm leading-7 text-[#6a6258]">
+            Aktivitas baca terakhir di portal ini tercatat{" "}
+            <span className="font-semibold text-[#1b2238]">
+              {formatDateTime(portal.lastReadAt)}
+            </span>
+            .
+          </div>
+        ) : null}
 
         <div className="grid gap-4 xl:grid-cols-2">
           {sortedParticipants.map((participant) => (
             <ParticipantCard
-              key={participant.id}
+              key={`${portal.portalKey}-${participant.participantId}`}
               adminScenario={scenario}
-              portalScenario={portalScenario}
+              portal={portal}
               participant={participant}
             />
           ))}

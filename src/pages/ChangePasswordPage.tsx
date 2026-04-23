@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaEye,
@@ -10,13 +10,15 @@ import {
 import { RequiredMark } from "../components/atoms/FormMarks";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
+import { invalidateAccessSummary } from "../hooks/useAccessSummary";
+import { invalidateProfile } from "../hooks/useProfile";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 
 type ProfileResponse = {
   userId: string;
   username: string;
   name: string;
-  badgeNumber: string | null;
+  cardNumber: string | null;
   department: string | null;
   departmentId: number | null;
   employeeUserId: number | null;
@@ -43,6 +45,7 @@ type ProfileResponse = {
   canEditProfile: boolean;
   canEditAllProfileFields: boolean;
   canChangePassword: boolean;
+  mustChangePassword: boolean;
   editableFields: string[];
 };
 
@@ -53,7 +56,7 @@ type DepartmentData = {
 
 type ProfileFormState = {
   name: string;
-  badgeNumber: string;
+  cardNumber: string;
   gender: string;
   nik: string;
   birthDay: string;
@@ -76,7 +79,7 @@ type ProfileFormState = {
 
 const emptyProfileForm: ProfileFormState = {
   name: "",
-  badgeNumber: "",
+  cardNumber: "",
   gender: "",
   nik: "",
   birthDay: "",
@@ -110,6 +113,14 @@ const toInputDate = (value?: string | null) => {
   return date.toISOString().slice(0, 10);
 };
 
+const getTodayInputDate = () => {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+};
+
+const TODAY_INPUT_DATE = getTodayInputDate();
+
 const formatDateLabel = (value?: string | null) => {
   if (!value) {
     return "-";
@@ -136,7 +147,7 @@ const normalizeEmailInput = (value?: string | null) => {
 
 const buildProfileForm = (profile: ProfileResponse): ProfileFormState => ({
   name: profile.name ?? "",
-  badgeNumber: profile.badgeNumber ?? "",
+  cardNumber: profile.cardNumber ?? "",
   gender: profile.gender ?? "",
   nik: profile.nik ?? "",
   birthDay: toInputDate(profile.birthDay),
@@ -162,7 +173,7 @@ const buildProfileForm = (profile: ProfileResponse): ProfileFormState => ({
 
 const adminRequiredFields = new Set<keyof ProfileFormState>([
   "name",
-  "badgeNumber",
+  "cardNumber",
   "gender",
   "nik",
   "birthDay",
@@ -173,6 +184,24 @@ const adminRequiredFields = new Set<keyof ProfileFormState>([
   "tipe",
   "location",
 ]);
+
+const FIRST_LOGIN_STEPS = [
+  {
+    label: "1. Pakai password sementara",
+    description:
+      "Masukkan password dari notifikasi onboarding ke kolom Password Lama.",
+  },
+  {
+    label: "2. Buat password baru",
+    description:
+      "Isi password baru minimal 6 karakter dan ulangi di kolom konfirmasi.",
+  },
+  {
+    label: "3. Simpan lalu lanjut",
+    description:
+      "Setelah tersimpan, menu OMS lain akan terbuka dan Anda bisa mulai bekerja.",
+  },
+] as const;
 
 const SummaryChip = ({
   label,
@@ -243,6 +272,7 @@ type ProfileFieldProps = {
   onChange: (value: string) => void;
   disabled?: boolean;
   type?: "text" | "date" | "email";
+  max?: string;
   placeholder?: string;
   options?: Array<{ label: string; value: string }>;
   helper?: string;
@@ -255,6 +285,7 @@ const ProfileField = ({
   onChange,
   disabled = false,
   type = "text",
+  max,
   placeholder,
   options,
   helper,
@@ -301,6 +332,7 @@ const ProfileField = ({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
+          max={max}
           placeholder={placeholder}
           className={`${baseClass} ${stateClass}`}
         />
@@ -313,6 +345,7 @@ const ProfileField = ({
 const ChangePasswordPage = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const passwordSectionRef = useRef<HTMLElement | null>(null);
 
   const [isOpen, setIsOpen] = useState(true);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
@@ -411,6 +444,26 @@ const ChangePasswordPage = () => {
     };
   }, [profile?.canEditAllProfileFields]);
 
+  useEffect(() => {
+    if (profile?.mustChangePassword && profile.canChangePassword) {
+      setIsPasswordEditing(true);
+    }
+  }, [profile?.canChangePassword, profile?.mustChangePassword]);
+
+  useEffect(() => {
+    if (!profile?.mustChangePassword) {
+      return;
+    }
+
+    setIsProfileEditing(false);
+    window.requestAnimationFrame(() => {
+      passwordSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [profile?.mustChangePassword]);
+
   const editableFieldSet = useMemo(
     () => new Set(profile?.editableFields ?? []),
     [profile?.editableFields]
@@ -418,6 +471,15 @@ const ChangePasswordPage = () => {
 
   const canEditField = (field: keyof ProfileFormState) =>
     editableFieldSet.has(field);
+  const isForcedFirstLogin = Boolean(profile?.mustChangePassword);
+  const canEditProfileNow = Boolean(profile?.canEditProfile) && !isForcedFirstLogin;
+
+  const scrollToPasswordSection = () => {
+    passwordSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
 
   const handleProfileChange = (field: keyof ProfileFormState, value: string) => {
     setProfileForm((current) => ({
@@ -445,7 +507,7 @@ const ChangePasswordPage = () => {
     assign("email", profileForm.email);
     assign("phone", profileForm.phone);
     assign("name", profileForm.name);
-    assign("badgeNumber", profileForm.badgeNumber);
+    assign("cardNumber", profileForm.cardNumber);
     assign("gender", profileForm.gender);
     assign("nik", profileForm.nik);
     assign("birthDay", profileForm.birthDay);
@@ -508,6 +570,14 @@ const ChangePasswordPage = () => {
       return "Tanggal hafal ibadah wajib diisi saat status hafal ibadah aktif.";
     }
 
+    if (
+      (payload.birthDay !== undefined || profileForm.birthDay) &&
+      profileForm.birthDay &&
+      profileForm.birthDay > TODAY_INPUT_DATE
+    ) {
+      return "Tanggal lahir tidak boleh melebihi hari ini.";
+    }
+
     return null;
   };
 
@@ -520,7 +590,7 @@ const ChangePasswordPage = () => {
   };
 
   const handleStartProfileEdit = () => {
-    if (!profile?.canEditProfile) {
+    if (!profile?.canEditProfile || profile.mustChangePassword) {
       return;
     }
 
@@ -611,7 +681,6 @@ const ChangePasswordPage = () => {
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     const validationMessage = validatePasswordForm();
     if (validationMessage) {
       showToast(validationMessage, "error");
@@ -649,7 +718,13 @@ const ChangePasswordPage = () => {
       setNewPassword("");
       setConfirmPassword("");
       setIsPasswordEditing(false);
-      showToast("Password berhasil diperbarui", "success");
+      invalidateProfile();
+      invalidateAccessSummary();
+      showToast("Password berhasil diperbarui. Silakan login ulang.", "success");
+      navigate("/login", {
+        replace: true,
+        state: { passwordChanged: true },
+      });
     } catch (error) {
       console.error("Failed to update password", error);
       showToast("Terjadi kesalahan jaringan. Coba lagi.", "error");
@@ -666,7 +741,7 @@ const ChangePasswordPage = () => {
 
   const profileViewItems = useMemo(
     () => [
-      { label: "Badge Number", value: displayValue(profile?.badgeNumber) },
+      { label: "Card Number", value: displayValue(profile?.cardNumber) },
       { label: "Nama", value: displayValue(profile?.name), accent: true },
       { label: "Gender", value: displayValue(profile?.gender) },
       { label: "NIK", value: displayValue(profile?.nik) },
@@ -719,6 +794,10 @@ const ChangePasswordPage = () => {
   };
 
   const handleCancelPasswordEdit = () => {
+    if (profile?.mustChangePassword) {
+      return;
+    }
+
     setOldPassword("");
     setNewPassword("");
     setConfirmPassword("");
@@ -729,7 +808,7 @@ const ChangePasswordPage = () => {
   };
 
   const profileInitial = (profile?.name?.trim().charAt(0) ?? "?").toUpperCase();
-  const loginIdentity = profile?.badgeNumber ? `#${profile.badgeNumber}` : profile?.username ?? "-";
+  const loginIdentity = profile?.cardNumber ? `#${profile.cardNumber}` : profile?.username ?? "-";
 
   return (
     <div className="flex min-h-screen bg-[#eef3fa]">
@@ -743,8 +822,54 @@ const ChangePasswordPage = () => {
                 Memuat profil OMS...
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="grid gap-6 xl:items-start xl:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="flex flex-col gap-6">
+                {isForcedFirstLogin ? (
+                  <section className="order-1 overflow-hidden rounded-[32px] border border-amber-200 bg-[linear-gradient(135deg,#fff8e8_0%,#fff3d6_44%,#fffdf8_100%)] p-6 shadow-[0_22px_48px_-40px_rgba(146,64,14,0.28)]">
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="max-w-3xl">
+                        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-700">
+                          Welcome OMS
+                        </p>
+                        <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-slate-800">
+                          Satu langkah lagi sebelum masuk OMS
+                        </h2>
+                        <p className="mt-3 text-[15px] leading-7 text-slate-600">
+                          Akun Anda masih memakai password sementara onboarding. Ganti password sekarang agar menu OMS terbuka dan penggunaan akun jadi lebih aman.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={scrollToPasswordSection}
+                        className="inline-flex items-center justify-center rounded-[18px] bg-[#272e79] px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_28px_-22px_rgba(15,23,42,0.28)] transition hover:bg-[#1f255f]"
+                      >
+                        Lanjut Ganti Password
+                      </button>
+                    </div>
+
+                    <div className="mt-6 grid gap-4 md:grid-cols-3">
+                      {FIRST_LOGIN_STEPS.map((step) => (
+                        <div
+                          key={step.label}
+                          className="rounded-[24px] border border-amber-200/80 bg-white/80 px-4 py-4 shadow-[0_16px_30px_-32px_rgba(146,64,14,0.3)]"
+                        >
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-700">
+                            {step.label}
+                          </p>
+                          <p className="mt-3 text-sm leading-6 text-slate-600">
+                            {step.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                <div
+                  className={`grid gap-6 xl:items-start xl:grid-cols-[320px_minmax(0,1fr)] ${
+                    isForcedFirstLogin ? "order-3" : "order-1"
+                  }`}
+                >
                   <div className="space-y-4 xl:sticky xl:top-6">
                     <section className="relative overflow-hidden rounded-[32px] border border-[#2d3555] bg-[#202744] text-white shadow-[0_24px_52px_-36px_rgba(15,23,42,0.4)]">
                       <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-[#a6937a]/10 blur-3xl" />
@@ -772,7 +897,7 @@ const ChangePasswordPage = () => {
                         <div className="mt-8 space-y-3">
                           <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/45">
-                              Badge Number
+                              Card Number
                             </p>
                             <p className="mt-2 text-lg font-semibold text-white">{loginIdentity}</p>
                           </div>
@@ -799,6 +924,13 @@ const ChangePasswordPage = () => {
                           value={profile?.statusLMS ? "Boleh akses" : "Belum diizinkan"}
                           tone={profile?.statusLMS ? "green" : "amber"}
                         />
+                        {isForcedFirstLogin ? (
+                          <SummaryChip
+                            label="Akun"
+                            value="Menunggu ganti password"
+                            tone="amber"
+                          />
+                        ) : null}
                         <SummaryChip
                           label="Hafal Ibadah"
                           value={profile?.isMem ? "Sudah" : "Belum"}
@@ -840,13 +972,15 @@ const ChangePasswordPage = () => {
                       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#44507f]">
-                            Employee Profile
+                            {isForcedFirstLogin ? "Informasi Akun" : "Employee Profile"}
                           </p>
                           <h2 className="mt-2 text-3xl font-semibold tracking-[-0.02em] text-slate-800">
-                            Detail Profil OMS
+                            {isForcedFirstLogin ? "Profil OMS Anda" : "Detail Profil OMS"}
                           </h2>
                           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                            {isProfileEditing
+                            {isForcedFirstLogin
+                              ? "Bagian ini membantu Anda mengecek identitas akun. Setelah password berhasil diganti, Anda bisa kembali ke sini untuk mengedit profil bila diperlukan."
+                              : isProfileEditing
                               ? "Ubah field yang aktif, cek kembali perubahannya, lalu simpan saat sudah yakin."
                               : "Data tampil lebih dulu dalam mode baca agar struktur informasi tetap bersih dan mudah dipindai."}
                           </p>
@@ -862,7 +996,7 @@ const ChangePasswordPage = () => {
                                 Batal
                               </button>
                             </>
-                          ) : profile?.canEditProfile ? (
+                          ) : canEditProfileNow ? (
                             <button
                               type="button"
                               onClick={handleStartProfileEdit}
@@ -877,7 +1011,7 @@ const ChangePasswordPage = () => {
 
                     {isProfileEditing ? (
                       <form onSubmit={handleProfileSubmit} className="space-y-5">
-                        {profile?.canEditAllProfileFields ? (
+                        {profile?.canEditAllProfileFields && !isForcedFirstLogin ? (
                           <div className="flex flex-wrap items-center gap-2 rounded-[24px] border border-[#dbe4f0] bg-[#f4f7fb] px-4 py-4 text-xs text-slate-600">
                             <span className="rounded-full bg-rose-50 px-2.5 py-1 font-semibold uppercase tracking-[0.18em] text-rose-500">
                               Wajib
@@ -893,12 +1027,12 @@ const ChangePasswordPage = () => {
                         <div className="rounded-[28px] border border-[#dbe4f0] bg-white p-4 shadow-[0_16px_36px_-34px_rgba(15,23,42,0.1)] md:p-5">
                           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         <ProfileField
-                          label="Badge Number"
-                          value={profileForm.badgeNumber}
-                          onChange={(value) => handleProfileChange("badgeNumber", value)}
-                          disabled={!isProfileEditing || !canEditField("badgeNumber")}
-                          placeholder="Badge number"
-                          mark={getFieldMark("badgeNumber")}
+                          label="Card Number"
+                          value={profileForm.cardNumber}
+                          onChange={(value) => handleProfileChange("cardNumber", value)}
+                          disabled={!isProfileEditing || !canEditField("cardNumber")}
+                          placeholder="Card number"
+                          mark={getFieldMark("cardNumber")}
                         />
                         <ProfileField
                           label="Nama"
@@ -930,6 +1064,7 @@ const ChangePasswordPage = () => {
                           onChange={(value) => handleProfileChange("birthDay", value)}
                           disabled={!isProfileEditing || !canEditField("birthDay")}
                           type="date"
+                          max={TODAY_INPUT_DATE}
                           mark={getFieldMark("birthDay")}
                         />
                         <ProfileField
@@ -1086,10 +1221,10 @@ const ChangePasswordPage = () => {
                           <button
                             type="submit"
                             disabled={
-                              !profile?.canEditProfile || !hasProfileChanges || isProfileSubmitting
+                              !canEditProfileNow || !hasProfileChanges || isProfileSubmitting
                             }
                             className={`inline-flex items-center justify-center gap-2 rounded-[18px] px-5 py-3 text-sm font-semibold text-white transition ${
-                              !profile?.canEditProfile ||
+                              !canEditProfileNow ||
                               !hasProfileChanges ||
                               isProfileSubmitting
                                 ? "cursor-not-allowed bg-slate-400"
@@ -1118,17 +1253,26 @@ const ChangePasswordPage = () => {
                 </section>
               </div>
 
-              <section className="rounded-[32px] border border-[#dbe4f0] bg-white p-6 shadow-[0_22px_48px_-40px_rgba(15,23,42,0.12)]">
+              <section
+                ref={passwordSectionRef}
+                className={`rounded-[32px] border border-[#dbe4f0] bg-white p-6 shadow-[0_22px_48px_-40px_rgba(15,23,42,0.12)] ${
+                  isForcedFirstLogin ? "order-2" : "order-2"
+                }`}
+              >
                 <div className="flex flex-col gap-5 border-b border-[#e7edf6] pb-6 lg:flex-row lg:items-end lg:justify-between">
                   <div className="max-w-3xl">
                     <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#44507f]">
-                      Security
+                      {isForcedFirstLogin ? "Aktivasi Akun" : "Security"}
                     </p>
                     <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-slate-800">
-                      Pengaturan Password
+                      {isForcedFirstLogin
+                        ? "Buat Password Baru untuk Login OMS"
+                        : "Pengaturan Password"}
                     </h2>
                     <p className="mt-3 text-[15px] leading-7 text-slate-500">
-                      Password minimal panjangnya 6 karakter, tidak boleh sama dengan password lama, dan harus cocok dengan konfirmasi password saat mengubah. Pastikan juga untuk selalu menjaga kerahasiaan password Anda.
+                      {isForcedFirstLogin
+                        ? "Masukkan password sementara dari notifikasi onboarding sebagai Password Lama, lalu buat password baru Anda. Setelah tersimpan, Anda bisa langsung lanjut ke menu OMS lainnya."
+                        : "Password minimal panjangnya 6 karakter, tidak boleh sama dengan password lama, dan harus cocok dengan konfirmasi password saat mengubah. Pastikan juga untuk selalu menjaga kerahasiaan password Anda."}
                     </p>
                   </div>
 
@@ -1142,6 +1286,11 @@ const ChangePasswordPage = () => {
                     </button>
                   ) : null}
                 </div>
+                {profile?.mustChangePassword ? (
+                  <div className="mt-6 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-800">
+                    Password sementara onboarding masih aktif. Gunakan password sementara dari notifikasi onboarding sebagai Password Lama. Setelah password baru berhasil disimpan, akses menu OMS akan terbuka otomatis.
+                  </div>
+                ) : null}
                 {isPasswordEditing ? (
                   <div className="mt-6 rounded-[28px] border border-[#dbe4f0] bg-white p-5 shadow-[0_16px_32px_-30px_rgba(15,23,42,0.1)]">
                     <form onSubmit={handlePasswordSubmit} className="space-y-5">
@@ -1159,6 +1308,7 @@ const ChangePasswordPage = () => {
                               type={showOld ? "text" : "password"}
                               value={oldPassword}
                               onChange={(event) => setOldPassword(event.target.value)}
+                              autoFocus={isForcedFirstLogin}
                               className="w-full rounded-[18px] border border-[#dbe4f0] bg-white py-3.5 pl-11 pr-11 text-[15px] outline-none transition focus:border-[#272e79] focus:ring-4 focus:ring-[#e4eaf6]"
                               placeholder="Masukkan password lama"
                             />
@@ -1170,6 +1320,11 @@ const ChangePasswordPage = () => {
                               {showOld ? <FaEyeSlash /> : <FaEye />}
                             </button>
                           </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            {profile?.mustChangePassword
+                              ? "Masukkan password sementara onboarding Anda."
+                              : "Masukkan password yang sedang aktif."}
+                          </p>
                         </div>
 
                         <div className="rounded-[24px] border border-[#e3eaf3] bg-[#fbfdff] p-4">
@@ -1227,13 +1382,15 @@ const ChangePasswordPage = () => {
                       </div>
 
                       <div className="flex flex-wrap justify-end gap-3 border-t border-[#e7edf6] pt-5">
-                        <button
-                          type="button"
-                          onClick={handleCancelPasswordEdit}
-                          className="rounded-[18px] border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                        >
-                          Batal
-                        </button>
+                        {!profile?.mustChangePassword ? (
+                          <button
+                            type="button"
+                            onClick={handleCancelPasswordEdit}
+                            className="rounded-[18px] border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            Batal
+                          </button>
+                        ) : null}
                         <button
                           type="submit"
                           disabled={isPasswordSubmitting}

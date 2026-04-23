@@ -1,15 +1,17 @@
-import {
-  getOnboardingScenario,
-  type OnboardingPortalKey,
-  type OnboardingScenario,
-} from "../../../features/onboarding/mock-config";
-import {
-  administratorPortalKeys,
-  getAdministratorParticipants,
-  type AdminParticipantStageSnapshot,
-  type AdminParticipantStageStatus,
-  type AdminPortalParticipant,
+import type {
+  AdminOnboardingParticipantStage,
+  AdminOnboardingPortal,
+  AdminPortalParticipant,
 } from "./onboarding-admin-monitoring";
+
+export type AdminParticipantStageStatus =
+  | "not_started"
+  | "reading"
+  | "waiting_exam"
+  | "waiting_review"
+  | "passed"
+  | "remedial"
+  | "failed_window";
 
 export const formatDate = (value?: string | null) =>
   value
@@ -31,15 +33,6 @@ export const formatDateTime = (value?: string | null) =>
       })
     : "-";
 
-export const stageStatusLabel: Record<AdminParticipantStageStatus, string> = {
-  not_started: "Belum mulai",
-  reading: "Sedang belajar",
-  waiting_exam: "Siap ujian",
-  waiting_review: "Menunggu review",
-  passed: "Lulus",
-  remedial: "Remedial",
-};
-
 export const adminAccentTextClass = "text-[#1b2238]";
 export const adminButtonClass =
   "border border-[#1b2238] bg-[#1b2238] text-[#fff8ed] shadow-[0_18px_34px_-24px_rgba(27,34,56,0.42)] hover:bg-[#2a3559]";
@@ -48,6 +41,43 @@ export const adminPanelClass =
 export const adminMutedPanelClass = "border-[#e7d8c6] bg-[#f6ecdf]";
 export const adminProgressBarClass = "bg-[#24345f]";
 
+const normalizeUpper = (value?: string | null) => (value ?? "").trim().toUpperCase();
+
+export const normalizeStageStatus = (
+  status?: string | null
+): AdminParticipantStageStatus => {
+  switch (normalizeUpper(status)) {
+    case "READING":
+      return "reading";
+    case "WAITING_EXAM":
+      return "waiting_exam";
+    case "WAITING_ADMIN":
+      return "waiting_review";
+    case "PASSED":
+    case "COMPLETED":
+    case "PASSED_OVERRIDE":
+      return "passed";
+    case "REMEDIAL":
+      return "remedial";
+    case "FAILED":
+    case "FAIL_FINAL":
+    case "CANCELLED":
+      return "failed_window";
+    default:
+      return "not_started";
+  }
+};
+
+export const stageStatusLabel: Record<AdminParticipantStageStatus, string> = {
+  not_started: "Belum mulai",
+  reading: "Sedang baca",
+  waiting_exam: "Siap lanjut",
+  waiting_review: "Menunggu review",
+  passed: "Lulus",
+  remedial: "Remedial",
+  failed_window: "Butuh keputusan",
+};
+
 export const stageStatusClass: Record<AdminParticipantStageStatus, string> = {
   not_started: "border-[#e7d8c6] bg-[#fffaf2] text-[#8b7a66]",
   reading: "border-[#e5cfaa] bg-[#fbf1df] text-[#8a5f24]",
@@ -55,116 +85,7 @@ export const stageStatusClass: Record<AdminParticipantStageStatus, string> = {
   waiting_review: "border-[#1b2238] bg-[#1b2238] text-[#fff8ed]",
   passed: "border-[#cfe0cf] bg-[#edf5ea] text-[#486448]",
   remedial: "border-[#e7caa4] bg-[#f8ebd4] text-[#915d16]",
-};
-
-export const isManagedPortalKey = (value?: string): value is OnboardingPortalKey =>
-  Boolean(value && administratorPortalKeys.includes(value.toUpperCase() as OnboardingPortalKey));
-
-export const getManagedPortals = () =>
-  administratorPortalKeys.map((portalKey) => ({
-    portalKey,
-    scenario: getOnboardingScenario(portalKey),
-    participants: getAdministratorParticipants(portalKey),
-  }));
-
-const isStagePassed = (status: AdminParticipantStageStatus) => status === "passed";
-
-export const isParticipantCompleted = (participant: AdminPortalParticipant) =>
-  participant.stages.every((stage) => isStagePassed(stage.status));
-
-export const getCurrentStageIndex = (participant: AdminPortalParticipant) => {
-  const current = participant.stages.find((stage) => !isStagePassed(stage.status));
-  return current?.stageIndex ?? participant.stages.at(-1)?.stageIndex ?? 0;
-};
-
-const getStageProgressRatio = (
-  scenario: OnboardingScenario,
-  stage: AdminParticipantStageSnapshot
-) => {
-  const materialsTotal = scenario.stages[stage.stageIndex]?.materials.length || 1;
-  const materialRatio = Math.min(1, stage.materialsDone / materialsTotal);
-
-  switch (stage.status) {
-    case "passed":
-      return 1;
-    case "reading":
-      return materialRatio * 0.6;
-    case "waiting_exam":
-      return 0.82;
-    case "waiting_review":
-      return 0.92;
-    case "remedial":
-      return 0.68;
-    default:
-      return 0;
-  }
-};
-
-export const getParticipantProgress = (
-  scenario: OnboardingScenario,
-  participant: AdminPortalParticipant
-) =>
-  Math.round(
-    (participant.stages.reduce(
-      (sum, stage) => sum + getStageProgressRatio(scenario, stage),
-      0
-    ) /
-      scenario.stages.length) *
-      100
-  );
-
-export const getParticipantMaterialProgress = (
-  scenario: OnboardingScenario,
-  participant: AdminPortalParticipant
-) => {
-  const done = participant.stages.reduce((sum, stage) => sum + stage.materialsDone, 0);
-  const total = scenario.stages.reduce(
-    (sum, stage) => sum + Math.max(stage.materials.length, 1),
-    0
-  );
-  return `${done}/${total}`;
-};
-
-export const getPortalMetrics = (
-  scenario: OnboardingScenario,
-  participants: AdminPortalParticipant[]
-) => {
-  const completedCount = participants.filter(isParticipantCompleted).length;
-  const needsAttentionCount = participants.filter((participant) =>
-    participant.stages.some(
-      (stage) => stage.status === "waiting_review" || stage.status === "remedial"
-    )
-  ).length;
-  const pendingByStage = scenario.stages.map(
-    (_, index) =>
-      participants.filter(
-        (participant) => participant.stages[index] && participant.stages[index].status !== "passed"
-      ).length
-  );
-  const activeByStage = scenario.stages.map(
-    (_, index) =>
-      participants.filter(
-        (participant) =>
-          !isParticipantCompleted(participant) && getCurrentStageIndex(participant) === index
-      ).length
-  );
-  const averageProgress = participants.length
-    ? Math.round(
-        participants.reduce(
-          (sum, participant) => sum + getParticipantProgress(scenario, participant),
-          0
-        ) / participants.length
-      )
-    : 0;
-
-  return {
-    totalParticipants: participants.length,
-    completedCount,
-    needsAttentionCount,
-    pendingByStage,
-    activeByStage,
-    averageProgress,
-  };
+  failed_window: "border-[#ebcdc7] bg-[#f9ece8] text-[#8f4736]",
 };
 
 export const getInitials = (name: string) =>
@@ -174,3 +95,211 @@ export const getInitials = (name: string) =>
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+
+export const isParticipantCompleted = (participant: AdminPortalParticipant) =>
+  participant.stages.every(
+    (stage) => normalizeStageStatus(stage.status) === "passed"
+  );
+
+const getStageProgressRatio = (stage: AdminOnboardingParticipantStage) => {
+  const normalized = normalizeStageStatus(stage.status);
+  const totalMaterialCount = Math.max(stage.totalMaterialCount, 1);
+  const materialRatio = Math.max(
+    0,
+    Math.min(1, stage.readMaterialCount / totalMaterialCount)
+  );
+
+  switch (normalized) {
+    case "passed":
+      return 1;
+    case "waiting_review":
+      return Math.max(0.88, materialRatio);
+    case "waiting_exam":
+      return Math.max(0.78, materialRatio);
+    case "remedial":
+      return Math.max(0.5, materialRatio);
+    case "failed_window":
+      return Math.max(0.4, materialRatio);
+    case "reading":
+      return Math.max(0.12, materialRatio);
+    default:
+      return 0;
+  }
+};
+
+export const getParticipantProgress = (participant: AdminPortalParticipant) => {
+  if (participant.stages.length === 0) {
+    return 0;
+  }
+
+  return Math.round(
+    (participant.stages.reduce(
+      (sum, stage) => sum + getStageProgressRatio(stage),
+      0
+    ) /
+      participant.stages.length) *
+      100
+  );
+};
+
+export const getCurrentStage = (participant: AdminPortalParticipant) =>
+  (participant.currentStageOrder != null
+    ? participant.stages.find(
+        (stage) => stage.stageOrder === participant.currentStageOrder
+      )
+    : null) ??
+  participant.stages.find((stage) => normalizeStageStatus(stage.status) !== "passed") ??
+  participant.stages.at(-1) ??
+  null;
+
+export const getCurrentStageIndex = (participant: AdminPortalParticipant) => {
+  const currentStage = getCurrentStage(participant);
+  if (!currentStage) {
+    return 0;
+  }
+
+  return participant.stages.findIndex(
+    (stage) =>
+      stage.onboardingStageTemplateId === currentStage.onboardingStageTemplateId
+  );
+};
+
+export const getParticipantMaterialProgress = (
+  participant: AdminPortalParticipant
+) => `${participant.readMaterialCount}/${Math.max(participant.totalMaterialCount, 1)}`;
+
+export const getParticipantLastActivityAt = (
+  participant: AdminPortalParticipant
+) => {
+  const candidates = [
+    participant.lastReadAt,
+    ...participant.stages.flatMap((stage) => [
+      stage.lastReadAt,
+      stage.completedAt,
+      stage.passedAt,
+      stage.failedAt,
+      stage.startedAt,
+    ]),
+    participant.startedAt,
+  ].filter(Boolean) as string[];
+
+  const latest = candidates.reduce<string | null>((current, value) => {
+    if (!current) {
+      return value;
+    }
+
+    return new Date(value).getTime() > new Date(current).getTime()
+      ? value
+      : current;
+  }, null);
+
+  return latest;
+};
+
+export const getStageLastActivityAt = (
+  stage: AdminOnboardingParticipantStage
+) => {
+  const candidates = [
+    stage.lastReadAt,
+    stage.completedAt,
+    stage.passedAt,
+    stage.failedAt,
+    stage.startedAt,
+  ].filter(Boolean) as string[];
+
+  const latest = candidates.reduce<string | null>((current, value) => {
+    if (!current) {
+      return value;
+    }
+
+    return new Date(value).getTime() > new Date(current).getTime()
+      ? value
+      : current;
+  }, null);
+
+  return latest;
+};
+
+export const getParticipantNextAction = (participant: AdminPortalParticipant) => {
+  if (isParticipantCompleted(participant)) {
+    return "Onboarding portal ini sudah clear. Admin tinggal pantau histori baca dan arsip tahap.";
+  }
+
+  const currentStage = getCurrentStage(participant);
+  if (!currentStage) {
+    return "Belum ada tahap aktif untuk peserta ini.";
+  }
+
+  switch (normalizeStageStatus(currentStage.status)) {
+    case "reading":
+      return `${currentStage.stageName} masih berjalan. Pantau apakah seluruh materi tahap ini benar-benar dibuka.`;
+    case "waiting_exam":
+      return `${currentStage.stageName} sudah masuk status siap lanjut. Admin bisa pantau langkah berikutnya.`;
+    case "waiting_review":
+      return `${currentStage.stageName} menunggu review admin. Pastikan keputusan berikutnya tidak tertahan.`;
+    case "remedial":
+      return `${currentStage.stageName} sedang remedial. Perlu follow-up supaya ritme onboarding tidak macet.`;
+    case "failed_window":
+      return `${currentStage.stageName} butuh keputusan lanjutan karena belum berhasil clear.`;
+    default:
+      return `${currentStage.stageName} belum aktif penuh.`;
+  }
+};
+
+export const getPortalMetrics = (portal: AdminOnboardingPortal) => {
+  const activeByStage = portal.stages.map((stage) =>
+    portal.participants.filter((participant) => {
+      if (isParticipantCompleted(participant)) {
+        return false;
+      }
+
+      const currentStage = getCurrentStage(participant);
+      return currentStage?.stageOrder === stage.stageOrder;
+    }).length
+  );
+
+  const pendingByStage = portal.stages.map((stage) =>
+    portal.participants.filter((participant) => {
+      const snapshot = participant.stages.find(
+        (item) => item.stageOrder === stage.stageOrder
+      );
+      return !snapshot || normalizeStageStatus(snapshot.status) !== "passed";
+    }).length
+  );
+
+  const needsAttentionCount = portal.participants.filter((participant) => {
+    const currentStage = getCurrentStage(participant);
+    const currentStatus = normalizeStageStatus(currentStage?.status);
+    const overdue =
+      !isParticipantCompleted(participant) &&
+      new Date(participant.dueAt).getTime() < Date.now();
+
+    return (
+      overdue ||
+      currentStatus === "waiting_review" ||
+      currentStatus === "remedial" ||
+      currentStatus === "failed_window"
+    );
+  }).length;
+
+  const averageProgress = portal.participants.length
+    ? Math.round(
+        portal.participants.reduce(
+          (sum, participant) => sum + getParticipantProgress(participant),
+          0
+        ) / portal.participants.length
+      )
+    : 0;
+
+  return {
+    totalParticipants: portal.totalParticipants,
+    activeParticipants: portal.activeParticipants,
+    completedCount: portal.completedParticipants,
+    needsAttentionCount,
+    pendingByStage,
+    activeByStage,
+    averageProgress,
+    totalOpenCount: portal.totalOpenCount,
+    latestReadAt: portal.lastReadAt,
+  };
+};

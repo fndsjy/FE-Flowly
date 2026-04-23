@@ -1139,7 +1139,7 @@ const ProcedureSopPage = () => {
               <img
                 src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
                 alt="Delete Confirmation"
-                className="w-40 mx-auto"
+                className="w-80 mx-auto"
               />
               <h3 className="text-lg font-semibold text-slate-900">
                 Hapus SOP

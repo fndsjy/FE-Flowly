@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../../components/atoms/BackButton";
+import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
 import type { SupplierUserProfile } from "../components/SupplierSidebar";
 
 type SupplierAdminRecord = {
@@ -248,6 +249,11 @@ export const SupplierAdministratorSuppliersPage = ({
   >("company_name_asc");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    recordId: string;
+    label: string;
+  }>({ open: false, recordId: "", label: "" });
   const [form, setForm] = useState<SupplierAdminFormState>(emptySupplierAdminForm);
 
   const sortedRecords = useMemo(() => {
@@ -342,12 +348,19 @@ export const SupplierAdministratorSuppliersPage = ({
     closeModal();
   };
 
-  const handleDelete = (record: SupplierAdminRecord) => {
-    if (!window.confirm(`Delete ${record.companyName}?`)) {
-      return;
-    }
+  const requestDelete = (record: SupplierAdminRecord) => {
+    setDeleteConfirm({
+      open: true,
+      recordId: record.id,
+      label: record.companyName,
+    });
+  };
 
-    setRecords((current) => current.filter((item) => item.id !== record.id));
+  const handleDelete = () => {
+    setRecords((current) =>
+      current.filter((item) => item.id !== deleteConfirm.recordId)
+    );
+    setDeleteConfirm({ open: false, recordId: "", label: "" });
   };
 
   const statusClassMap: Record<SupplierAdminRecord["status"], string> = {
@@ -463,7 +476,7 @@ export const SupplierAdministratorSuppliersPage = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(record)}
+                        onClick={() => requestDelete(record)}
                         className="inline-flex items-center gap-2 rounded-full border border-[#f0d8d8] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#b24747] transition hover:bg-[#fff7f7]"
                       >
                         <i className="fa-solid fa-trash" aria-hidden="true"></i>
@@ -611,6 +624,16 @@ export const SupplierAdministratorSuppliersPage = ({
           </div>
         </div>
       ) : null}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{deleteConfirm.label}</span>?
+          </>
+        }
+        onClose={() => setDeleteConfirm({ open: false, recordId: "", label: "" })}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 };

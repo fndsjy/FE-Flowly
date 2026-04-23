@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/organisms/Sidebar";
+import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
@@ -279,6 +280,12 @@ const NotificationTemplatePage = () => {
     useState(false);
   const [notificationTemplateDeletingId, setNotificationTemplateDeletingId] =
     useState<string | null>(null);
+  const [notificationTemplateDeleteConfirm, setNotificationTemplateDeleteConfirm] =
+    useState<{
+      open: boolean;
+      caseNotificationTemplateId: string;
+      label: string;
+    }>({ open: false, caseNotificationTemplateId: "", label: "" });
   const [notificationTemplateForm, setNotificationTemplateForm] =
     useState<NotificationTemplateForm>({
       caseNotificationTemplateId: "",
@@ -456,9 +463,17 @@ const NotificationTemplatePage = () => {
     }
   };
 
-  const handleNotificationTemplateDelete = async (
-    caseNotificationTemplateId: string
-  ) => {
+  const requestNotificationTemplateDelete = (item: CaseNotificationTemplate) => {
+    setNotificationTemplateDeleteConfirm({
+      open: true,
+      caseNotificationTemplateId: item.caseNotificationTemplateId,
+      label: item.templateName,
+    });
+  };
+
+  const handleNotificationTemplateDelete = async () => {
+    const caseNotificationTemplateId =
+      notificationTemplateDeleteConfirm.caseNotificationTemplateId;
     if (!caseNotificationTemplateId) return;
     setNotificationTemplateDeletingId(caseNotificationTemplateId);
     try {
@@ -475,6 +490,11 @@ const NotificationTemplatePage = () => {
       }
       showToast("Template default dihapus", "success");
       fetchNotificationTemplates();
+      setNotificationTemplateDeleteConfirm({
+        open: false,
+        caseNotificationTemplateId: "",
+        label: "",
+      });
       if (
         notificationTemplateFormMode === "edit" &&
         notificationTemplateForm.caseNotificationTemplateId ===
@@ -598,11 +618,7 @@ const NotificationTemplatePage = () => {
                               Edit
                             </button>
                             <button
-                              onClick={() =>
-                                handleNotificationTemplateDelete(
-                                  item.caseNotificationTemplateId
-                                )
-                              }
+                              onClick={() => requestNotificationTemplateDelete(item)}
                               disabled={isDeleting}
                               className={`text-slate-400 hover:underline ${
                                 isDeleting ? "opacity-60 cursor-not-allowed" : ""
@@ -844,6 +860,27 @@ const NotificationTemplatePage = () => {
           </div>
         </div>
       </div>
+      <DeleteConfirmDialog
+        open={notificationTemplateDeleteConfirm.open}
+        title={
+          <>
+            Hapus{" "}
+            <span className="text-rose-500">
+              {notificationTemplateDeleteConfirm.label}
+            </span>
+            ?
+          </>
+        }
+        onClose={() =>
+          setNotificationTemplateDeleteConfirm({
+            open: false,
+            caseNotificationTemplateId: "",
+            label: "",
+          })
+        }
+        onConfirm={handleNotificationTemplateDelete}
+        isLoading={notificationTemplateDeletingId !== null}
+      />
     </div>
   );
 };

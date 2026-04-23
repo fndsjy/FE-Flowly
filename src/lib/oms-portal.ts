@@ -4,7 +4,7 @@ export type OmsUserProfile = {
   userId: string;
   username: string;
   name: string;
-  badgeNumber: string | null;
+  cardNumber: string | null;
   department: string | null;
   roleId: string;
   roleName: string;

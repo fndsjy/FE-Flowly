@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
+import type { OnboardingScenario, OnboardingPortalKey } from "../../../features/onboarding/mock-config";
 import type {
-  OnboardingPortalKey,
-  OnboardingScenario,
-} from "../../../features/onboarding/mock-config";
-import type { AdminPortalParticipant } from "../../lib/onboarding/onboarding-admin-monitoring";
+  AdminOnboardingPortal,
+  AdminPortalParticipant,
+} from "../../lib/onboarding/onboarding-admin-monitoring";
 import {
   adminButtonClass,
   adminMutedPanelClass,
@@ -11,11 +11,14 @@ import {
   adminProgressBarClass,
   formatDate,
   formatDateTime,
-  getCurrentStageIndex,
+  getCurrentStage,
   getInitials,
+  getParticipantLastActivityAt,
   getParticipantMaterialProgress,
+  getParticipantNextAction,
   getParticipantProgress,
   getPortalMetrics,
+  normalizeStageStatus,
   stageStatusClass,
   stageStatusLabel,
 } from "../../lib/onboarding/adminOnboardingUtils";
@@ -65,55 +68,43 @@ const portalToneMap: Record<
   },
 };
 
-export const getPortalTone = (portalKey: OnboardingPortalKey) => portalToneMap[portalKey];
+const safePortalKey = (value: string): OnboardingPortalKey => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized in portalToneMap) {
+    return normalized as OnboardingPortalKey;
+  }
 
-export const StatCard = ({
-  label,
-  value,
-  helper,
-  accentClass,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  accentClass: string;
-}) => (
-  <article className="rounded-[26px] border border-[#dccab6] bg-[#fffaf2] p-5 shadow-[0_22px_50px_-42px_rgba(74,53,31,0.24)]">
-    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8a6d4b]">
-      {label}
-    </p>
-    <h2 className={`mt-3 text-[32px] font-semibold tracking-[-0.06em] ${accentClass}`}>
-      {value}
-    </h2>
-    <p className="mt-3 text-sm leading-7 text-[#696157]">{helper}</p>
-  </article>
-);
+  return "ADMINISTRATOR";
+};
+
+export const getPortalTone = (portalKey: string) => portalToneMap[safePortalKey(portalKey)];
 
 export const PortalSummaryCard = ({
   adminScenario,
-  portalScenario,
-  participants,
+  portal,
 }: {
   adminScenario: OnboardingScenario;
-  portalScenario: OnboardingScenario;
-  participants: AdminPortalParticipant[];
+  portal: AdminOnboardingPortal;
 }) => {
-  const metrics = getPortalMetrics(portalScenario, participants);
-  const portalHref = `${adminScenario.basePath}/portal/${portalScenario.portalKey}`;
-  const tone = getPortalTone(portalScenario.portalKey);
-  const stageSummaryText = portalScenario.stages
-    .slice(0, 3)
-    .map(
-      (stage, index) =>
-        `${metrics.pendingByStage[index] ?? 0} user belum kelar ${stage.phase.toLowerCase()}`
-    )
-    .join(", ");
+  const metrics = getPortalMetrics(portal);
+  const portalHref = `${adminScenario.basePath}/portal/${portal.portalKey}`;
+  const tone = getPortalTone(portal.portalKey);
+  const stageSummaryText =
+    portal.stages.length > 0
+      ? portal.stages
+          .slice(0, 4)
+          .map(
+            (stage, index) =>
+              `${metrics.pendingByStage[index] ?? 0} peserta belum clear ${stage.stageName.toLowerCase()}`
+          )
+          .join(", ")
+      : "Belum ada tahap aktif pada portal ini.";
 
   return (
     <Link
       to={portalHref}
       className="group block focus:outline-none"
-      aria-label={`Buka detail portal ${portalScenario.portalLabel}`}
+      aria-label={`Buka detail portal ${portal.portalName}`}
     >
       <article
         className={`relative overflow-hidden rounded-[36px] border p-6 transition duration-200 group-hover:-translate-y-1 group-hover:shadow-[0_30px_70px_-44px_rgba(74,53,31,0.34)] group-focus-visible:-translate-y-1 group-focus-visible:shadow-[0_30px_70px_-44px_rgba(74,53,31,0.34)] ${adminPanelClass}`}
@@ -130,7 +121,7 @@ export const PortalSummaryCard = ({
                 <span
                   className={`rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] ${tone.chipClass}`}
                 >
-                  {portalScenario.portalLabel}
+                  {portal.portalName}
                 </span>
                 <span className="rounded-full border border-[#e4d5c3] bg-[#fff7ec] px-4 py-2 text-xs font-semibold text-[#6a6258]">
                   {metrics.needsAttentionCount} follow-up
@@ -143,8 +134,11 @@ export const PortalSummaryCard = ({
                     {metrics.totalParticipants} peserta dipantau
                   </h2>
                   <p className="mt-4 max-w-2xl text-[15px] leading-8 text-[#615a52] md:text-base">
-                    {stageSummaryText}. Admin tinggal masuk ke portal ini buat cek
-                    bottleneck dan mutusin follow-up berikutnya.
+                    {stageSummaryText} Total baca materi saat ini sudah{" "}
+                    <span className="font-semibold text-[#1b2238]">
+                      {metrics.totalOpenCount} kali
+                    </span>
+                    .
                   </p>
                 </div>
 
@@ -158,9 +152,12 @@ export const PortalSummaryCard = ({
               <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   ["Rata-rata progres", `${metrics.averageProgress}%`],
-                  ["Butuh follow-up", `${metrics.needsAttentionCount} user`],
-                  ["Selesai onboarding", `${metrics.completedCount} user`],
-                  ["Masih aktif", `${metrics.totalParticipants - metrics.completedCount} user`],
+                  ["Masih aktif", `${metrics.activeParticipants} peserta`],
+                  ["Selesai", `${metrics.completedCount} peserta`],
+                  [
+                    "Aktivitas terakhir",
+                    formatDateTime(metrics.latestReadAt),
+                  ],
                 ].map(([label, value], index) => (
                   <div
                     key={label}
@@ -178,9 +175,9 @@ export const PortalSummaryCard = ({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              {portalScenario.stages.map((stage, index) => (
+              {portal.stages.map((stage, index) => (
                 <div
-                  key={stage.id}
+                  key={stage.onboardingStageTemplateId}
                   className={`rounded-[24px] border p-4 shadow-[0_12px_28px_-24px_rgba(74,53,31,0.24)] transition ${
                     index % 2 === 0 ? "-rotate-[1deg]" : "rotate-[1deg]"
                   } ${tone.stageClass}`}
@@ -188,17 +185,18 @@ export const PortalSummaryCard = ({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
-                        {stage.phase}
+                        Tahap {stage.stageOrder}
                       </p>
                       <h3 className="mt-2 text-base font-semibold text-[#1b2238]">
-                        {stage.title}
+                        {stage.stageName}
                       </h3>
                     </div>
                     <span className={`mt-1 h-3 w-3 rounded-full ${tone.markerClass}`}></span>
                   </div>
                   <div className="mt-4 space-y-1.5 text-sm leading-6 text-[#5f584f]">
-                    <p>Aktif: {metrics.activeByStage[index]} user</p>
-                    <p>Belum selesai: {metrics.pendingByStage[index]} user</p>
+                    <p>Aktif: {metrics.activeByStage[index] ?? 0} peserta</p>
+                    <p>Belum selesai: {metrics.pendingByStage[index] ?? 0} peserta</p>
+                    <p>{stage.materialCount} materi dipasang</p>
                   </div>
                 </div>
               ))}
@@ -212,24 +210,23 @@ export const PortalSummaryCard = ({
 
 export const ParticipantCard = ({
   adminScenario,
-  portalScenario,
+  portal,
   participant,
 }: {
   adminScenario: OnboardingScenario;
-  portalScenario: OnboardingScenario;
+  portal: AdminOnboardingPortal;
   participant: AdminPortalParticipant;
 }) => {
-  const progress = getParticipantProgress(portalScenario, participant);
-  const currentStageIndex = getCurrentStageIndex(participant);
-  const currentStage = portalScenario.stages[currentStageIndex];
-  const currentStageSnapshot = participant.stages[currentStageIndex];
-  const participantHref = `${adminScenario.basePath}/portal/${portalScenario.portalKey}/user/${participant.id}`;
+  const progress = getParticipantProgress(participant);
+  const currentStage = getCurrentStage(participant);
+  const currentStageStatus = normalizeStageStatus(currentStage?.status);
+  const participantHref = `${adminScenario.basePath}/portal/${portal.portalKey}/user/${encodeURIComponent(participant.participantId)}`;
 
   return (
     <Link
       to={participantHref}
       className="group block focus:outline-none"
-      aria-label={`Buka detail user ${participant.name}`}
+      aria-label={`Buka detail user ${participant.participantName}`}
     >
       <article
         className={`rounded-[30px] border p-5 transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_26px_56px_-40px_rgba(74,53,31,0.28)] group-focus-visible:-translate-y-0.5 group-focus-visible:shadow-[0_26px_56px_-40px_rgba(74,53,31,0.28)] ${adminPanelClass}`}
@@ -239,26 +236,27 @@ export const ParticipantCard = ({
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-start gap-4">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-[#1b2238] text-sm font-semibold text-[#fff8ed] shadow-[0_16px_32px_-24px_rgba(27,34,56,0.45)]">
-                  {getInitials(participant.name)}
+                  {getInitials(participant.participantName)}
                 </div>
                 <div>
                   <h3 className="text-[28px] font-semibold leading-none tracking-[-0.05em] text-[#1b2238]">
-                    {participant.name}
+                    {participant.participantName}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-[#625a50]">
-                    {participant.roleLabel} | {participant.unitLabel}
+                    {participant.departmentName ?? "Departemen belum diisi"} |{" "}
+                    {participant.cardNumber ?? participant.badgeNumber ?? participant.participantReferenceId}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <span className="rounded-full border border-[#e0d1bf] bg-[#fbf3e9] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#6f6458]">
-                      {currentStage?.phase}
+                      {currentStage
+                        ? `Tahap ${currentStage.stageOrder}`
+                        : "Belum ada tahap"}
                     </span>
-                    {currentStageSnapshot ? (
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[currentStageSnapshot.status]}`}
-                      >
-                        {stageStatusLabel[currentStageSnapshot.status]}
-                      </span>
-                    ) : null}
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[currentStageStatus]}`}
+                    >
+                      {stageStatusLabel[currentStageStatus]}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -274,12 +272,14 @@ export const ParticipantCard = ({
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
                 Langkah berikutnya
               </p>
-              <p className="mt-2 text-sm leading-7 text-[#5d564d]">{participant.nextAction}</p>
+              <p className="mt-2 text-sm leading-7 text-[#5d564d]">
+                {getParticipantNextAction(participant)}
+              </p>
             </div>
 
-            {currentStageSnapshot?.note ? (
+            {currentStage?.note ? (
               <div className="mt-3 rounded-[20px] border border-[#e6d7c5] bg-[#fffdf8] px-4 py-4 text-sm leading-7 text-[#5d564d]">
-                {currentStageSnapshot.note}
+                {currentStage.note}
               </div>
             ) : null}
           </div>
@@ -287,9 +287,12 @@ export const ParticipantCard = ({
           <div>
             <div className="grid gap-3 sm:grid-cols-2">
               {[
-                ["Materi", getParticipantMaterialProgress(portalScenario, participant)],
-                ["Deadline", formatDate(participant.deadlineAt)],
-                ["Aktivitas terakhir", formatDateTime(participant.lastActivityAt)],
+                ["Materi dibuka", getParticipantMaterialProgress(participant)],
+                ["Baca pertama", formatDateTime(participant.firstReadAt)],
+                [
+                  "Aktivitas terakhir",
+                  formatDateTime(getParticipantLastActivityAt(participant)),
+                ],
                 ["Progress", `${progress}%`],
               ].map(([label, value]) => (
                 <div key={label} className={`rounded-[18px] border px-4 py-3 ${adminMutedPanelClass}`}>
@@ -313,18 +316,41 @@ export const ParticipantCard = ({
                 />
               </div>
             </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className={`rounded-[18px] border px-4 py-3 ${adminMutedPanelClass}`}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+                  Deadline
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[#5d564d]">
+                  {formatDate(participant.dueAt)}
+                </p>
+              </div>
+              <div className={`rounded-[18px] border px-4 py-3 ${adminMutedPanelClass}`}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+                  Total baca
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[#5d564d]">
+                  {participant.totalOpenCount} kali
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          {participant.stages.map((stage) => (
-            <span
-              key={`${participant.id}-${stage.stageIndex}`}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[stage.status]}`}
-            >
-              {portalScenario.stages[stage.stageIndex]?.phase}: {stageStatusLabel[stage.status]}
-            </span>
-          ))}
+          {participant.stages.map((stage) => {
+            const normalized = normalizeStageStatus(stage.status);
+
+            return (
+              <span
+                key={`${participant.participantId}-${stage.stageOrder}`}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[normalized]}`}
+              >
+                Tahap {stage.stageOrder}: {stageStatusLabel[normalized]}
+              </span>
+            );
+          })}
         </div>
       </article>
     </Link>
