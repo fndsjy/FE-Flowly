@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
-import type { OnboardingScenario, OnboardingPortalKey } from "../../../features/onboarding/mock-config";
 import type {
   AdminOnboardingPortal,
   AdminPortalParticipant,
+  ManagedOnboardingPortalKey,
 } from "../../lib/onboarding/onboarding-admin-monitoring";
+import type { AdminOnboardingNavigation } from "../../lib/onboarding/onboarding-admin-navigation";
 import {
   adminButtonClass,
   adminMutedPanelClass,
@@ -24,7 +25,7 @@ import {
 } from "../../lib/onboarding/adminOnboardingUtils";
 
 const portalToneMap: Record<
-  OnboardingPortalKey,
+  ManagedOnboardingPortalKey | "ADMINISTRATOR",
   {
     chipClass: string;
     stageClass: string;
@@ -68,10 +69,10 @@ const portalToneMap: Record<
   },
 };
 
-const safePortalKey = (value: string): OnboardingPortalKey => {
+const safePortalKey = (value: string): ManagedOnboardingPortalKey | "ADMINISTRATOR" => {
   const normalized = value.trim().toUpperCase();
   if (normalized in portalToneMap) {
-    return normalized as OnboardingPortalKey;
+    return normalized as ManagedOnboardingPortalKey | "ADMINISTRATOR";
   }
 
   return "ADMINISTRATOR";
@@ -80,14 +81,14 @@ const safePortalKey = (value: string): OnboardingPortalKey => {
 export const getPortalTone = (portalKey: string) => portalToneMap[safePortalKey(portalKey)];
 
 export const PortalSummaryCard = ({
-  adminScenario,
+  adminNavigation,
   portal,
 }: {
-  adminScenario: OnboardingScenario;
+  adminNavigation: AdminOnboardingNavigation;
   portal: AdminOnboardingPortal;
 }) => {
   const metrics = getPortalMetrics(portal);
-  const portalHref = `${adminScenario.basePath}/portal/${portal.portalKey}`;
+  const portalHref = `${adminNavigation.basePath}/portal/${portal.portalKey}`;
   const tone = getPortalTone(portal.portalKey);
   const stageSummaryText =
     portal.stages.length > 0
@@ -209,18 +210,18 @@ export const PortalSummaryCard = ({
 };
 
 export const ParticipantCard = ({
-  adminScenario,
+  adminNavigation,
   portal,
   participant,
 }: {
-  adminScenario: OnboardingScenario;
+  adminNavigation: AdminOnboardingNavigation;
   portal: AdminOnboardingPortal;
   participant: AdminPortalParticipant;
 }) => {
   const progress = getParticipantProgress(participant);
   const currentStage = getCurrentStage(participant);
   const currentStageStatus = normalizeStageStatus(currentStage?.status);
-  const participantHref = `${adminScenario.basePath}/portal/${portal.portalKey}/user/${encodeURIComponent(participant.participantId)}`;
+  const participantHref = `${adminNavigation.basePath}/portal/${portal.portalKey}/user/${encodeURIComponent(participant.participantId)}`;
 
   return (
     <Link

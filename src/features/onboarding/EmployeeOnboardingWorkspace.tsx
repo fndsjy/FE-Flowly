@@ -49,6 +49,30 @@ type WorkspaceMaterial = {
   note: string | null;
 };
 
+type WorkspaceExam = {
+  onboardingStageExamId: string;
+  examId: number;
+  examName: string;
+  passScore: number | null;
+  orderIndex: number;
+  questionCount: number;
+  durationSeconds: number;
+  questionTypes: string[];
+};
+
+type WorkspaceCertificate = {
+  certNumber: string;
+  certificateTemplateId: number;
+  certificateName: string | null;
+  fileName: string;
+  imageUrl: string;
+  pdfUrl: string;
+  status: string | null;
+  issuedAt: string | null;
+  generatedBy: string | null;
+  scheduleId: number | null;
+};
+
 type WorkspaceStage = {
   onboardingStageProgressId: string;
   onboardingStageTemplateId: string;
@@ -63,7 +87,13 @@ type WorkspaceStage = {
   completedAt: string | null;
   failedAt: string | null;
   note: string | null;
+  examScore: number | null;
+  examAttemptStatus: string | null;
+  examSubmittedAt: string | null;
+  examReviewedAt: string | null;
+  examNote: string | null;
   materials: WorkspaceMaterial[];
+  exams: WorkspaceExam[];
 };
 
 type WorkspacePortal = {
@@ -77,6 +107,7 @@ type WorkspacePortal = {
   dueAt: string;
   currentStageOrder: number | null;
   note: string | null;
+  certificates: WorkspaceCertificate[];
   stages: WorkspaceStage[];
 };
 
@@ -92,6 +123,8 @@ const portalKeys: OnboardingPortalKey[] = [
 
 const panel =
   "rounded-[32px] border border-white/70 bg-white/92 p-6 shadow-[0_28px_72px_-48px_rgba(15,23,42,0.28)] md:p-8";
+const DEFAULT_STAGE_PASS_SCORE = 60;
+const ONBOARDING_WORKSPACE_REFRESH_EVENT = "flowly:onboarding-workspace-refresh";
 
 const safePortalKey = (value?: string | null): OnboardingPortalKey => {
   const normalized = value?.trim().toUpperCase() ?? "";
@@ -245,6 +278,22 @@ const buildScenario = (
   const runtimePortalKey = safePortalKey(portal.portalKey);
   const baseScenario = getOnboardingScenario(requestedPortalKey);
 
+  const certificates = (portal.certificates ?? []).map((certificate) => ({
+    id: certificate.certNumber,
+    title: certificate.certificateName ?? "Sertifikat Onboarding",
+    owner: certificate.generatedBy ?? "LMS DOMAS",
+    status:
+      certificate.status?.trim().toUpperCase() === "A"
+        ? ("issued" as const)
+        : ("pending" as const),
+    issuedAt: certificate.issuedAt,
+    note: certificate.certNumber,
+    certificateNumber: certificate.certNumber,
+    fileName: certificate.fileName,
+    imageUrl: certificate.imageUrl,
+    pdfUrl: certificate.pdfUrl,
+  }));
+
   const stages = portal.stages.map((stage) => {
     const stageStatus = mapStageStatus(stage.status);
     const stageMaterials = stage.materials
@@ -303,18 +352,40 @@ const buildScenario = (
       .sort((left, right) => left.title.localeCompare(right.title));
 
     const assessmentStatus = mapAssessmentStatus(stage.status);
+    const exams = [...(stage.exams ?? [])].sort(
+      (left, right) => left.orderIndex - right.orderIndex
+    );
+    const examQuestionCount = exams.reduce(
+      (sum, exam) => sum + Number(exam.questionCount ?? 0),
+      0
+    );
+    const examDurationSeconds = exams.reduce(
+      (sum, exam) => sum + Number(exam.durationSeconds ?? 0),
+      0
+    );
+    const examQuestionTypes = Array.from(
+      new Set(exams.flatMap((exam) => exam.questionTypes ?? []))
+    );
+    const firstExam = exams[0] ?? null;
+    const stagePassScore =
+      exams.find((exam) => exam.passScore != null)?.passScore ??
+      DEFAULT_STAGE_PASS_SCORE;
     const submittedAt =
-      assessmentStatus === "submitted" ||
+      stage.examSubmittedAt ??
+      (assessmentStatus === "submitted" ||
       assessmentStatus === "passed" ||
       assessmentStatus === "remedial" ||
       assessmentStatus === "failed_window"
         ? stage.completedAt ?? stage.passedAt ?? stage.startedAt
-        : null;
+        : null);
     const reviewedAt =
-      assessmentStatus === "passed" ? stage.passedAt ?? stage.completedAt : null;
+      stage.examReviewedAt ??
+      (assessmentStatus === "passed" ? stage.passedAt ?? stage.completedAt : null);
 
     return {
-      id: stage.onboardingStageTemplateId,
+      id: stage.onboardingStageProgressId,
+      stageProgressId: stage.onboardingStageProgressId,
+      stageTemplateId: stage.onboardingStageTemplateId,
       phase: `Tahap ${stage.stageOrder}`,
       title: stage.stageName,
       targetWindow: stage.stageCode || `Stage ${stage.stageOrder}`,
@@ -329,19 +400,24 @@ const buildScenario = (
         failedAt: stage.failedAt,
         materials: stageMaterials,
         assessment: {
-        title: `Ujian ${stage.stageName}`,
-        durationMinutes: 30,
-        questionBankCount: Math.max(stageMaterials.length * 5, 10),
-        passScore: 75,
-        score: assessmentStatus === "passed" ? 100 : null,
+        title:
+          exams.length === 1
+            ? firstExam?.examName ?? `Ujian ${stage.stageName}`
+            : `Ujian ${stage.stageName}`,
+        durationMinutes: Math.max(1, Math.ceil((examDurationSeconds || 1800) / 60)),
+        durationSeconds: examDurationSeconds || 1800,
+        questionBankCount: examQuestionCount,
+        passScore: stagePassScore,
+        score: stage.examScore ?? (assessmentStatus === "passed" ? 100 : null),
         status: assessmentStatus,
         submittedAt,
         reviewedAt,
         remedialCount: stage.remedialCount,
-        adminNote:
-          stage.note ??
-          "Status ujian akan mengikuti progres onboarding tahap ini.",
-        questionTypes: ["Pilihan ganda", "True / False", "Essay"],
+        adminNote: stage.examNote ?? "-",
+        questionTypes:
+          examQuestionTypes.length > 0
+            ? examQuestionTypes
+            : ["Pilihan ganda", "True / False", "Essay"],
       },
       checkpoints: [
         `${stageMaterials.length} materi terpasang`,
@@ -364,7 +440,7 @@ const buildScenario = (
       `Onboarding ${portal.portalName} aktif sampai ${formatDate(portal.dueAt)}.`,
     lmsStatus: portal.status.trim().toUpperCase() === "PASSED_TO_LMS" ? "Aktif" : "Belum aktif",
     stages,
-    certificates: [],
+    certificates,
     isRuntime: true,
   };
 };
@@ -434,10 +510,24 @@ export default function EmployeeOnboardingWorkspace() {
   }, [refreshTick]);
 
   const scheduleWorkspaceRefresh = () => {
-    window.setTimeout(() => {
+    const refresh = () => {
       setRefreshTick((value) => value + 1);
-    }, 600);
+    };
+
+    window.setTimeout(refresh, 800);
+    window.setTimeout(refresh, 1800);
   };
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === ONBOARDING_WORKSPACE_REFRESH_EVENT) {
+        scheduleWorkspaceRefresh();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   const scenario = useMemo(() => {
     const requestedPortalKey: OnboardingPortalKey = "EMPLOYEE";

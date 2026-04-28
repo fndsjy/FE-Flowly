@@ -1,5 +1,4 @@
 import { Navigate, useParams } from "react-router-dom";
-import type { OnboardingScenario } from "../../../features/onboarding/mock-config";
 import {
   ParticipantCard,
   getPortalTone,
@@ -12,6 +11,7 @@ import {
   getParticipantProgress,
   getPortalMetrics,
 } from "../../lib/onboarding/adminOnboardingUtils";
+import type { AdminOnboardingNavigation } from "../../lib/onboarding/onboarding-admin-navigation";
 import {
   isManagedPortalKey,
   useAdministratorOnboardingMonitoring,
@@ -63,15 +63,15 @@ const StatePanel = ({
 );
 
 const AdminPortalDetailPage = ({
-  scenario,
+  navigation,
 }: {
-  scenario: OnboardingScenario;
+  navigation: AdminOnboardingNavigation;
 }) => {
   const { managedPortalKey } = useParams<{ managedPortalKey: string }>();
   const { portals, loading, error } = useAdministratorOnboardingMonitoring();
 
   if (!isManagedPortalKey(managedPortalKey)) {
-    return <Navigate to={scenario.basePath} replace />;
+    return <Navigate to={navigation.basePath} replace />;
   }
 
   if (loading) {
@@ -91,7 +91,7 @@ const AdminPortalDetailPage = ({
     portals.find((item) => item.portalKey === managedPortalKey) ?? null;
 
   if (!portal) {
-    return <Navigate to={scenario.basePath} replace />;
+    return <Navigate to={navigation.basePath} replace />;
   }
 
   const metrics = getPortalMetrics(portal);
@@ -118,10 +118,10 @@ const AdminPortalDetailPage = ({
         title={`Detail portal ${portal.portalName}`}
         subtitle="Halaman ini fokus ke portal tertentu: lihat tahap mana yang paling padat, siapa yang belum bergerak, dan kapan aktivitas baca terakhir terjadi."
         items={[
-          { label: "Dashboard admin", to: scenario.basePath },
+          { label: "Dashboard admin", to: navigation.basePath },
           { label: portal.portalName },
         ]}
-        backTo={scenario.basePath}
+        backTo={navigation.basePath}
       />
 
       <section className="relative overflow-hidden rounded-[38px] border border-[#d8c7b2] bg-[#fff7ec] px-6 py-7 shadow-[0_30px_86px_-56px_rgba(74,53,31,0.32)] md:px-8 md:py-8">
@@ -264,7 +264,7 @@ const AdminPortalDetailPage = ({
           {sortedParticipants.map((participant) => (
             <ParticipantCard
               key={`${portal.portalKey}-${participant.participantId}`}
-              adminScenario={scenario}
+              adminNavigation={navigation}
               portal={portal}
               participant={participant}
             />

@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Link,
   NavLink,
   Navigate,
   Route,
   Routes,
+  useNavigate,
   useParams,
 } from "react-router-dom";
 import {
@@ -23,6 +24,11 @@ import {
 import AdminOverviewPage from "../../administrator/pages/onboarding/AdminOverviewPage";
 import AdminParticipantDetailPage from "../../administrator/pages/onboarding/AdminParticipantDetailPage";
 import AdminPortalDetailPage from "../../administrator/pages/onboarding/AdminPortalDetailPage";
+import { adminOnboardingNavigation } from "../../administrator/lib/onboarding/onboarding-admin-navigation";
+import { useToast } from "../../components/organisms/MessageToast";
+import { apiFetch, getApiErrorMessage } from "../../lib/api";
+
+const ONBOARDING_WORKSPACE_REFRESH_EVENT = "flowly:onboarding-workspace-refresh";
 
 const formatDate = (value?: string | null) =>
   value
@@ -96,6 +102,14 @@ const formatCountdown = (totalSeconds: number) => {
   return [minutes, seconds]
     .map((value) => String(value).padStart(2, "0"))
     .join(":");
+};
+
+const formatDuration = (totalSeconds: number) => {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
 const overallLabel: Record<OverallOnboardingStatus, string> = {
@@ -201,6 +215,47 @@ type ExamQuestion = {
   helper: string;
 };
 
+type RuntimeExamOption = {
+  value: string;
+  label: string;
+  display: string;
+};
+
+type RuntimeExamQuestion = {
+  questionId: number;
+  orderIndex: number;
+  type: "mcq" | "boolean" | "essay";
+  prompt: string;
+  options: RuntimeExamOption[];
+  helper: string;
+  timeLimitSeconds: number;
+};
+
+type RuntimeExamResponse = {
+  session: {
+    id: number;
+    scheduleId: number | null;
+    examsId: string;
+    startTime: string;
+    endTime: string | null;
+    tokenExpiresAt: string;
+    durationSeconds: number;
+    durationMinutes: number;
+    isFinished: boolean;
+  };
+  questions: RuntimeExamQuestion[];
+  answers?: Array<{
+    questionId: number;
+    answer: string | null;
+  }>;
+};
+
+const runtimeQuestionTypeLabel: Record<RuntimeExamQuestion["type"], string> = {
+  mcq: "Pilihan ganda",
+  essay: "Essay",
+  boolean: "True / False",
+};
+
 const getFlowState = (stages: OnboardingStage[], index: number): FlowState => {
   const stage = stages[index];
   if (!stage) return "locked";
@@ -239,6 +294,18 @@ const getStageReference = (scenario: OnboardingScenario, index: number) => {
 const countRemedials = (scenario: OnboardingScenario) =>
   scenario.stages.reduce((sum, stage) => sum + stage.assessment.remedialCount, 0);
 
+const isMaterialRead = (item: OnboardingMaterial) =>
+  item.status === "completed" ||
+  Boolean(
+    item.readAt ||
+      item.lastReadAt ||
+      item.completedAt ||
+      Number(item.openCount ?? 0) > 0
+  );
+
+const countReadMaterials = (materials: OnboardingMaterial[]) =>
+  materials.filter(isMaterialRead).length;
+
 const buildExamQuestions = (stage: OnboardingStage): ExamQuestion[] => [
   {
     id: `${stage.id}-mcq`,
@@ -276,9 +343,7 @@ const PageShell = ({
   children: ReactNode;
 }) => {
   const materials = scenario.stages.flatMap((stage) => stage.materials);
-  const completedMaterials = materials.filter(
-    (item) => item.status === "completed"
-  ).length;
+  const readMaterials = countReadMaterials(materials);
   const passedStages = scenario.stages.filter(
     (item) => item.status === "passed"
   ).length;
@@ -300,7 +365,7 @@ const PageShell = ({
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
               User cukup melihat alur tahap dari atas ke bawah, membuka materi,
-              lalu masuk ke ujian di tab baru setelah semua file selesai dibaca.
+              lalu masuk ke ujian di tab baru setelah semua file pernah dibuka.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <span className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${scenario.theme.badgeClass}`}>
@@ -370,7 +435,7 @@ const PageShell = ({
           ["Mulai", formatDate(scenario.startedAt), "Tanggal onboarding dimulai."],
           ["Deadline", formatDate(scenario.deadlineAt), deadlineDelta >= 0 ? `${deadlineDelta} hari tersisa.` : `${Math.abs(deadlineDelta)} hari lewat deadline.`],
           ["Tahap Lulus", `${passedStages}/${scenario.stages.length}`, "Tahap berikutnya terbuka setelah tahap sebelumnya lulus."],
-          ["Materi Selesai", `${completedMaterials}/${materials.length}`, `${countRemedials(scenario)} remedial sudah tercatat.`],
+          ["Materi Dibaca", `${readMaterials}/${materials.length}`, `${countRemedials(scenario)} remedial sudah tercatat.`],
         ].map(([label, value, helper]) => (
           <article key={label} className="rounded-[24px] border border-white/70 bg-white/92 p-5 shadow-[0_18px_48px_-40px_rgba(15,23,42,0.2)]">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
@@ -449,141 +514,193 @@ const ExamPanel = ({
   flowState: FlowState;
   dependency: string | null;
 }) => {
-  const doneMaterials = stage.materials.filter(
-    (item) => item.status === "completed"
-  ).length;
+  const [showExamAgreement, setShowExamAgreement] = useState(false);
+  const doneMaterials = countReadMaterials(stage.materials);
   const ready =
-    doneMaterials === stage.materials.length && stage.materials.length > 0;
+    stage.materials.length === 0 || doneMaterials === stage.materials.length;
   const assessment = stage.assessment;
-  const runtimeExamDisabled = Boolean(scenario.isRuntime);
+  const hasQuestions = assessment.questionBankCount > 0;
+  const examActionClosed =
+    assessment.status === "submitted" || assessment.status === "passed";
   const canPreviewExam =
-    !runtimeExamDisabled &&
     flowState !== "locked" &&
+    ready &&
+    hasQuestions &&
+    !examActionClosed &&
     assessment.status !== "failed_window";
   const startLabel =
     assessment.status === "remedial" ? "Mulai remedial" : "Mulai ujian";
+  const displayAssessmentStatus: AssessmentStatus =
+    flowState === "locked"
+      ? "locked"
+      : canPreviewExam
+        ? assessment.status === "remedial"
+          ? "remedial"
+          : "ready"
+        : assessment.status;
+  const examUrl = `${scenario.basePath}/exam/${stage.id}`;
 
   return (
-    <section className="rounded-[26px] border border-slate-200 bg-white/95 p-5 shadow-[0_18px_42px_-38px_rgba(15,23,42,0.18)]">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-            Bagian ujian
-          </p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-900">
-            {assessment.title}
-          </h3>
+    <>
+      <section className="rounded-[26px] border border-slate-200 bg-white/95 p-5 shadow-[0_18px_42px_-38px_rgba(15,23,42,0.18)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              Bagian ujian
+            </p>
+            <h3 className="mt-2 text-xl font-semibold text-slate-900">
+              {assessment.title}
+            </h3>
+          </div>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${chipClass(
+              displayAssessmentStatus
+            )}`}
+          >
+            {assessmentLabel[displayAssessmentStatus]}
+          </span>
         </div>
-        <span
-          className={`rounded-full border px-3 py-1 text-xs font-semibold ${chipClass(
-            flowState === "locked" ? "locked" : assessment.status
-          )}`}
-        >
-          {assessmentLabel[flowState === "locked" ? "locked" : assessment.status]}
-        </span>
-      </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <div className={`rounded-[18px] border p-4 ${scenario.theme.softPanelClass}`}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-            Durasi
-          </p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">
-            {assessment.durationMinutes} menit
-          </p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className={`rounded-[18px] border p-4 ${scenario.theme.softPanelClass}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+              Durasi
+            </p>
+            <p className="mt-2 text-lg font-semibold text-slate-900">
+              {formatDuration(
+                assessment.durationSeconds ?? assessment.durationMinutes * 60
+              )}
+            </p>
+          </div>
+          <div className={`rounded-[18px] border p-4 ${scenario.theme.softPanelClass}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+              Tipe soal
+            </p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+              {assessment.questionTypes.join(" | ")}
+            </p>
+          </div>
+          <div className={`rounded-[18px] border p-4 ${scenario.theme.softPanelClass}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+              Passing score
+            </p>
+            <p className="mt-2 text-lg font-semibold text-slate-900">
+              {assessment.passScore}
+            </p>
+          </div>
         </div>
-        <div className={`rounded-[18px] border p-4 ${scenario.theme.softPanelClass}`}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-            Tipe soal
-          </p>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
-            {assessment.questionTypes.join(" | ")}
-          </p>
-        </div>
-        <div className={`rounded-[18px] border p-4 ${scenario.theme.softPanelClass}`}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-            Passing score
-          </p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">
-            {assessment.passScore}
-          </p>
-        </div>
-      </div>
 
-      <div className="mt-5 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-        <h4 className="text-sm font-semibold text-slate-900">
-          {flowState === "locked"
-            ? "Tahap ini belum bisa ujian"
-            : runtimeExamDisabled
-              ? "Ujian belum tersedia di halaman ini"
-            : !ready
-              ? "Selesaikan semua materi dulu"
-              : assessment.status === "submitted"
-                ? "Ujian sudah dikirim"
-                : assessment.status === "passed"
-                  ? "Tahap sudah lulus"
-                  : assessment.status === "remedial"
-                    ? "Remedial tersedia"
-                    : assessment.status === "failed_window"
-                      ? "Menunggu keputusan atasan"
-                      : "User sudah bisa mulai ujian"}
-        </h4>
-        <p className="mt-2 text-sm leading-7 text-slate-600">
-          {flowState === "locked"
-            ? `Tahap ini terkunci. Selesaikan ${dependency ?? "tahap sebelumnya"} sampai lulus.`
-            : runtimeExamDisabled
-              ? "Halaman onboarding ini sudah memakai data real untuk tahap dan materi. Fitur ujian online belum diaktifkan dari workspace ini."
-            : !ready
-              ? "Selesaikan semua file pada tahap ini sebelum lanjut ke ujian."
-              : assessment.status === "submitted"
-                ? "Status aslinya sedang menunggu nilai dipublish."
-                : assessment.status === "passed"
-                  ? "Tahap ini sudah lulus."
-                  : assessment.status === "remedial"
-                    ? "Nilai sebelumnya belum lulus. Tombol remedial muncul agar user bisa mengulang."
-                    : assessment.status === "failed_window"
-                      ? "Jendela training sudah habis. Menunggu apakah diperpanjang atau dihentikan."
-                      : "Klik tombol di bawah untuk membuka halaman ujian baru di tab terpisah."}
-        </p>
-      </div>
+        <div className="mt-5 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+          <h4 className="text-sm font-semibold text-slate-900">
+            {flowState === "locked"
+              ? "Tahap ini belum bisa ujian"
+              : !hasQuestions
+                ? "Ujian belum memiliki soal"
+              : !ready
+                ? "Buka semua materi dulu"
+                : assessment.status === "submitted"
+                  ? "Ujian sudah dikirim"
+                  : assessment.status === "passed"
+                    ? "Tahap sudah lulus"
+                    : assessment.status === "remedial"
+                      ? "Remedial tersedia"
+                      : assessment.status === "failed_window"
+                        ? "Menunggu keputusan atasan"
+                        : "User sudah bisa mulai ujian"}
+          </h4>
+          <p className="mt-2 text-sm leading-7 text-slate-600">
+            {flowState === "locked"
+              ? `Tahap ini terkunci. Selesaikan ${dependency ?? "tahap sebelumnya"} sampai lulus.`
+              : !hasQuestions
+                ? "Admin belum memasang soal untuk tahap ini."
+              : !ready
+                ? "Tekan Mulai baca pada semua file tahap ini sebelum lanjut ke ujian."
+                : assessment.status === "submitted"
+                  ? "Status aslinya sedang menunggu nilai dipublish."
+                  : assessment.status === "passed"
+                    ? "Tahap ini sudah lulus."
+                    : assessment.status === "remedial"
+                      ? "Nilai sebelumnya belum lulus. Tombol remedial muncul agar user bisa mengulang."
+                      : assessment.status === "failed_window"
+                        ? "Jendela training sudah habis. Menunggu apakah diperpanjang atau dihentikan."
+                        : "Klik tombol di bawah untuk membuka halaman ujian baru di tab terpisah."}
+          </p>
+        </div>
 
-      <div className="mt-5 flex flex-wrap gap-3">
-        {canPreviewExam ? (
-          <>
-            <Link
-              to={`${scenario.basePath}/exam/${stage.id}`}
-              target="_blank"
-              rel="noreferrer"
-              className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
-            >
-              {startLabel}
-            </Link>
-            {assessment.status === "submitted" ? (
-              <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700">
-                Tunggu nilai admin
+        {!examActionClosed ? (
+          <div className="mt-5 flex flex-wrap gap-3">
+            {canPreviewExam ? (
+              <button
+                type="button"
+                onClick={() => setShowExamAgreement(true)}
+                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
+              >
+                {startLabel}
+              </button>
+            ) : !hasQuestions ? (
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
+                Soal belum tersedia
               </span>
-            ) : null}
-            {assessment.status === "passed" ? (
-              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
-                Tahap lulus
+            ) : assessment.status === "failed_window" ? (
+              <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">
+                Tunggu keputusan atasan
               </span>
-            ) : null}
-          </>
-        ) : runtimeExamDisabled ? (
-          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
-            Ujian belum tersedia
-          </span>
-        ) : assessment.status === "failed_window" ? (
-          <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">
-            Tunggu keputusan atasan
-          </span>
-        ) : (
-          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
-            Mulai ujian belum tersedia
-          </span>
-        )}
-      </div>
-    </section>
+            ) : (
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
+                Mulai ujian belum tersedia
+              </span>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      {showExamAgreement ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Tutup konfirmasi ujian"
+            onClick={() => setShowExamAgreement(false)}
+            className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
+          />
+          <section className="relative w-full max-w-xl rounded-[28px] border border-white/75 bg-white p-6 shadow-[0_32px_90px_-34px_rgba(15,23,42,0.5)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              Konfirmasi integritas
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
+              Sebelum mulai ujian
+            </h3>
+            <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+              Dengan melanjutkan, saya menyatakan akan mengerjakan ujian ini
+              secara mandiri, jujur, tidak menggunakan bantuan yang tidak
+              diperbolehkan, tidak membagikan soal atau jawaban, dan memahami
+              bahwa waktu ujian akan langsung berjalan saat halaman ujian
+              terbuka.
+            </div>
+            <p className="mt-4 text-sm leading-7 text-slate-600">
+              Pastikan koneksi stabil dan Anda siap fokus sampai ujian selesai.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowExamAgreement(false)}
+                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <Link
+                to={examUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setShowExamAgreement(false)}
+                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
+              >
+                Saya setuju dan mulai ujian
+              </Link>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 };
 
@@ -602,9 +719,7 @@ const StageTimelineCard = ({
   const dependency = getDependency(scenario.stages, index);
   const stageReference = getStageReference(scenario, index);
   const stageGap = formatGapDuration(stage.startedAt, stageReference.value);
-  const doneMaterials = stage.materials.filter(
-    (item) => item.status === "completed"
-  ).length;
+  const doneMaterials = countReadMaterials(stage.materials);
   const progressPercent = stage.materials.length
     ? (doneMaterials / stage.materials.length) * 100
     : 0;
@@ -658,7 +773,7 @@ const StageTimelineCard = ({
                   {flowState === "locked" ? "Terkunci" : stageLabel[stage.status]}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {doneMaterials}/{stage.materials.length} materi
+                  {doneMaterials}/{stage.materials.length} dibaca
                 </span>
               </div>
             </div>
@@ -727,7 +842,7 @@ const StageTimelineCard = ({
                       </h3>
                     </div>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      {doneMaterials}/{stage.materials.length} selesai
+                      {doneMaterials}/{stage.materials.length} dibaca
                     </span>
                   </div>
 
@@ -784,31 +899,6 @@ const StagesPage = ({
 const hasAssessmentHistory = (stage: OnboardingStage) =>
   Boolean(stage.assessment.submittedAt);
 
-const getAssessmentSummary = (
-  stage: OnboardingStage,
-  flowState: FlowState,
-  dependency: string | null
-) => {
-  if (flowState === "locked") {
-    return `Belum terbuka. Selesaikan ${dependency ?? "tahap sebelumnya"} sampai lulus.`;
-  }
-
-  switch (stage.assessment.status) {
-    case "ready":
-      return "Semua materi tahap ini sudah selesai. User belum pernah ujian dan siap memulai attempt pertama.";
-    case "submitted":
-      return "Ujian sudah dikirim dan sekarang menunggu nilai dari admin.";
-    case "passed":
-      return "Tahap ini sudah lulus dan hasilnya tercatat sebagai history ujian.";
-    case "remedial":
-      return "Nilai sebelumnya belum lulus. User sedang berada di alur remedial.";
-    case "failed_window":
-      return "Window onboarding terlewati. Tahap ini sekarang menunggu keputusan extension atau penutupan training.";
-    default:
-      return "Tahap ini masih terkunci.";
-  }
-};
-
 const AssessmentsPage = ({ scenario }: { scenario: OnboardingScenario }) => {
   const historyStages = scenario.stages.reduce<
     Array<{ stage: OnboardingStage; index: number }>
@@ -840,7 +930,6 @@ const AssessmentsPage = ({ scenario }: { scenario: OnboardingScenario }) => {
 
         {historyStages.map(({ stage, index }) => {
           const flowState = getFlowState(scenario.stages, index);
-          const dependency = getDependency(scenario.stages, index);
           const status = flowState === "locked" ? "locked" : stage.assessment.status;
           const latestAttempt = Math.max(1, stage.assessment.remedialCount + 1);
 
@@ -915,9 +1004,6 @@ const AssessmentsPage = ({ scenario }: { scenario: OnboardingScenario }) => {
                   Hasil terakhir
                 </p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  {getAssessmentSummary(stage, flowState, dependency)}
-                </p>
-                <p className="mt-4 text-sm leading-7 text-slate-600">
                   {stage.assessment.adminNote}
                 </p>
               </div>
@@ -929,29 +1015,485 @@ const AssessmentsPage = ({ scenario }: { scenario: OnboardingScenario }) => {
   );
 };
 
-const ExamPage = ({ scenario }: { scenario: OnboardingScenario }) => {
+const ExamPage = ({
+  scenario,
+  onRuntimeRefresh,
+}: {
+  scenario: OnboardingScenario;
+  onRuntimeRefresh?: () => void;
+}) => {
   const { stageId } = useParams<{ stageId: string }>();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
   const stage = scenario.stages.find((item) => item.id === stageId);
-  const [submittedMock, setSubmittedMock] = useState(false);
+  const isRuntime = Boolean(scenario.isRuntime);
+  const answerSaveTimers = useRef<Record<number, number>>({});
+  const examScrollRef = useRef<HTMLDivElement | null>(null);
+  const focusWarningLastAtRef = useRef(0);
+  const focusWarningTimerRef = useRef<number | null>(null);
+  const [runtimeExam, setRuntimeExam] = useState<RuntimeExamResponse | null>(null);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [savingAnswerIds, setSavingAnswerIds] = useState<Set<number>>(new Set());
+  const [savedAnswerIds, setSavedAnswerIds] = useState<Set<number>>(new Set());
+  const [submitted, setSubmitted] = useState(false);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
   const [sessionLocked, setSessionLocked] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [loading, setLoading] = useState(isRuntime);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showFocusWarning, setShowFocusWarning] = useState(false);
+  const [, setFocusWarningCount] = useState(0);
+  const [currentQuestionGroupIndex, setCurrentQuestionGroupIndex] = useState(0);
   const isRemedial = stage?.assessment.status === "remedial";
-  const sessionEnded = submittedMock || sessionLocked;
-  const questions = stage ? buildExamQuestions(stage) : [];
-  const submitButtonClass = sessionLocked
-    ? "cursor-not-allowed border border-slate-200 bg-slate-200 text-slate-500 shadow-none"
-    : submittedMock
+  const sessionEnded = submitted || sessionLocked || Boolean(runtimeExam?.session.isFinished);
+  const mockQuestions = stage && !isRuntime ? buildExamQuestions(stage) : [];
+  const runtimeQuestionGroups = useMemo(() => {
+    const groups: Array<{
+      type: RuntimeExamQuestion["type"];
+      label: string;
+      questions: RuntimeExamQuestion[];
+    }> = [];
+
+    for (const question of runtimeExam?.questions ?? []) {
+      const latestGroup = groups[groups.length - 1];
+      if (latestGroup?.type === question.type) {
+        latestGroup.questions.push(question);
+      } else {
+        groups.push({
+          type: question.type,
+          label: runtimeQuestionTypeLabel[question.type],
+          questions: [question],
+        });
+      }
+    }
+
+    return groups;
+  }, [runtimeExam]);
+  const currentQuestionGroup =
+    runtimeQuestionGroups[
+      Math.min(currentQuestionGroupIndex, Math.max(0, runtimeQuestionGroups.length - 1))
+    ] ?? null;
+  const isLastQuestionGroup =
+    !isRuntime ||
+    runtimeQuestionGroups.length === 0 ||
+    currentQuestionGroupIndex >= runtimeQuestionGroups.length - 1;
+  const isAnswered = useCallback(
+    (questionId: number) => Boolean((answers[questionId] ?? "").trim()),
+    [answers]
+  );
+  const getQuestionGroupMissingAnswerCount = useCallback(
+    (group: { questions: RuntimeExamQuestion[] }) =>
+      group.questions.filter((question) => !isAnswered(question.questionId)).length,
+    [isAnswered]
+  );
+  const scrollExamToTop = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      examScrollRef.current?.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
+  }, []);
+  const canOpenQuestionGroup = useCallback(
+    (targetIndex: number) => {
+      if (targetIndex <= currentQuestionGroupIndex) {
+        return true;
+      }
+
+      return runtimeQuestionGroups
+        .slice(0, targetIndex)
+        .every((group) => getQuestionGroupMissingAnswerCount(group) === 0);
+    },
+    [
+      currentQuestionGroupIndex,
+      getQuestionGroupMissingAnswerCount,
+      runtimeQuestionGroups,
+    ]
+  );
+  const goToQuestionGroup = useCallback(
+    (targetIndex: number) => {
+      if (targetIndex === currentQuestionGroupIndex) {
+        return;
+      }
+
+      if (!canOpenQuestionGroup(targetIndex)) {
+        const blockingGroup = runtimeQuestionGroups
+          .slice(0, targetIndex)
+          .find((group) => getQuestionGroupMissingAnswerCount(group) > 0);
+        showToast(
+          `Isi semua soal di bagian ${blockingGroup?.label ?? "sebelumnya"} sebelum lanjut.`,
+          "error"
+        );
+        return;
+      }
+
+      setCurrentQuestionGroupIndex(targetIndex);
+      scrollExamToTop();
+    },
+    [
+      canOpenQuestionGroup,
+      currentQuestionGroupIndex,
+      getQuestionGroupMissingAnswerCount,
+      runtimeQuestionGroups,
+      scrollExamToTop,
+      showToast,
+    ]
+  );
+  const totalMissingAnswerCount =
+    runtimeExam?.questions.filter((question) => !isAnswered(question.questionId)).length ?? 0;
+  const currentGroupMissingAnswerCount =
+    currentQuestionGroup ? getQuestionGroupMissingAnswerCount(currentQuestionGroup) : 0;
+  const submitButtonClass =
+    sessionLocked || sessionEnded
       ? "cursor-not-allowed border border-slate-200 bg-white text-slate-500 shadow-none"
       : scenario.theme.buttonClass;
 
-  useEffect(() => {
-    if (!stage || sessionEnded) {
+  const clearAnswerSaveTimer = useCallback((questionId: number) => {
+    const timer = answerSaveTimers.current[questionId];
+    if (timer) {
+      window.clearTimeout(timer);
+      delete answerSaveTimers.current[questionId];
+    }
+  }, []);
+
+  const clearAllAnswerSaveTimers = useCallback(() => {
+    Object.values(answerSaveTimers.current).forEach((timer) =>
+      window.clearTimeout(timer)
+    );
+    answerSaveTimers.current = {};
+  }, []);
+
+  const saveRuntimeAnswer = useCallback(
+    async (questionId: number, answerValue: string) => {
+      if (!runtimeExam || !isRuntime || submitted || sessionLocked) {
+        return;
+      }
+
+      setSavingAnswerIds((current) => new Set(current).add(questionId));
+      try {
+        const res = await apiFetch("/onboarding/exam/answer", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            examsId: runtimeExam.session.examsId,
+            questionId,
+            answer: answerValue,
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(getApiErrorMessage(json, "Gagal menyimpan jawaban"));
+        }
+
+        setSavedAnswerIds((current) => {
+          const next = new Set(current);
+          if (json.response?.saved) {
+            next.add(questionId);
+          } else {
+            next.delete(questionId);
+          }
+          return next;
+        });
+      } finally {
+        setSavingAnswerIds((current) => {
+          const next = new Set(current);
+          next.delete(questionId);
+          return next;
+        });
+      }
+    },
+    [isRuntime, runtimeExam, sessionLocked, submitted]
+  );
+
+  const scheduleRuntimeAnswerSave = useCallback(
+    (questionId: number, answerValue: string, delayMs = 350) => {
+      if (!isRuntime) {
+        return;
+      }
+
+      clearAnswerSaveTimer(questionId);
+      answerSaveTimers.current[questionId] = window.setTimeout(() => {
+        delete answerSaveTimers.current[questionId];
+        void saveRuntimeAnswer(questionId, answerValue).catch((error) => {
+          const message =
+            error instanceof Error ? error.message : "Gagal menyimpan jawaban";
+          showToast(message, "error");
+        });
+      }, delayMs);
+    },
+    [clearAnswerSaveTimer, isRuntime, saveRuntimeAnswer, showToast]
+  );
+
+  const updateRuntimeAnswer = useCallback(
+    (questionId: number, answerValue: string, saveDelayMs = 350) => {
+      setAnswers((current) => ({
+        ...current,
+        [questionId]: answerValue,
+      }));
+      scheduleRuntimeAnswerSave(questionId, answerValue, saveDelayMs);
+    },
+    [scheduleRuntimeAnswerSave]
+  );
+
+  const recordFocusWarning = useCallback(
+    (warningCount: number) => {
+      if (!isRuntime || !runtimeExam?.session.examsId || sessionEnded) {
+        return;
+      }
+
+      void apiFetch("/onboarding/exam/warning", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          examsId: runtimeExam.session.examsId,
+          reason: "PAGE_OR_TAB_LEFT",
+          count: warningCount,
+        }),
+      }).catch(() => undefined);
+    },
+    [isRuntime, runtimeExam, sessionEnded]
+  );
+
+  const triggerFocusWarning = useCallback(() => {
+    const now = Date.now();
+    if (now - focusWarningLastAtRef.current < 1500) {
       return;
     }
 
-    const durationSeconds = stage.assessment.durationMinutes * 60;
-    const deadline = Date.now() + durationSeconds * 1000;
+    focusWarningLastAtRef.current = now;
+    setFocusWarningCount((current) => {
+      const next = current + 1;
+      recordFocusWarning(next);
+      return next;
+    });
+    setShowFocusWarning(true);
+
+    if (focusWarningTimerRef.current) {
+      window.clearTimeout(focusWarningTimerRef.current);
+    }
+    focusWarningTimerRef.current = window.setTimeout(() => {
+      setShowFocusWarning(false);
+      focusWarningTimerRef.current = null;
+    }, 6500);
+  }, [recordFocusWarning]);
+
+  const submitRuntimeExam = useCallback(
+    async (autoSubmit = false) => {
+      if (!runtimeExam || submitting || submitted) {
+        return;
+      }
+
+      if (!autoSubmit) {
+        const firstMissingQuestion = runtimeExam.questions.find(
+          (question) => !isAnswered(question.questionId)
+        );
+        if (firstMissingQuestion) {
+          const firstMissingGroupIndex = runtimeQuestionGroups.findIndex((group) =>
+            group.questions.some(
+              (question) => question.questionId === firstMissingQuestion.questionId
+            )
+          );
+          if (firstMissingGroupIndex >= 0) {
+            setCurrentQuestionGroupIndex(firstMissingGroupIndex);
+          }
+          showToast(
+            `Lengkapi semua jawaban sebelum submit. Masih ada ${totalMissingAnswerCount} soal belum diisi.`,
+            "error"
+          );
+          return;
+        }
+      }
+
+      setSubmitting(true);
+      setAutoSubmitted(autoSubmit);
+      try {
+        const res = await apiFetch("/onboarding/exam/submit", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            examsId: runtimeExam.session.examsId,
+            autoSubmit,
+            answers: runtimeExam.questions.map((question) => ({
+              questionId: question.questionId,
+              answer: answers[question.questionId] ?? null,
+            })),
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(getApiErrorMessage(json, "Gagal mengirim ujian"));
+        }
+
+        setSubmitted(true);
+        clearAllAnswerSaveTimers();
+        onRuntimeRefresh?.();
+        try {
+          window.localStorage.setItem(
+            ONBOARDING_WORKSPACE_REFRESH_EVENT,
+            String(Date.now())
+          );
+        } catch {
+          // Cross-tab refresh is best-effort.
+        }
+        showToast(
+          autoSubmit
+            ? "Waktu habis. Jawaban dikirim otomatis."
+            : isRemedial
+              ? "Remedial berhasil dikirim dan menunggu koreksi admin."
+              : "Ujian berhasil dikirim dan menunggu koreksi admin.",
+          "success"
+        );
+        navigate(scenario.basePath, { replace: true });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Gagal mengirim ujian";
+        setErrorMessage(message);
+        showToast(message, "error");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      answers,
+      clearAllAnswerSaveTimers,
+      isAnswered,
+      isRemedial,
+      navigate,
+      onRuntimeRefresh,
+      runtimeExam,
+      runtimeQuestionGroups,
+      scenario.basePath,
+      showToast,
+      submitted,
+      submitting,
+      totalMissingAnswerCount,
+    ]
+  );
+
+  useEffect(() => {
+    if (!stage) {
+      return;
+    }
+
+    setSubmitted(false);
+    setAutoSubmitted(false);
+    setSessionLocked(false);
+    setErrorMessage(null);
+    setRuntimeExam(null);
+    setAnswers({});
+    setSavingAnswerIds(new Set());
+    setSavedAnswerIds(new Set());
+    setShowFocusWarning(false);
+    setFocusWarningCount(0);
+    setCurrentQuestionGroupIndex(0);
+    clearAllAnswerSaveTimers();
+
+    if (!isRuntime) {
+      setLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    const startExam = async () => {
+      setLoading(true);
+      try {
+        const res = await apiFetch("/onboarding/exam/start", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            onboardingStageProgressId: stage.stageProgressId ?? stage.id,
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(getApiErrorMessage(json, "Gagal memulai ujian"));
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        const response = (json.response ?? null) as RuntimeExamResponse | null;
+        const restoredAnswers = (response?.answers ?? []).reduce<
+          Record<number, string>
+        >((current, answer) => {
+          if (answer.answer != null) {
+            current[answer.questionId] = answer.answer;
+          }
+          return current;
+        }, {});
+
+        setRuntimeExam(response);
+        setAnswers(restoredAnswers);
+        setSavedAnswerIds(new Set(Object.keys(restoredAnswers).map(Number)));
+        setSubmitted(Boolean(response?.session?.isFinished));
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+
+        const message =
+          error instanceof Error ? error.message : "Gagal memulai ujian";
+        setErrorMessage(message);
+        showToast(message, "error");
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void startExam();
+
+    return () => {
+      mounted = false;
+      clearAllAnswerSaveTimers();
+    };
+  }, [clearAllAnswerSaveTimers, isRuntime, showToast, stage]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (focusWarningTimerRef.current) {
+        window.clearTimeout(focusWarningTimerRef.current);
+        focusWarningTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      runtimeQuestionGroups.length > 0 &&
+      currentQuestionGroupIndex >= runtimeQuestionGroups.length
+    ) {
+      setCurrentQuestionGroupIndex(0);
+    }
+  }, [currentQuestionGroupIndex, runtimeQuestionGroups.length]);
+
+  useEffect(() => {
+    if (!stage || sessionEnded || loading) {
+      return;
+    }
+
+    const deadline = isRuntime
+      ? new Date(runtimeExam?.session.tokenExpiresAt ?? Date.now()).getTime()
+      : Date.now() + (stage.assessment.durationSeconds ?? stage.assessment.durationMinutes * 60) * 1000;
 
     const updateRemaining = () => {
       const nextSeconds = Math.max(
@@ -961,8 +1503,12 @@ const ExamPage = ({ scenario }: { scenario: OnboardingScenario }) => {
       setRemainingSeconds(nextSeconds);
 
       if (nextSeconds === 0) {
-        setSubmittedMock(true);
-        setAutoSubmitted(true);
+        if (isRuntime) {
+          void submitRuntimeExam(true);
+        } else {
+          setSubmitted(true);
+          setAutoSubmitted(true);
+        }
       }
     };
 
@@ -970,18 +1516,35 @@ const ExamPage = ({ scenario }: { scenario: OnboardingScenario }) => {
     const timer = window.setInterval(updateRemaining, 1000);
 
     return () => window.clearInterval(timer);
-  }, [sessionEnded, stage]);
+  }, [isRuntime, loading, runtimeExam, sessionEnded, stage, submitRuntimeExam]);
 
   useEffect(() => {
-    if (!stage || sessionEnded) {
+    if (!stage || sessionEnded || loading) {
       return;
     }
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        setSessionLocked(true);
+        triggerFocusWarning();
       }
     };
+    const handleWindowBlur = () => {
+      triggerFocusWarning();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [loading, sessionEnded, stage, triggerFocusWarning]);
+
+  useEffect(() => {
+    if (!stage || sessionEnded) {
+      return;
+    }
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
@@ -993,12 +1556,10 @@ const ExamPage = ({ scenario }: { scenario: OnboardingScenario }) => {
     };
 
     window.history.pushState({ examLocked: true }, "", window.location.href);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("popstate", handlePopState);
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("popstate", handlePopState);
     };
@@ -1010,8 +1571,18 @@ const ExamPage = ({ scenario }: { scenario: OnboardingScenario }) => {
 
   return (
     <div
-      className={`min-h-screen px-5 py-6 text-slate-900 md:px-8 ${examPageClassByPortal[scenario.portalKey]}`}
+      ref={examScrollRef}
+      className={`fixed inset-0 z-[9999] overflow-y-auto px-5 py-6 text-slate-900 md:px-8 ${examPageClassByPortal[scenario.portalKey]}`}
     >
+      {showFocusWarning && !sessionEnded ? (
+        <div className="fixed right-4 top-4 z-[10000] w-[min(360px,calc(100vw-32px))] rounded-[20px] border border-amber-200 bg-amber-50 px-5 py-4 text-amber-900 shadow-[0_24px_54px_-32px_rgba(146,64,14,0.45)]">
+          <p className="text-sm font-semibold">Peringatan pindah halaman</p>
+          <p className="mt-2 text-sm leading-6">
+            Keluar dari halaman atau pindah tab saat ujian akan direkam. Jika
+            terlalu sering terjadi, attempt ini dapat ditinjau ulang oleh admin.
+          </p>
+        </div>
+      ) : null}
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="sticky top-3 z-30 flex justify-end">
           <div
@@ -1030,92 +1601,296 @@ const ExamPage = ({ scenario }: { scenario: OnboardingScenario }) => {
           <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-900">
             {stage.assessment.title}
           </h1>
+          {runtimeExam?.session.examsId ? (
+            <p className="mt-3 text-sm leading-7 text-slate-600">
+              Sesi {runtimeExam.session.examsId}
+            </p>
+          ) : null}
         </section>
 
-        <form className={`space-y-4 ${sessionLocked ? "pointer-events-none opacity-60" : ""}`}>
-          {questions.map((question, index) => (
-            <article
-              key={question.id}
-              className="rounded-[26px] border border-white/75 bg-white/94 p-6 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]"
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Soal {index + 1}
-              </p>
-              <h2 className="mt-3 text-xl font-semibold text-slate-900">
-                {question.prompt}
-              </h2>
-              <p className="mt-2 text-sm leading-7 text-slate-600">
-                {question.helper}
-              </p>
-
-              {question.type === "essay" ? (
-                <textarea
-                  rows={6}
-                  disabled={sessionEnded}
-                  placeholder="Tulis jawaban essay di sini..."
-                  className="mt-5 w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
-                />
-              ) : (
-                <div className="mt-5 space-y-3">
-                  {question.options?.map((option) => (
-                    <label
-                      key={option}
-                      className="flex cursor-pointer items-start gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white"
-                    >
-                      <input
-                        type="radio"
-                        name={question.id}
-                        disabled={sessionEnded}
-                        className="mt-1 h-4 w-4"
-                      />
-                      <span>{option}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </article>
-          ))}
-
-          <section className="rounded-[26px] border border-white/75 bg-white/94 p-6 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  {isRemedial ? "Submit remedial" : "Submit ujian"}
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={sessionEnded}
-                onClick={() => {
-                  setSubmittedMock(true);
-                  setAutoSubmitted(false);
-                }}
-                className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition ${submitButtonClass}`}
-              >
-                {sessionLocked
-                  ? "Sesi dikunci"
-                  : submittedMock
-                    ? autoSubmitted
-                      ? "Terkirim otomatis"
-                      : "Simulasi terkirim"
-                    : isRemedial
-                      ? "Selesai remedial"
-                      : "Selesai ujian"}
-              </button>
-            </div>
-            {sessionLocked ? (
-              <div className="mt-4 rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
-                Sesi dikunci.
-              </div>
-            ) : submittedMock ? (
-              <div className="mt-4 rounded-[18px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-7 text-emerald-800">
-                {autoSubmitted
-                  ? "Waktu habis. Jawaban terkirim otomatis."
-                  : `${isRemedial ? "Remedial" : "Ujian"} berhasil dikirim.`}
-              </div>
-            ) : null}
+        {loading ? (
+          <section className="rounded-[26px] border border-white/75 bg-white/94 p-6 text-sm leading-7 text-slate-600 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]">
+            Menyiapkan sesi ujian...
           </section>
-        </form>
+        ) : errorMessage ? (
+          <section className="rounded-[26px] border border-rose-200 bg-rose-50 p-6 text-sm leading-7 text-rose-800 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]">
+            {errorMessage}
+          </section>
+        ) : (
+          <form className={`space-y-4 ${sessionLocked ? "pointer-events-none opacity-60" : ""}`}>
+            {isRuntime && currentQuestionGroup ? (
+              <section className="rounded-[26px] border border-white/75 bg-white/94 p-5 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                      Bagian {currentQuestionGroupIndex + 1} dari {runtimeQuestionGroups.length}
+                    </p>
+                    <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                      {currentQuestionGroup.label}
+                    </h2>
+                  </div>
+                  <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {currentQuestionGroup.questions.length} soal
+                  </span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {runtimeQuestionGroups.map((group, index) => {
+                    const missingCount = getQuestionGroupMissingAnswerCount(group);
+                    const active = index === currentQuestionGroupIndex;
+                    const accessible =
+                      canOpenQuestionGroup(index) && !sessionEnded && !submitting;
+                    return (
+                      <button
+                        key={`${group.type}-${index}`}
+                        type="button"
+                        disabled={!accessible}
+                        onClick={() => goToQuestionGroup(index)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                          active
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : !accessible
+                              ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                              : missingCount > 0
+                              ? "border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300"
+                        }`}
+                      >
+                        {group.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+            {isRuntime
+              ? currentQuestionGroup?.questions.map((question) => (
+                  <article
+                    key={question.questionId}
+                    className="rounded-[26px] border border-white/75 bg-white/94 p-6 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                      Soal {question.orderIndex}
+                    </p>
+                    <h2 className="mt-3 text-xl font-semibold text-slate-900">
+                      {question.prompt}
+                    </h2>
+                    <p className="mt-2 text-sm leading-7 text-slate-600">
+                      {question.helper}
+                    </p>
+
+                    {question.type === "essay" ? (
+                      <textarea
+                        rows={6}
+                        disabled={sessionEnded || submitting}
+                        value={answers[question.questionId] ?? ""}
+                        onChange={(event) =>
+                          updateRuntimeAnswer(
+                            question.questionId,
+                            event.target.value,
+                            450
+                          )
+                        }
+                        onBlur={(event) =>
+                          scheduleRuntimeAnswerSave(
+                            question.questionId,
+                            event.target.value,
+                            0
+                          )
+                        }
+                        placeholder="Tulis jawaban essay di sini..."
+                        className="mt-5 w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                      />
+                    ) : (
+                      <div className="mt-5 space-y-3">
+                        {question.options.map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex cursor-pointer items-start gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white"
+                          >
+                            <input
+                              type="radio"
+                              name={String(question.questionId)}
+                              value={option.value}
+                              checked={answers[question.questionId] === option.value}
+                              disabled={sessionEnded || submitting}
+                              onChange={() =>
+                                updateRuntimeAnswer(
+                                  question.questionId,
+                                  option.value,
+                                  0
+                                )
+                              }
+                              className="mt-1 h-4 w-4"
+                            />
+                            <span>{option.display}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {savingAnswerIds.has(question.questionId) ||
+                    savedAnswerIds.has(question.questionId) ? (
+                      <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        {savingAnswerIds.has(question.questionId)
+                          ? "Menyimpan jawaban..."
+                          : "Jawaban tersimpan otomatis"}
+                      </p>
+                    ) : null}
+                  </article>
+                ))
+              : mockQuestions.map((question, index) => (
+                  <article
+                    key={question.id}
+                    className="rounded-[26px] border border-white/75 bg-white/94 p-6 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                      Soal {index + 1}
+                    </p>
+                    <h2 className="mt-3 text-xl font-semibold text-slate-900">
+                      {question.prompt}
+                    </h2>
+                    <p className="mt-2 text-sm leading-7 text-slate-600">
+                      {question.helper}
+                    </p>
+
+                    {question.type === "essay" ? (
+                      <textarea
+                        rows={6}
+                        disabled={sessionEnded}
+                        placeholder="Tulis jawaban essay di sini..."
+                        className="mt-5 w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                      />
+                    ) : (
+                      <div className="mt-5 space-y-3">
+                        {question.options?.map((option) => (
+                          <label
+                            key={option}
+                            className="flex cursor-pointer items-start gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white"
+                          >
+                            <input
+                              type="radio"
+                              name={question.id}
+                              disabled={sessionEnded}
+                              className="mt-1 h-4 w-4"
+                            />
+                            <span>{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+
+            <section className="rounded-[26px] border border-white/75 bg-white/94 p-6 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.2)]">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                    {isRemedial ? "Submit remedial" : "Submit ujian"}
+                  </p>
+                  {isRuntime && !submitted ? (
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Jawaban disimpan otomatis setiap kali Anda mengisi atau
+                      memilih jawaban.
+                    </p>
+                  ) : null}
+                  {isRuntime && !submitted && totalMissingAnswerCount > 0 ? (
+                    <p className="mt-2 text-sm leading-6 text-amber-700">
+                      Masih ada {totalMissingAnswerCount} soal belum diisi.
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {isRuntime && runtimeQuestionGroups.length > 1 ? (
+                    <button
+                      type="button"
+                      disabled={currentQuestionGroupIndex === 0 || sessionEnded || submitting}
+                      onClick={() => goToQuestionGroup(currentQuestionGroupIndex - 1)}
+                      className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition ${
+                        currentQuestionGroupIndex === 0 || sessionEnded || submitting
+                          ? "cursor-not-allowed border border-slate-200 bg-white text-slate-400"
+                          : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      Kembali
+                    </button>
+                  ) : null}
+                  {isRuntime && !isLastQuestionGroup ? (
+                    <button
+                      type="button"
+                      disabled={
+                        sessionEnded ||
+                        submitting ||
+                        currentGroupMissingAnswerCount > 0
+                      }
+                      onClick={() => goToQuestionGroup(currentQuestionGroupIndex + 1)}
+                      className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition ${
+                        sessionEnded ||
+                        submitting ||
+                        currentGroupMissingAnswerCount > 0
+                          ? "cursor-not-allowed border border-slate-200 bg-white text-slate-400"
+                          : scenario.theme.buttonClass
+                      }`}
+                    >
+                      Lanjut ke {runtimeQuestionGroups[currentQuestionGroupIndex + 1]?.label ?? "bagian berikutnya"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={
+                        sessionEnded ||
+                        submitting ||
+                        (isRuntime && totalMissingAnswerCount > 0)
+                      }
+                      onClick={() => {
+                        if (isRuntime) {
+                          void submitRuntimeExam(false);
+                          return;
+                        }
+
+                        setSubmitted(true);
+                        setAutoSubmitted(false);
+                      }}
+                      className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition ${
+                        isRuntime && totalMissingAnswerCount > 0
+                          ? "cursor-not-allowed border border-slate-200 bg-white text-slate-400"
+                          : submitButtonClass
+                      }`}
+                    >
+                      {submitting
+                        ? "Mengirim..."
+                        : sessionLocked
+                          ? "Sesi dikunci"
+                          : submitted
+                            ? autoSubmitted
+                              ? "Terkirim otomatis"
+                              : "Terkirim"
+                            : isRuntime && totalMissingAnswerCount > 0
+                              ? "Lengkapi semua jawaban"
+                              : isRemedial
+                                ? "Selesai remedial"
+                                : "Selesai ujian"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {isRuntime && !isLastQuestionGroup && currentGroupMissingAnswerCount > 0 ? (
+                <div className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-7 text-amber-800">
+                  Isi semua soal di bagian ini sebelum lanjut ke bagian berikutnya.
+                </div>
+              ) : null}
+              {sessionLocked ? (
+                <div className="mt-4 rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
+                  Sesi dikunci.
+                </div>
+              ) : submitted ? (
+                <div className="mt-4 rounded-[18px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-7 text-emerald-800">
+                  {autoSubmitted
+                    ? "Waktu habis. Jawaban terkirim otomatis."
+                    : `${isRemedial ? "Remedial" : "Ujian"} berhasil dikirim.`}
+                </div>
+              ) : null}
+            </section>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -1274,29 +2049,22 @@ const openCertificatePreview = (
   previewWindow.document.close();
 };
 
+const openCertificateFile = (url?: string | null) => {
+  if (!url) {
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
 const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
-  const issuedCertificates = scenario.stages.reduce<
-    Array<{
-      stage: OnboardingStage;
-      index: number;
-      issuedAt: string;
-    }>
-  >((items, stage, index) => {
-    if (stage.assessment.status !== "passed") {
-      return items;
-    }
-
-    items.push({
-      stage,
+  const issuedCertificates = scenario.certificates
+    .filter((certificate) => certificate.status === "issued")
+    .map((certificate, index) => ({
+      certificate,
       index,
-      issuedAt:
-        stage.assessment.reviewedAt ??
-        stage.assessment.submittedAt ??
-        new Date().toISOString(),
-    });
-
-    return items;
-  }, []);
+      issuedAt: certificate.issuedAt ?? new Date().toISOString(),
+    }));
 
   return (
     <PageShell scenario={scenario}>
@@ -1307,18 +2075,18 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
               Belum ada sertifikat
             </p>
             <h3 className="mt-3 text-2xl font-semibold text-slate-900">
-              Belum ada tahap yang lulus
+              Belum ada sertifikat diterbitkan
             </h3>
             <p className="mt-3 text-sm leading-7 text-slate-600">
-              Sertifikat akan muncul otomatis setelah user menyelesaikan ujian dan
-              dinyatakan lulus.
+              Sertifikat akan muncul otomatis setelah file sertifikat diterbitkan
+              dari LMS.
             </p>
           </section>
         ) : null}
 
-        {issuedCertificates.map(({ stage, index, issuedAt }) => (
+        {issuedCertificates.map(({ certificate, index, issuedAt }) => (
           <article
-            key={stage.id}
+            key={certificate.id}
             className="rounded-[28px] border border-white/70 bg-white/92 p-6 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.24)]"
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1328,14 +2096,13 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                    {stage.phase}
+                    Sertifikat onboarding
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold text-slate-900">
-                    Sertifikat {stage.title}
+                    {certificate.title}
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-600">
-                    Diterbitkan karena {stage.assessment.title.toLowerCase()} sudah
-                    lulus.
+                    Diterbitkan oleh {certificate.owner}.
                   </p>
                 </div>
               </div>
@@ -1347,12 +2114,9 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
 
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
-                ["Status ujian", "Lulus"],
-                [
-                  "Nilai akhir",
-                  `${stage.assessment.score ?? "-"}`,
-                ],
-                ["Remedial tercatat", `${stage.assessment.remedialCount}`],
+                ["Nomor sertifikat", certificate.certificateNumber ?? certificate.id],
+                ["Status", "Aktif"],
+                ["Penerbit", certificate.owner],
                 ["Tanggal terbit", formatDateTime(issuedAt)],
               ].map(([label, value]) => (
                 <div
@@ -1374,17 +2138,44 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
                 Ringkasan sertifikat
               </p>
               <p className="mt-3 text-sm leading-7 text-slate-600">
-                User telah menyelesaikan tahap ini dan hasil akhirnya lulus, jadi
-                sertifikat bisa dibuka sebagai preview dummy di tab baru.
+                {certificate.note}
               </p>
-              {scenario.isRuntime ? (
+              {certificate.pdfUrl || certificate.imageUrl ? (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {certificate.imageUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => openCertificateFile(certificate.imageUrl)}
+                      className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
+                    >
+                      Buka gambar
+                    </button>
+                  ) : null}
+                  {certificate.pdfUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => openCertificateFile(certificate.pdfUrl)}
+                      className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
+                    >
+                      Buka PDF
+                    </button>
+                  ) : null}
+                </div>
+              ) : scenario.isRuntime ? (
                 <span className="mt-5 inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
                   Preview sertifikat belum tersedia
                 </span>
               ) : (
                 <button
                   type="button"
-                  onClick={() => openCertificatePreview(scenario, stage, issuedAt)}
+                  onClick={() => {
+                    const passedStage = scenario.stages.find(
+                      (stage) => stage.assessment.status === "passed"
+                    );
+                    if (passedStage) {
+                      openCertificatePreview(scenario, passedStage, issuedAt);
+                    }
+                  }}
                   className={`mt-5 inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
                 >
                   Buka sertifikat
@@ -1407,65 +2198,82 @@ export const OnboardingPortalWorkspace = ({
   scenarioOverride?: OnboardingScenario;
   onRuntimeRefresh?: () => void;
 }) => {
-  const scenario = scenarioOverride ?? getOnboardingScenario(portalKey);
   const isAdministrator = portalKey === "ADMINISTRATOR";
+
+  if (isAdministrator) {
+    return (
+      <Routes>
+        <Route
+          index
+          element={<AdminOverviewPage navigation={adminOnboardingNavigation} />}
+        />
+        <Route
+          path="checklist"
+          element={<Navigate to={adminOnboardingNavigation.basePath} replace />}
+        />
+        <Route
+          path="assessments"
+          element={<Navigate to={adminOnboardingNavigation.basePath} replace />}
+        />
+        <Route
+          path="certificates"
+          element={<Navigate to={adminOnboardingNavigation.basePath} replace />}
+        />
+        <Route
+          path="portal/:managedPortalKey"
+          element={
+            <AdminPortalDetailPage navigation={adminOnboardingNavigation} />
+          }
+        />
+        <Route
+          path="portal/:managedPortalKey/user/:participantId"
+          element={
+            <AdminParticipantDetailPage
+              navigation={adminOnboardingNavigation}
+            />
+          }
+        />
+        <Route
+          path="*"
+          element={<Navigate to={adminOnboardingNavigation.basePath} replace />}
+        />
+      </Routes>
+    );
+  }
+
+  const scenario = scenarioOverride ?? getOnboardingScenario(portalKey);
 
   return (
     <Routes>
       <Route
         index
         element={
-          isAdministrator ? (
-            <AdminOverviewPage scenario={scenario} />
-          ) : (
-            <StagesPage
-              scenario={scenario}
-              onRuntimeRefresh={onRuntimeRefresh}
-            />
-          )
+          <StagesPage
+            scenario={scenario}
+            onRuntimeRefresh={onRuntimeRefresh}
+          />
         }
       />
       <Route path="checklist" element={<Navigate to={scenario.basePath} replace />} />
       <Route
         path="assessments"
         element={
-          isAdministrator ? (
-            <Navigate to={scenario.basePath} replace />
-          ) : (
-            <AssessmentsPage scenario={scenario} />
-          )
+          <AssessmentsPage scenario={scenario} />
         }
       />
       <Route
         path="certificates"
         element={
-          isAdministrator ? (
-            <Navigate to={scenario.basePath} replace />
-          ) : (
-            <CertificatesPage scenario={scenario} />
-          )
+          <CertificatesPage scenario={scenario} />
         }
       />
-      {isAdministrator ? (
-        <>
-          <Route
-            path="portal/:managedPortalKey"
-            element={<AdminPortalDetailPage scenario={scenario} />}
-          />
-          <Route
-            path="portal/:managedPortalKey/user/:participantId"
-            element={<AdminParticipantDetailPage scenario={scenario} />}
-          />
-        </>
-      ) : null}
       <Route
         path="exam/:stageId"
         element={
-          scenario.isRuntime ? (
-            <Navigate to={scenario.basePath} replace />
-          ) : (
-            <ExamPage scenario={scenario} />
-          )
+          <ExamPage
+            scenario={scenario}
+            onRuntimeRefresh={onRuntimeRefresh}
+          />
         }
       />
       <Route path="*" element={<Navigate to={scenario.basePath} replace />} />
