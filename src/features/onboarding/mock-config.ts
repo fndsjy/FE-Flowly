@@ -57,6 +57,7 @@ export type OnboardingMaterial = {
 export type OnboardingAssessment = {
   title: string;
   durationMinutes: number;
+  durationSeconds?: number;
   questionBankCount: number;
   passScore: number;
   score: number | null;
@@ -70,6 +71,8 @@ export type OnboardingAssessment = {
 
 export type OnboardingStage = {
   id: string;
+  stageProgressId?: string | null;
+  stageTemplateId?: string | null;
   phase: string;
   title: string;
   targetWindow: string;
@@ -91,6 +94,10 @@ export type OnboardingCertificate = {
   status: CertificateStatus;
   issuedAt: string | null;
   note: string;
+  certificateNumber?: string;
+  fileName?: string;
+  imageUrl?: string;
+  pdfUrl?: string;
 };
 
 export type OnboardingExtensionRequest = {

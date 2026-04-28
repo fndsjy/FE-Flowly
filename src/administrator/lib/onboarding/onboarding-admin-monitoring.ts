@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import type { OnboardingPortalKey } from "../../../features/onboarding/mock-config";
 import { apiFetch, getApiErrorMessage } from "../../../lib/api";
 
-export type ManagedOnboardingPortalKey = Exclude<
-  OnboardingPortalKey,
-  "ADMINISTRATOR"
->;
+export type ManagedOnboardingPortalKey =
+  | "EMPLOYEE"
+  | "SUPPLIER"
+  | "CUSTOMER"
+  | "AFFILIATE"
+  | "INFLUENCER"
+  | "COMMUNITY";
 
 export type AdminOnboardingMaterial = {
   onboardingStageMaterialId: string;
@@ -26,6 +28,21 @@ export type AdminOnboardingMaterial = {
   completedAt: string | null;
   openCount: number;
   note: string | null;
+  files: AdminOnboardingMaterialFile[];
+};
+
+export type AdminOnboardingMaterialFile = {
+  id: number;
+  title: string | null;
+  fileName: string;
+  url: string | null;
+  fileType: number | null;
+  progressId: string | null;
+  status: string;
+  readAt: string | null;
+  lastReadAt: string | null;
+  completedAt: string | null;
+  openCount: number;
 };
 
 export type AdminOnboardingStageTemplate = {

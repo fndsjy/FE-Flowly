@@ -1,5 +1,4 @@
 import { Navigate, useParams } from "react-router-dom";
-import type { OnboardingScenario } from "../../../features/onboarding/mock-config";
 import AdminOnboardingHeader from "../../components/onboarding/AdminOnboardingHeader";
 import {
   adminMutedPanelClass,
@@ -15,6 +14,7 @@ import {
   stageStatusClass,
   stageStatusLabel,
 } from "../../lib/onboarding/adminOnboardingUtils";
+import type { AdminOnboardingNavigation } from "../../lib/onboarding/onboarding-admin-navigation";
 import {
   isManagedPortalKey,
   type AdminOnboardingMaterial,
@@ -81,7 +81,12 @@ const stageCompletion = (stage: AdminOnboardingParticipantStage) => {
 };
 
 const materialStatusLabel = (material: AdminOnboardingMaterial) => {
-  if (material.readAt || material.lastReadAt || material.openCount > 0) {
+  if (
+    material.readAt ||
+    material.lastReadAt ||
+    material.completedAt ||
+    material.openCount > 0
+  ) {
     return "Sudah dibuka";
   }
 
@@ -89,14 +94,67 @@ const materialStatusLabel = (material: AdminOnboardingMaterial) => {
 };
 
 const materialStatusClass = (material: AdminOnboardingMaterial) => {
-  if (material.readAt || material.lastReadAt || material.openCount > 0) {
+  if (
+    material.readAt ||
+    material.lastReadAt ||
+    material.completedAt ||
+    material.openCount > 0
+  ) {
     return "border-[#ecd7b8] bg-[#fbf1df] text-[#8a5f24]";
   }
 
   return "border-[#e6d7c5] bg-[#fffaf2] text-[#8b7a66]";
 };
 
-const MaterialCard = ({ material }: { material: AdminOnboardingMaterial }) => (
+const hasReadSignal = (material: Pick<
+  AdminOnboardingMaterial,
+  "readAt" | "lastReadAt" | "completedAt" | "openCount"
+>) =>
+  Boolean(
+    material.readAt ||
+      material.lastReadAt ||
+      material.completedAt ||
+      material.openCount > 0
+  );
+
+const resolveFileTitle = (title: string | null, fileName: string) => {
+  const trimmedTitle = title?.trim();
+  return trimmedTitle && trimmedTitle.length > 0 ? trimmedTitle : fileName;
+};
+
+const buildMaterialDisplayItems = (materials: AdminOnboardingMaterial[]) =>
+  materials
+    .flatMap((material) => {
+      if (!material.files || material.files.length === 0) {
+        return [
+          {
+            ...material,
+            displayId: material.onboardingStageMaterialId,
+          },
+        ];
+      }
+
+      return material.files.map((file) => ({
+        ...material,
+        displayId: `${material.onboardingStageMaterialId}-${file.id}`,
+        materialTitle: resolveFileTitle(file.title, file.fileName),
+        fileCount: 1,
+        totalFileCount: 1,
+        selectedFileIds: [file.id],
+        readFileCount: hasReadSignal(file) ? 1 : 0,
+        status: file.status,
+        readAt: file.readAt,
+        lastReadAt: file.lastReadAt,
+        completedAt: file.completedAt,
+        openCount: file.openCount,
+        files: [file],
+      }));
+    })
+    .sort((left, right) => left.materialTitle.localeCompare(right.materialTitle));
+
+type MaterialDisplayItem = ReturnType<typeof buildMaterialDisplayItems>[number];
+
+const MaterialCard = ({ material }: { material: MaterialDisplayItem }) => (
   <div className="rounded-[18px] border border-[#e2d3bf] bg-[#fffdf8] px-4 py-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
@@ -130,9 +188,9 @@ const MaterialCard = ({ material }: { material: AdminOnboardingMaterial }) => (
 );
 
 export default function AdminParticipantDetailPage({
-  scenario,
+  navigation,
 }: {
-  scenario: OnboardingScenario;
+  navigation: AdminOnboardingNavigation;
 }) {
   const { managedPortalKey, participantId } = useParams<{
     managedPortalKey: string;
@@ -141,7 +199,7 @@ export default function AdminParticipantDetailPage({
   const { portals, loading, error } = useAdministratorOnboardingMonitoring();
 
   if (!isManagedPortalKey(managedPortalKey) || !participantId) {
-    return <Navigate to={scenario.basePath} replace />;
+    return <Navigate to={navigation.basePath} replace />;
   }
 
   if (loading) {
@@ -163,7 +221,7 @@ export default function AdminParticipantDetailPage({
     portal?.participants.find((item) => item.participantId === participantId) ?? null;
 
   if (!portal || !participant) {
-    return <Navigate to={`${scenario.basePath}/portal/${managedPortalKey}`} replace />;
+    return <Navigate to={`${navigation.basePath}/portal/${managedPortalKey}`} replace />;
   }
 
   const currentStage = getCurrentStage(participant);
@@ -177,14 +235,14 @@ export default function AdminParticipantDetailPage({
         title={participant.participantName}
         subtitle="Halaman ini fokus ke monitoring peserta: tahap aktif, kapan mulai baca, kapan terakhir aktif, dan materi apa saja yang sudah dibuka."
         items={[
-          { label: "Dashboard admin", to: scenario.basePath },
+          { label: "Dashboard admin", to: navigation.basePath },
           {
             label: portal.portalName,
-            to: `${scenario.basePath}/portal/${managedPortalKey}`,
+            to: `${navigation.basePath}/portal/${managedPortalKey}`,
           },
           { label: participant.participantName },
         ]}
-        backTo={`${scenario.basePath}/portal/${managedPortalKey}`}
+        backTo={`${navigation.basePath}/portal/${managedPortalKey}`}
       />
 
       <section className={`rounded-[32px] border p-6 md:p-8 ${adminPanelClass}`}>
@@ -314,6 +372,7 @@ export default function AdminParticipantDetailPage({
         {participant.stages.map((stage) => {
           const normalized = normalizeStageStatus(stage.status);
           const completion = stageCompletion(stage);
+          const materialDisplayItems = buildMaterialDisplayItems(stage.materials);
 
           return (
             <article
@@ -370,10 +429,10 @@ export default function AdminParticipantDetailPage({
               </div>
 
               <div className="mt-5 space-y-3">
-                {stage.materials.length > 0 ? (
-                  stage.materials.map((material) => (
+                {materialDisplayItems.length > 0 ? (
+                  materialDisplayItems.map((material) => (
                     <MaterialCard
-                      key={material.onboardingStageMaterialId}
+                      key={material.displayId}
                       material={material}
                     />
                   ))

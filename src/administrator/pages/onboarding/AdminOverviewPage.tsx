@@ -1,10 +1,10 @@
-import type { OnboardingScenario } from "../../../features/onboarding/mock-config";
 import { PortalSummaryCard } from "../../components/onboarding/AdminOnboardingCards";
 import {
   adminPanelClass,
   formatDateTime,
   getPortalMetrics,
 } from "../../lib/onboarding/adminOnboardingUtils";
+import type { AdminOnboardingNavigation } from "../../lib/onboarding/onboarding-admin-navigation";
 import { useAdministratorOnboardingMonitoring } from "../../lib/onboarding/onboarding-admin-monitoring";
 
 const OverviewMetricCard = ({
@@ -58,9 +58,9 @@ const StatePanel = ({
 );
 
 const AdminOverviewPage = ({
-  scenario,
+  navigation,
 }: {
-  scenario: OnboardingScenario;
+  navigation: AdminOnboardingNavigation;
 }) => {
   const { portals, loading, error } = useAdministratorOnboardingMonitoring();
 
@@ -167,7 +167,8 @@ const AdminOverviewPage = ({
               Pantau semua portal onboarding dari satu meja kendali.
             </h1>
             <p className="mt-5 max-w-3xl text-[15px] leading-8 text-[#615a52] md:text-base">
-              Fokus halaman ini bukan dummy lagi. Admin bisa langsung baca portal mana
+              Data monitoring langsung dibaca dari assignment onboarding, progres
+              materi, dan template tahap aktif. Admin bisa langsung baca portal mana
               yang padat, siapa yang masih aktif onboarding, dan kapan aktivitas baca
               terakhir terjadi.
             </p>
@@ -245,7 +246,7 @@ const AdminOverviewPage = ({
         {portalSnapshots.map(({ portal }) => (
           <PortalSummaryCard
             key={portal.portalKey}
-            adminScenario={scenario}
+            adminNavigation={navigation}
             portal={portal}
           />
         ))}
