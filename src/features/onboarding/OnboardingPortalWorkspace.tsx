@@ -119,7 +119,7 @@ const overallLabel: Record<OverallOnboardingStatus, string> = {
   extension_pending: "Perpanjangan diproses",
   returned_to_oms: "Kembali ke OMS",
   passed_to_lms: "Lulus ke LMS",
-  failed_nonactive: "Gagal dan nonaktif",
+  failed_nonactive: "Butuh keputusan HRD",
 };
 
 const stageLabel: Record<StageStatus, string> = {
@@ -129,7 +129,7 @@ const stageLabel: Record<StageStatus, string> = {
   waiting_admin: "Menunggu nilai",
   passed: "Lulus",
   remedial: "Remedial",
-  failed_window: "Lewat batas 3 bulan",
+  failed_window: "Melewati tenggat",
 };
 
 const assessmentLabel: Record<AssessmentStatus, string> = {
@@ -138,7 +138,7 @@ const assessmentLabel: Record<AssessmentStatus, string> = {
   submitted: "Tunggu nilai",
   passed: "Lulus",
   remedial: "Remedial",
-  failed_window: "Butuh keputusan",
+  failed_window: "Butuh keputusan HRD",
 };
 
 const materialTypeLabel: Record<OnboardingMaterialType, string> = {
@@ -260,6 +260,7 @@ const getFlowState = (stages: OnboardingStage[], index: number): FlowState => {
   const stage = stages[index];
   if (!stage) return "locked";
   if (stage.status === "passed") return "completed";
+  if (stage.status === "failed_window") return "locked";
   return stages.slice(0, index).every((item) => item.status === "passed")
     ? "current"
     : "locked";
@@ -306,6 +307,13 @@ const isMaterialRead = (item: OnboardingMaterial) =>
 const countReadMaterials = (materials: OnboardingMaterial[]) =>
   materials.filter(isMaterialRead).length;
 
+const isOnboardingDecisionLocked = (scenario: OnboardingScenario) =>
+  scenario.overallStatus === "failed_nonactive" ||
+  scenario.stages.some((stage) => stage.status === "failed_window");
+
+const shouldShowAssessmentFeatures = (scenario: OnboardingScenario) =>
+  scenario.portalKey !== "CUSTOMER";
+
 const buildExamQuestions = (stage: OnboardingStage): ExamQuestion[] => [
   {
     id: `${stage.id}-mcq`,
@@ -342,15 +350,34 @@ const PageShell = ({
   scenario: OnboardingScenario;
   children: ReactNode;
 }) => {
+  const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
   const materials = scenario.stages.flatMap((stage) => stage.materials);
   const readMaterials = countReadMaterials(materials);
   const passedStages = scenario.stages.filter(
     (item) => item.status === "passed"
   ).length;
+  const deadlineTime = new Date(scenario.deadlineAt).getTime();
+  const nowTime = Date.now();
   const deadlineDelta = Math.ceil(
-    (new Date(scenario.deadlineAt).getTime() - Date.now()) /
-      (1000 * 60 * 60 * 24)
+    (deadlineTime - nowTime) / (1000 * 60 * 60 * 24)
   );
+  const onboardingDecisionLocked = isOnboardingDecisionLocked(scenario);
+  const deadlineHelper = onboardingDecisionLocked
+    ? "Tenggat sudah lewat. Menunggu keputusan HRD."
+    : deadlineTime < nowTime
+      ? `${Math.abs(deadlineDelta)} hari lewat deadline.`
+      : deadlineDelta > 0
+        ? `${deadlineDelta} hari tersisa.`
+        : "Tenggat berakhir hari ini.";
+  const workspaceTabs = [
+    { label: "Tahapan", to: scenario.basePath },
+    ...(showAssessmentFeatures
+      ? [
+          { label: "Riwayat ujian", to: `${scenario.basePath}/assessments` },
+          { label: "Sertifikat", to: `${scenario.basePath}/certificates` },
+        ]
+      : []),
+  ];
 
   return (
     <div className="space-y-6">
@@ -364,8 +391,9 @@ const PageShell = ({
               Tahapan belajar dibuat jelas dari atas ke bawah
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
-              User cukup melihat alur tahap dari atas ke bawah, membuka materi,
-              lalu masuk ke ujian di tab baru setelah semua file pernah dibuka.
+              {showAssessmentFeatures
+                ? "User cukup melihat alur tahap dari atas ke bawah, membuka materi, lalu masuk ke ujian di tab baru setelah semua file pernah dibuka."
+                : "Customer cukup melihat alur tahap dari atas ke bawah, lalu membuka materi dan informasi yang tersedia."}
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <span className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${scenario.theme.badgeClass}`}>
@@ -388,18 +416,20 @@ const PageShell = ({
               <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">1. Lihat alur tahapan dari atas ke bawah.</div>
               <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">2. Klik tahap aktif untuk membuka daftar materi di dalamnya.</div>
               <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">3. Tekan Mulai baca untuk membuka file di tab baru.</div>
-              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">{scenario.isRuntime ? "4. Materi di halaman ini sudah diambil dari setting onboarding aktual per tahap." : "4. Untuk demo UI, tombol mulai ujian tetap bisa dibuka agar alurnya bisa dicoba."}</div>
+              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">
+                {scenario.isRuntime
+                  ? "4. Materi di halaman ini sudah diambil dari setting onboarding aktual per tahap."
+                  : showAssessmentFeatures
+                    ? "4. Untuk demo UI, tombol mulai ujian tetap bisa dibuka agar alurnya bisa dicoba."
+                    : "4. Halaman ini hanya menampilkan materi customer yang perlu dibaca."}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <div className="inline-flex flex-wrap gap-2 rounded-[24px] border border-white/75 bg-white/72 p-2 shadow-[0_20px_40px_-32px_rgba(15,23,42,0.24)] backdrop-blur">
-        {[
-          { label: "Tahapan", to: scenario.basePath },
-          { label: "Riwayat ujian", to: `${scenario.basePath}/assessments` },
-          { label: "Sertifikat", to: `${scenario.basePath}/certificates` },
-        ].map((item) => (
+        {workspaceTabs.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -430,12 +460,36 @@ const PageShell = ({
         ))}
       </div>
 
+      {onboardingDecisionLocked ? (
+        <section className="rounded-[28px] border border-amber-200 bg-amber-50/90 p-5 shadow-[0_18px_48px_-38px_rgba(245,158,11,0.45)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-600">
+            Masa onboarding sudah berakhir
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-amber-950">
+            {showAssessmentFeatures
+              ? "Tahapan belajar dan ujian tidak bisa diakses sementara."
+              : "Tahapan customer tidak bisa diakses sementara."}
+          </h2>
+          <p className="mt-3 max-w-4xl text-sm leading-7 text-amber-900/85">
+            {showAssessmentFeatures
+              ? "Onboarding sudah melewati tenggat, sehingga proses belajar dikunci sampai HRD memberikan keputusan berikutnya. Silakan hubungi HRD untuk tindak lanjut. Riwayat ujian dan sertifikat tetap bisa dibuka dari tab di atas."
+              : "Onboarding customer sudah melewati tenggat, sehingga proses belajar dikunci sampai admin memberikan keputusan berikutnya."}
+          </p>
+        </section>
+      ) : null}
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           ["Mulai", formatDate(scenario.startedAt), "Tanggal onboarding dimulai."],
-          ["Deadline", formatDate(scenario.deadlineAt), deadlineDelta >= 0 ? `${deadlineDelta} hari tersisa.` : `${Math.abs(deadlineDelta)} hari lewat deadline.`],
+          ["Deadline", formatDate(scenario.deadlineAt), deadlineHelper],
           ["Tahap Lulus", `${passedStages}/${scenario.stages.length}`, "Tahap berikutnya terbuka setelah tahap sebelumnya lulus."],
-          ["Materi Dibaca", `${readMaterials}/${materials.length}`, `${countRemedials(scenario)} remedial sudah tercatat.`],
+          [
+            "Materi Dibaca",
+            `${readMaterials}/${materials.length}`,
+            showAssessmentFeatures
+              ? `${countRemedials(scenario)} remedial sudah tercatat.`
+              : "Materi yang sudah pernah dibuka.",
+          ],
         ].map(([label, value, helper]) => (
           <article key={label} className="rounded-[24px] border border-white/70 bg-white/92 p-5 shadow-[0_18px_48px_-40px_rgba(15,23,42,0.2)]">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
@@ -715,6 +769,7 @@ const StageTimelineCard = ({
   index: number;
   onRuntimeRefresh?: () => void;
 }) => {
+  const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
   const flowState = getFlowState(scenario.stages, index);
   const dependency = getDependency(scenario.stages, index);
   const stageReference = getStageReference(scenario, index);
@@ -724,6 +779,17 @@ const StageTimelineCard = ({
     ? (doneMaterials / stage.materials.length) * 100
     : 0;
   const hasNext = index < scenario.stages.length - 1;
+  const onboardingDecisionLocked = isOnboardingDecisionLocked(scenario);
+  const displayStatus = onboardingDecisionLocked
+    ? "failed_window"
+    : flowState === "locked"
+      ? "locked"
+      : stage.status;
+  const displayStatusLabel = onboardingDecisionLocked
+    ? "Melewati tenggat"
+    : flowState === "locked"
+      ? "Terkunci"
+      : stageLabel[stage.status];
 
   return (
     <div className="relative pl-20">
@@ -732,6 +798,8 @@ const StageTimelineCard = ({
           className={`mt-6 flex h-12 w-12 items-center justify-center rounded-full border text-sm font-semibold ${
             flowState === "completed"
               ? scenario.theme.progressDoneClass
+              : onboardingDecisionLocked
+                ? "border-amber-200 bg-amber-50 text-amber-700"
               : flowState === "current"
                 ? "border-slate-300 bg-white text-slate-900"
                 : "border-slate-200 bg-slate-100 text-slate-400"
@@ -767,10 +835,10 @@ const StageTimelineCard = ({
               <div className="flex flex-wrap items-center gap-3">
                 <span
                   className={`rounded-full border px-3 py-1 text-xs font-semibold ${chipClass(
-                    flowState === "locked" ? "locked" : stage.status
+                    displayStatus
                   )}`}
                 >
-                  {flowState === "locked" ? "Terkunci" : stageLabel[stage.status]}
+                  {displayStatusLabel}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   {doneMaterials}/{stage.materials.length} dibaca
@@ -786,19 +854,29 @@ const StageTimelineCard = ({
                 />
               </div>
               <p className="text-sm text-slate-500">
-                Klik tahap ini untuk membuka materi dan bagian ujian.
+                {onboardingDecisionLocked
+                  ? "Akses tahap ditutup karena masa onboarding sudah lewat."
+                  : showAssessmentFeatures
+                    ? "Klik tahap ini untuk membuka materi dan bagian ujian."
+                    : "Klik tahap ini untuk membuka materi customer."}
               </p>
             </div>
           </summary>
 
           <div className="mt-6 space-y-5">
-            {flowState === "locked" ? (
+            {onboardingDecisionLocked ? (
+              <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-900">
+                {showAssessmentFeatures
+                  ? "Masa onboarding sudah melewati tenggat, jadi materi dan ujian pada tahap ini tidak bisa diakses sementara. Silakan hubungi HRD untuk mendapatkan keputusan lanjutan: diluluskan, diperpanjang, atau ditetapkan gagal final."
+                  : "Masa onboarding customer sudah melewati tenggat, jadi materi pada tahap ini tidak bisa diakses sementara. Silakan hubungi admin untuk tindak lanjut."}
+              </div>
+            ) : flowState === "locked" ? (
               <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-5 py-4 text-sm leading-7 text-slate-600">
                 Tahap ini belum terbuka. Selesaikan{" "}
                 <span className="font-semibold text-slate-900">
                   {dependency ?? "tahap sebelumnya"}
                 </span>{" "}
-                sampai lulus.
+                {showAssessmentFeatures ? "sampai lulus." : "sampai selesai."}
               </div>
               ) : (
               <>
@@ -859,12 +937,14 @@ const StageTimelineCard = ({
                   </div>
                 </section>
 
-                <ExamPanel
-                  scenario={scenario}
-                  stage={stage}
-                  flowState={flowState}
-                  dependency={dependency}
-                />
+                {showAssessmentFeatures ? (
+                  <ExamPanel
+                    scenario={scenario}
+                    stage={stage}
+                    flowState={flowState}
+                    dependency={dependency}
+                  />
+                ) : null}
               </>
             )}
           </div>
@@ -929,8 +1009,7 @@ const AssessmentsPage = ({ scenario }: { scenario: OnboardingScenario }) => {
         ) : null}
 
         {historyStages.map(({ stage, index }) => {
-          const flowState = getFlowState(scenario.stages, index);
-          const status = flowState === "locked" ? "locked" : stage.assessment.status;
+          const status = stage.assessment.status;
           const latestAttempt = Math.max(1, stage.assessment.remedialCount + 1);
 
           return (
@@ -973,7 +1052,13 @@ const AssessmentsPage = ({ scenario }: { scenario: OnboardingScenario }) => {
               <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
                   ["Dikerjakan", formatDateTime(stage.assessment.submittedAt)],
-                  ["Direview admin", formatDateTime(stage.assessment.reviewedAt)],
+                  [
+                    "Nilai sebelumnya",
+                    (stage.assessment.remedialCount <= 0 ||
+                      stage.assessment.previousScore == null)
+                      ? "-"
+                      : `${stage.assessment.previousScore}`,
+                  ],
                   [
                     "Nilai terakhir",
                     stage.assessment.score == null
@@ -2242,6 +2327,7 @@ export const OnboardingPortalWorkspace = ({
   }
 
   const scenario = scenarioOverride ?? getOnboardingScenario(portalKey);
+  const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
 
   return (
     <Routes>
@@ -2258,22 +2344,34 @@ export const OnboardingPortalWorkspace = ({
       <Route
         path="assessments"
         element={
-          <AssessmentsPage scenario={scenario} />
+          showAssessmentFeatures ? (
+            <AssessmentsPage scenario={scenario} />
+          ) : (
+            <Navigate to={scenario.basePath} replace />
+          )
         }
       />
       <Route
         path="certificates"
         element={
-          <CertificatesPage scenario={scenario} />
+          showAssessmentFeatures ? (
+            <CertificatesPage scenario={scenario} />
+          ) : (
+            <Navigate to={scenario.basePath} replace />
+          )
         }
       />
       <Route
         path="exam/:stageId"
         element={
-          <ExamPage
-            scenario={scenario}
-            onRuntimeRefresh={onRuntimeRefresh}
-          />
+          showAssessmentFeatures ? (
+            <ExamPage
+              scenario={scenario}
+              onRuntimeRefresh={onRuntimeRefresh}
+            />
+          ) : (
+            <Navigate to={scenario.basePath} replace />
+          )
         }
       />
       <Route path="*" element={<Navigate to={scenario.basePath} replace />} />

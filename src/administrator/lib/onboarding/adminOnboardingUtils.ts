@@ -11,6 +11,7 @@ export type AdminParticipantStageStatus =
   | "waiting_review"
   | "passed"
   | "remedial"
+  | "transfer_review"
   | "failed_window";
 
 export const formatDate = (value?: string | null) =>
@@ -41,6 +42,60 @@ export const adminPanelClass =
 export const adminMutedPanelClass = "border-[#e7d8c6] bg-[#f6ecdf]";
 export const adminProgressBarClass = "bg-[#24345f]";
 
+export type AdminOnboardingVisualMode = "admin" | "employee";
+
+export const getAdminOnboardingTheme = (
+  visualMode: AdminOnboardingVisualMode = "admin"
+) => {
+  if (visualMode === "employee") {
+    return {
+      visualMode,
+      accentTextClass: "text-[#24306f]",
+      buttonClass:
+        "border border-[#24306f] bg-[#24306f] text-white shadow-[0_18px_34px_-24px_rgba(36,48,111,0.42)] hover:bg-[#31438a]",
+      panelClass:
+        "border-[#dce5fb] bg-white shadow-[0_24px_56px_-42px_rgba(36,48,111,0.22)]",
+      mutedPanelClass: "border-[#dce5fb] bg-[#f6f8ff]",
+      progressBarClass: "bg-[#31438a]",
+      heroClass:
+        "border-[#d8e3ff] bg-[#f7f9ff] shadow-[0_32px_90px_-56px_rgba(36,48,111,0.28)]",
+      heroBlockClass: "bg-[#eaf0ff]",
+      heroDecorClass: "border-[#d8e3ff] bg-white",
+      eyebrowClass: "bg-[#eaf0ff] text-[#31438a]",
+      labelClass: "text-[#6b7aa5]",
+      bodyTextClass: "text-[#4b587d]",
+      subtleTextClass: "text-[#7180a8]",
+      chipClass: "border-[#dce5fb] bg-white text-[#4b587d]",
+      infoClass: "border-[#dce5fb] bg-white",
+      progressTrackClass: "bg-[#e8eefc]",
+      hoverShadowClass:
+        "group-hover:shadow-[0_30px_70px_-44px_rgba(36,48,111,0.28)] group-focus-visible:shadow-[0_30px_70px_-44px_rgba(36,48,111,0.28)]",
+    };
+  }
+
+  return {
+    visualMode,
+    accentTextClass: adminAccentTextClass,
+    buttonClass: adminButtonClass,
+    panelClass: adminPanelClass,
+    mutedPanelClass: adminMutedPanelClass,
+    progressBarClass: adminProgressBarClass,
+    heroClass:
+      "border-[#d7c4ad] bg-[#fff7ec] shadow-[0_32px_90px_-56px_rgba(74,53,31,0.34)]",
+    heroBlockClass: "bg-[#eedfcb]",
+    heroDecorClass: "border-[#dccbb6] bg-[#f7ebdb]",
+    eyebrowClass: "bg-[#efe1cf] text-[#8b6a48]",
+    labelClass: "text-[#8a6d4b]",
+    bodyTextClass: "text-[#615a52]",
+    subtleTextClass: "text-[#6b6258]",
+    chipClass: "border-[#dfcfbc] bg-[#fffaf2] text-[#5f584f]",
+    infoClass: "border-[#e2d3bf] bg-[#fffdf8]",
+    progressTrackClass: "bg-[#eadfce]",
+    hoverShadowClass:
+      "group-hover:shadow-[0_30px_70px_-44px_rgba(74,53,31,0.34)] group-focus-visible:shadow-[0_30px_70px_-44px_rgba(74,53,31,0.34)]",
+  };
+};
+
 const normalizeUpper = (value?: string | null) => (value ?? "").trim().toUpperCase();
 
 export const normalizeStageStatus = (
@@ -59,6 +114,8 @@ export const normalizeStageStatus = (
       return "passed";
     case "REMEDIAL":
       return "remedial";
+    case "TRANSFER_REVIEW":
+      return "transfer_review";
     case "FAILED":
     case "FAIL_FINAL":
     case "CANCELLED":
@@ -75,6 +132,7 @@ export const stageStatusLabel: Record<AdminParticipantStageStatus, string> = {
   waiting_review: "Menunggu review",
   passed: "Lulus",
   remedial: "Remedial",
+  transfer_review: "Review HRD",
   failed_window: "Butuh keputusan",
 };
 
@@ -85,6 +143,7 @@ export const stageStatusClass: Record<AdminParticipantStageStatus, string> = {
   waiting_review: "border-[#1b2238] bg-[#1b2238] text-[#fff8ed]",
   passed: "border-[#cfe0cf] bg-[#edf5ea] text-[#486448]",
   remedial: "border-[#e7caa4] bg-[#f8ebd4] text-[#915d16]",
+  transfer_review: "border-[#cbd8f7] bg-[#eef4ff] text-[#31438a]",
   failed_window: "border-[#ebcdc7] bg-[#f9ece8] text-[#8f4736]",
 };
 
@@ -118,6 +177,8 @@ const getStageProgressRatio = (stage: AdminOnboardingParticipantStage) => {
       return Math.max(0.78, materialRatio);
     case "remedial":
       return Math.max(0.5, materialRatio);
+    case "transfer_review":
+      return Math.max(0.4, materialRatio);
     case "failed_window":
       return Math.max(0.4, materialRatio);
     case "reading":
@@ -167,6 +228,45 @@ export const getCurrentStageIndex = (participant: AdminPortalParticipant) => {
 export const getParticipantMaterialProgress = (
   participant: AdminPortalParticipant
 ) => `${participant.readMaterialCount}/${Math.max(participant.totalMaterialCount, 1)}`;
+
+export const formatExamScore = (score?: number | null) => {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return "-";
+  }
+
+  return Number.isInteger(score) ? `${score}` : score.toFixed(1);
+};
+
+export const getParticipantLatestExamStage = (
+  participant: AdminPortalParticipant
+) => {
+  const stagesWithExamSignal = participant.stages.filter(
+    (stage) =>
+      stage.examScore != null ||
+      stage.examSubmittedAt ||
+      stage.examReviewedAt ||
+      stage.examAttemptStatus
+  );
+
+  return [...stagesWithExamSignal].sort((left, right) => {
+    const leftTime = new Date(
+      left.examReviewedAt ?? left.examSubmittedAt ?? left.completedAt ?? left.startedAt ?? 0
+    ).getTime();
+    const rightTime = new Date(
+      right.examReviewedAt ?? right.examSubmittedAt ?? right.completedAt ?? right.startedAt ?? 0
+    ).getTime();
+
+    if (rightTime !== leftTime) {
+      return rightTime - leftTime;
+    }
+
+    return right.stageOrder - left.stageOrder;
+  })[0] ?? null;
+};
+
+export const getParticipantLatestExamScore = (
+  participant: AdminPortalParticipant
+) => getParticipantLatestExamStage(participant)?.examScore ?? null;
 
 export const getParticipantLastActivityAt = (
   participant: AdminPortalParticipant
@@ -239,6 +339,8 @@ export const getParticipantNextAction = (participant: AdminPortalParticipant) =>
       return `${currentStage.stageName} menunggu review admin. Pastikan keputusan berikutnya tidak tertahan.`;
     case "remedial":
       return `${currentStage.stageName} sedang remedial. Perlu follow-up supaya ritme onboarding tidak macet.`;
+    case "transfer_review":
+      return `${currentStage.stageName} dibekukan untuk review HRD. Cek kemungkinan pindah departemen sebelum onboarding dilanjutkan.`;
     case "failed_window":
       return `${currentStage.stageName} butuh keputusan lanjutan karena belum berhasil clear.`;
     default:
@@ -278,6 +380,7 @@ export const getPortalMetrics = (portal: AdminOnboardingPortal) => {
       overdue ||
       currentStatus === "waiting_review" ||
       currentStatus === "remedial" ||
+      currentStatus === "transfer_review" ||
       currentStatus === "failed_window"
     );
   }).length;

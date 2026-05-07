@@ -23,11 +23,17 @@ type FormState = {
   templateName: string;
   channel: NotificationChannel;
   eventKey: string;
-  recipientRole: "PARTICIPANT";
+  recipientRole: string;
   scopeMode: "ALL" | "SELECTED";
   selectedPortalKeys: string[];
   messageTemplate: string;
   isActive: boolean;
+};
+type TestNotificationResponse = {
+  sent?: number;
+  pending?: number;
+  failed?: number;
+  skipped?: number;
 };
 
 const pagePanelClass =
@@ -52,8 +58,22 @@ const TOKENS = [
   "{loginUrl}",
   "{supportName}",
   "{supportPhone}",
+  "{employeeName}",
+  "{startedDate}",
+  "{sbuSubName}",
+  "{sbuName}",
+  "{pilarName}",
+  "{positionName}",
+  "{jabatanName}",
+  "{hrdUrl}",
 ];
 const DEFAULT_EVENT_KEY = "OMS_FIRST_LOGIN";
+const DEFAULT_EVENT_KEY_OPTIONS = [
+  "OMS_FIRST_LOGIN",
+  "ONBOARDING_STARTED",
+  "ONBOARDING_OVERDUE_FAILED",
+];
+const DEFAULT_RECIPIENT_ROLE = "PARTICIPANT";
 const DEFAULT_CHANNEL: NotificationChannel = "EMAIL";
 const EMPLOYEE_PORTAL_KEY = "EMPLOYEE";
 const CUSTOM_EVENT_OPTION_VALUE = "__CUSTOM__";
@@ -61,9 +81,20 @@ const NOTIFICATION_CHANNEL_OPTIONS: NotificationChannel[] = [
   "WHATSAPP",
   "EMAIL",
 ];
+const DEFAULT_RECIPIENT_ROLE_OPTIONS = [
+  "PARTICIPANT",
+  "SBU_SUB_PIC",
+  "HRD",
+];
 const EVENT_KEY_LABELS: Record<string, string> = {
-  ONBOARDING_STARTED: "HRD -> Participant (Onboarding dimulai)",
-  OMS_FIRST_LOGIN: "HRD -> Participant (Welcome OMS / first login)",
+  ONBOARDING_STARTED: "Onboarding dimulai",
+  OMS_FIRST_LOGIN: "Welcome OMS / first login",
+  ONBOARDING_OVERDUE_FAILED: "Onboarding melewati deadline",
+};
+const RECIPIENT_ROLE_LABELS: Record<string, string> = {
+  PARTICIPANT: "Peserta onboarding",
+  SBU_SUB_PIC: "PIC SBU Sub",
+  HRD: "HRD",
 };
 const DEFAULT_MESSAGE =
   "Halo {recipientName},\n\nWelcome OMS. Onboarding Anda untuk portal {portalName} sudah dimulai dengan deadline {deadlineDays} hari sampai {dueDate}.\nCard number / username Anda: {cardNumber}\nPassword sementara Anda: {temporaryPassword}\n\nSilakan login melalui {loginUrl} dan segera ubah password Anda setelah berhasil masuk.\n\nJika ada kendala, hubungi {supportName} di {supportPhone}.";
@@ -98,6 +129,13 @@ const sanitizeEventKey = (value: string) =>
     .replace(/^_+|_+$/g, "")
     .slice(0, 50);
 
+const sanitizeRecipientRole = (value: string) =>
+  value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 30);
+
 const formatEventKeyLabel = (value?: string | null) => {
   const sanitized = sanitizeEventKey(value ?? "");
   return sanitized ? sanitized.replaceAll("_", " ") : "-";
@@ -106,6 +144,13 @@ const formatEventKeyLabel = (value?: string | null) => {
 const getEventKeyLabel = (value?: string | null) => {
   const sanitized = sanitizeEventKey(value ?? "");
   return sanitized ? EVENT_KEY_LABELS[sanitized] ?? formatEventKeyLabel(sanitized) : "-";
+};
+
+const getRecipientRoleLabel = (value?: string | null) => {
+  const sanitized = sanitizeRecipientRole(value ?? "");
+  return sanitized
+    ? RECIPIENT_ROLE_LABELS[sanitized] ?? sanitized.replaceAll("_", " ")
+    : "-";
 };
 
 const isNotificationChannel = (value?: string | null): value is NotificationChannel =>
@@ -146,7 +191,7 @@ const createDefaultForm = (): FormState => ({
   templateName: "",
   channel: DEFAULT_CHANNEL,
   eventKey: DEFAULT_EVENT_KEY,
-  recipientRole: "PARTICIPANT",
+  recipientRole: DEFAULT_RECIPIENT_ROLE,
   scopeMode: "ALL",
   selectedPortalKeys: [],
   messageTemplate: DEFAULT_MESSAGE,
@@ -161,6 +206,7 @@ const AdministratorNotificationTemplatePage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [testingWhatsapp, setTestingWhatsapp] = useState(false);
   const [mode, setMode] = useState<"add" | "edit">("add");
   const [searchInput, setSearchInput] = useState("");
   const [portalFilter, setPortalFilter] = useState("ALL");
@@ -180,7 +226,7 @@ const AdministratorNotificationTemplatePage = () => {
     [portalOptions]
   );
   const eventKeyOptions = useMemo<EventKeyOption[]>(() => {
-    const values = new Set<string>([DEFAULT_EVENT_KEY]);
+    const values = new Set<string>(DEFAULT_EVENT_KEY_OPTIONS);
 
     for (const item of templates) {
       const eventKey = sanitizeEventKey(item.eventKey);
@@ -198,6 +244,27 @@ const AdministratorNotificationTemplatePage = () => {
       .map((value) => ({
         value,
         label: getEventKeyLabel(value),
+      }));
+  }, [templates]);
+  const recipientRoleOptions = useMemo(() => {
+    const values = new Set<string>(DEFAULT_RECIPIENT_ROLE_OPTIONS);
+
+    for (const item of templates) {
+      const recipientRole = sanitizeRecipientRole(item.recipientRole);
+      if (recipientRole) {
+        values.add(recipientRole);
+      }
+    }
+
+    return Array.from(values)
+      .sort((left, right) => {
+        if (left === DEFAULT_RECIPIENT_ROLE) return -1;
+        if (right === DEFAULT_RECIPIENT_ROLE) return 1;
+        return left.localeCompare(right);
+      })
+      .map((value) => ({
+        value,
+        label: getRecipientRoleLabel(value),
       }));
   }, [templates]);
 
@@ -286,13 +353,14 @@ const AdministratorNotificationTemplatePage = () => {
           item.appliesToAllPortals ? "ALL" : "SELECTED",
           item.portalKeys ?? []
         )
-      ),
-      eventKey: nextEventKey,
-      recipientRole: "PARTICIPANT",
-      scopeMode: item.appliesToAllPortals ? "ALL" : "SELECTED",
-      selectedPortalKeys: item.portalKeys ?? [],
-      messageTemplate: item.messageTemplate,
-      isActive: item.isActive,
+        ),
+        eventKey: nextEventKey,
+        recipientRole:
+          sanitizeRecipientRole(item.recipientRole) || DEFAULT_RECIPIENT_ROLE,
+        scopeMode: item.appliesToAllPortals ? "ALL" : "SELECTED",
+        selectedPortalKeys: item.portalKeys ?? [],
+        messageTemplate: item.messageTemplate,
+        isActive: item.isActive,
     });
     setChannelManuallyChanged(true);
     setIsCustomEventKey(
@@ -334,15 +402,20 @@ const AdministratorNotificationTemplatePage = () => {
       showToast("Nama template wajib diisi", "error");
       return;
     }
-    const normalizedEventKey = sanitizeEventKey(form.eventKey);
-    if (!normalizedEventKey) {
-      showToast("Event key wajib diisi", "error");
-      return;
-    }
-    if (!form.messageTemplate.trim()) {
-      showToast("Template pesan wajib diisi", "error");
-      return;
-    }
+      const normalizedEventKey = sanitizeEventKey(form.eventKey);
+      if (!normalizedEventKey) {
+        showToast("Event key wajib diisi", "error");
+        return;
+      }
+      const normalizedRecipientRole = sanitizeRecipientRole(form.recipientRole);
+      if (!normalizedRecipientRole) {
+        showToast("Penerima wajib diisi", "error");
+        return;
+      }
+      if (!form.messageTemplate.trim()) {
+        showToast("Template pesan wajib diisi", "error");
+        return;
+      }
     if (form.scopeMode === "SELECTED" && form.selectedPortalKeys.length === 0) {
       showToast("Pilih minimal satu portal", "error");
       return;
@@ -352,13 +425,13 @@ const AdministratorNotificationTemplatePage = () => {
     try {
       const payload = {
         ...(isEditMode ? { notificationTemplateId: form.notificationTemplateId } : {}),
-        templateName: form.templateName,
-        channel: form.channel,
-        eventKey: normalizedEventKey,
-        recipientRole: form.recipientRole,
-        portalKeys: form.scopeMode === "ALL" ? [] : form.selectedPortalKeys,
-        messageTemplate: form.messageTemplate,
-        isActive: form.isActive,
+          templateName: form.templateName,
+          channel: form.channel,
+          eventKey: normalizedEventKey,
+          recipientRole: normalizedRecipientRole,
+          portalKeys: form.scopeMode === "ALL" ? [] : form.selectedPortalKeys,
+          messageTemplate: form.messageTemplate,
+          isActive: form.isActive,
       };
       const res = await apiFetch("/notification-template", {
         method: isEditMode ? "PUT" : "POST",
@@ -414,14 +487,45 @@ const AdministratorNotificationTemplatePage = () => {
     }
   };
 
+  const handleSendWhatsappTest = async () => {
+    setTestingWhatsapp(true);
+    try {
+      const res = await apiFetch("/notification-template/test-whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        showToast(getApiErrorMessage(json, "Gagal mengirim tes WA"), "error");
+        return;
+      }
+
+      const response = (json?.response ?? {}) as TestNotificationResponse;
+      const sent = Number(response.sent ?? 0);
+      const pending = Number(response.pending ?? 0);
+      const failed = Number(response.failed ?? 0);
+      const skipped = Number(response.skipped ?? 0);
+      showToast(
+        `Tes WA: terkirim ${sent}, pending ${pending}, gagal ${failed}, dilewati ${skipped}`,
+        sent > 0 ? "success" : "error"
+      );
+    } catch {
+      showToast("Gagal mengirim tes WA", "error");
+    } finally {
+      setTestingWhatsapp(false);
+    }
+  };
+
   const filteredTemplates = useMemo(() => {
     const term = deferredSearch.trim().toLowerCase();
     return templates.filter((item) => {
-      const matchesSearch =
-        term.length === 0 ||
-        item.templateName.toLowerCase().includes(term) ||
-        item.messageTemplate.toLowerCase().includes(term) ||
-        item.eventKey.toLowerCase().includes(term);
+        const matchesSearch =
+          term.length === 0 ||
+          item.templateName.toLowerCase().includes(term) ||
+          item.messageTemplate.toLowerCase().includes(term) ||
+          item.eventKey.toLowerCase().includes(term) ||
+          item.recipientRole.toLowerCase().includes(term);
       if (!matchesSearch) return false;
       if (portalFilter === "ALL") return true;
       if (portalFilter === "__ALL_PORTALS__") return item.appliesToAllPortals;
@@ -452,6 +556,16 @@ const AdministratorNotificationTemplatePage = () => {
               className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
             >
               Refresh Data
+            </button>
+            <button
+              type="button"
+              onClick={handleSendWhatsappTest}
+              disabled={testingWhatsapp}
+              className={`rounded-full border border-emerald-300/70 bg-emerald-400/15 px-4 py-2 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-400/25 ${
+                testingWhatsapp ? "cursor-not-allowed opacity-60" : ""
+              }`}
+            >
+              {testingWhatsapp ? "Mengirim..." : "Tes WA"}
             </button>
             <button
               type="button"
@@ -539,7 +653,7 @@ const AdministratorNotificationTemplatePage = () => {
                             {item.channel}
                           </span>
                           <span className="rounded-full border border-[#dbe3ec] bg-[#f8fafc] px-3 py-1 text-[11px] font-semibold text-slate-600">
-                            {item.recipientRole}
+                              {getRecipientRoleLabel(item.recipientRole)}
                           </span>
                           {item.appliesToAllPortals ? (
                             <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700">
@@ -662,9 +776,9 @@ const AdministratorNotificationTemplatePage = () => {
                     lain Email. Tetap bisa diubah bila diperlukan.
                   </p>
                 </div>
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                    Event key
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                      Event key
                   </label>
                   <select
                     value={isCustomEventKey ? CUSTOM_EVENT_OPTION_VALUE : form.eventKey}
@@ -709,11 +823,37 @@ const AdministratorNotificationTemplatePage = () => {
                   <p className="mt-2 text-xs leading-5 text-slate-500">
                     Pilih event yang sudah ada untuk mengurangi human error. Pakai
                     custom hanya kalau event baru belum tersedia.
-                  </p>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                      Penerima
+                    </label>
+                    <select
+                      value={form.recipientRole}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          recipientRole:
+                            sanitizeRecipientRole(event.target.value) ||
+                            DEFAULT_RECIPIENT_ROLE,
+                        }))
+                      }
+                      className="mt-2 w-full rounded-[18px] border border-[#dde5ee] bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300"
+                    >
+                      {recipientRoleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Penerima menentukan siapa yang dipanggil saat event berjalan.
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div>
+                <div>
                 <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                   Scope portal
                 </label>

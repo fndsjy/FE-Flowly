@@ -14,6 +14,9 @@ export type CustomerUserProfile = {
   roleId: string;
   roleName: string;
   roleLevel: number;
+  custid?: string;
+  customer?: Record<string, unknown> | null;
+  customerData?: Record<string, unknown>[];
 };
 
 export type CustomerSidebarItem = PortalSidebarItem;
@@ -80,6 +83,49 @@ const getCustomerMenuIcon = (resourceKey: string) => {
   return <i className="fa-solid fa-circle h-4 w-4" aria-hidden="true"></i>;
 };
 
+const hiddenCustomerMenuKeywords = [
+  "ASSESSMENT",
+  "CERTIFICATE",
+  "CERTIFICATES",
+  "EXAM",
+  "HASIL UJIAN",
+  "HASIL_UJIAN",
+  "LEARNING",
+  "RESULT",
+  "SERTIFIKAT",
+  "UJIAN",
+];
+
+const hiddenCustomerMenuRoutes = ["/assessments", "/certificates", "/exam"];
+
+const isHiddenCustomerAssessmentMenu = (item: CustomerSidebarItem) => {
+  const searchText = `${item.resourceKey} ${item.label}`.toUpperCase();
+  const path = item.path.toLowerCase();
+
+  if (path === "/customer" || path === "/customer/") {
+    return false;
+  }
+
+  return (
+    hiddenCustomerMenuKeywords.some((keyword) => searchText.includes(keyword)) ||
+    hiddenCustomerMenuRoutes.some((route) => path.includes(route))
+  );
+};
+
+const normalizeCustomerMenuItem = (item: CustomerSidebarItem): CustomerSidebarItem => {
+  const searchText = `${item.resourceKey} ${item.label}`.toUpperCase();
+  const path = item.path.toLowerCase();
+
+  if (path === "/customer" || path === "/customer/" || searchText.includes("DASHBOARD")) {
+    return {
+      ...item,
+      label: "Onboarding",
+    };
+  }
+
+  return item;
+};
+
 const CustomerSidebar = ({
   isOpen,
   isDesktop,
@@ -107,7 +153,7 @@ const CustomerSidebar = ({
           return;
         }
 
-        setMenuItems(nextMenuItems);
+        setMenuItems(nextMenuItems.map(normalizeCustomerMenuItem));
         setModuleRoutesByParent(nextModuleRoutes);
       })
       .catch(() => {
@@ -143,7 +189,9 @@ const CustomerSidebar = ({
     location.pathname.startsWith("/customer/profile/");
   const isAdminUser = user?.roleLevel === 1;
   const visibleMenuItems = menuItems.filter(
-    (item) => isAdminUser || !item.resourceKey.toUpperCase().includes("ADMIN")
+    (item) =>
+      !isHiddenCustomerAssessmentMenu(item) &&
+      (isAdminUser || !item.resourceKey.toUpperCase().includes("ADMIN"))
   );
   const dismissMobileSidebar = () => {
     if (!isDesktop) {

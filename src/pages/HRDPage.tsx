@@ -1,4 +1,12 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faChevronLeft,
+  faChevronRight,
+  faPenToSquare,
+  faScaleBalanced,
+  faTrash,
+} from "@fortawesome/free-solid-svg-icons";
 import BackButton from "../components/atoms/BackButton";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 import Sidebar from "../components/organisms/Sidebar";
@@ -51,22 +59,46 @@ interface FingerMachineData {
   label: string;
 }
 
+interface EmployeeOnboardingPlacementDetailData {
+  source: string;
+  label: string;
+  roleLabel: string;
+  positionName: string | null;
+  jabatanName: string | null;
+  pilarName: string | null;
+  sbuName: string | null;
+  sbuSubName: string | null;
+  sbuSubPicName: string | null;
+}
+
 interface EmployeeOnboardingSummaryData {
   userId: number;
   employeeName: string | null;
-  onboardingAssignmentId: string;
+  onboardingAssignmentId: string | null;
   portalKey: string;
-  status: string;
-  startedAt: string;
-  dueAt: string;
+  status: string | null;
+  startedAt: string | null;
+  dueAt: string | null;
+  failedAt: string | null;
   currentStageOrder: number | null;
   hasActiveAssignment: boolean;
   canStart: boolean;
+  requiresDecision: boolean;
+  hasOnboardingPlacement: boolean;
+  onboardingPlacementSources: string[];
+  onboardingPlacementDetails: EmployeeOnboardingPlacementDetailData[];
+  onboardingBlockReason: string | null;
 }
 
 type FormMode = "add" | "edit";
+type OnboardingDecisionType =
+  | "PASS_OVERRIDE"
+  | "EXTEND"
+  | "FAIL_FINAL"
+  | "FREEZE_TRANSFER_REVIEW";
 
 const HRD_ONBOARDING_PORTAL_KEY = "EMPLOYEE";
+const EMPLOYEE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 type FormState = {
   userId: string;
@@ -528,7 +560,17 @@ const getEmployeeCardNumber = (employee: Pick<EmployeeData, "BadgeNum" | "CardNo
 const getOnboardingStatusMeta = (
   summary?: EmployeeOnboardingSummaryData | null
 ) => {
-  if (!summary) {
+  if (!summary || !summary.onboardingAssignmentId) {
+    if (summary && !summary.hasOnboardingPlacement) {
+      return {
+        label: "Belum siap onboarding",
+        className: "bg-amber-100 text-amber-700",
+        helper:
+          summary.onboardingBlockReason ||
+          "Karyawan belum ada di struktur organisasi atau PIC pilar/SBU/SBU SUB.",
+      };
+    }
+
     return {
       label: "Belum onboarding",
       className: "bg-slate-100 text-slate-600",
@@ -536,7 +578,7 @@ const getOnboardingStatusMeta = (
     };
   }
 
-  const normalizedStatus = summary.status.trim().toUpperCase();
+  const normalizedStatus = summary.status?.trim().toUpperCase() ?? "";
 
   if (summary.hasActiveAssignment) {
     return {
@@ -560,9 +602,27 @@ const getOnboardingStatusMeta = (
     };
   }
 
-  if (normalizedStatus === "FAILED" || normalizedStatus === "FAIL_FINAL") {
+  if (normalizedStatus === "FAILED") {
     return {
-      label: "Onboarding gagal",
+      label: "Butuh keputusan HRD",
+      className: "bg-amber-100 text-amber-700",
+      helper: `Gagal otomatis ${formatCompactDate(
+        summary.failedAt ?? summary.dueAt
+      )}`,
+    };
+  }
+
+  if (normalizedStatus === "TRANSFER_REVIEW") {
+    return {
+      label: "Dibekukan PIC",
+      className: "bg-indigo-100 text-indigo-700",
+      helper: "Menunggu review HRD untuk kemungkinan perpindahan departemen.",
+    };
+  }
+
+  if (normalizedStatus === "FAIL_FINAL") {
+    return {
+      label: "Onboarding gagal final",
       className: "bg-rose-100 text-rose-700",
       helper: `Deadline ${formatCompactDate(summary.dueAt)}`,
     };
@@ -573,6 +633,67 @@ const getOnboardingStatusMeta = (
     className: "bg-amber-100 text-amber-700",
     helper: `Mulai ${formatCompactDate(summary.startedAt)}`,
   };
+};
+
+const getOnboardingPlacementDetails = (
+  summary?: EmployeeOnboardingSummaryData | null
+) =>
+  Array.isArray(summary?.onboardingPlacementDetails)
+    ? summary.onboardingPlacementDetails.filter(
+        (detail) =>
+          (detail.roleLabel || detail.label || "").trim().length > 0
+      )
+    : [];
+
+const getPlacementDetailRows = (
+  detail: EmployeeOnboardingPlacementDetailData
+) => {
+  const source = detail.source.trim().toUpperCase();
+
+  if (source === "CHART_MEMBER") {
+    return [
+      ["SBU Sub", detail.sbuSubName],
+      ["PIC SBU Sub", detail.sbuSubPicName || "-"],
+    ];
+  }
+
+  if (source === "PILAR_PIC") {
+    return [["Pilar", detail.pilarName]];
+  }
+
+  if (source === "SBU_PIC") {
+    return [["SBU", detail.sbuName]];
+  }
+
+  if (source === "SBU_SUB_PIC") {
+    return [["SBU Sub", detail.sbuSubName]];
+  }
+
+  return [["Detail", detail.label]];
+};
+
+const getPlacementDetailTitle = (
+  detail: EmployeeOnboardingPlacementDetailData
+) => {
+  const source = detail.source.trim().toUpperCase();
+
+  if (source === "CHART_MEMBER") {
+    return detail.positionName || detail.jabatanName || "Staff struktur organisasi";
+  }
+
+  if (source === "PILAR_PIC") {
+    return "PIC Pilar";
+  }
+
+  if (source === "SBU_PIC") {
+    return "PIC SBU";
+  }
+
+  if (source === "SBU_SUB_PIC") {
+    return "PIC SBU Sub";
+  }
+
+  return detail.roleLabel || detail.label;
 };
 
 const HRDPage = () => {
@@ -590,6 +711,8 @@ const HRDPage = () => {
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [hireDateFrom, setHireDateFrom] = useState("");
   const [hireDateTo, setHireDateTo] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [sortBy, setSortBy] = useState<
     | "last_created_desc"
     | "last_updated_desc"
@@ -623,6 +746,17 @@ const HRDPage = () => {
     label: "",
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [decisionTarget, setDecisionTarget] = useState<{
+    open: boolean;
+    employee: EmployeeData | null;
+    summary: EmployeeOnboardingSummaryData | null;
+  }>({
+    open: false,
+    employee: null,
+    summary: null,
+  });
+  const [decisionNote, setDecisionNote] = useState("");
+  const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
 
   const { showToast } = useToast();
   const { isAdmin, menuAccessMap } = useAccessSummary();
@@ -631,7 +765,37 @@ const HRDPage = () => {
   const canStartEmployeeOnboarding = (
     employee: EmployeeData,
     summary?: EmployeeOnboardingSummaryData | null
-  ) => !employee.ResignDate && !(summary?.hasActiveAssignment ?? false);
+  ) => !employee.ResignDate && (summary?.canStart ?? false);
+
+  const getStartOnboardingDisabledReason = (
+    employee: EmployeeData,
+    summary?: EmployeeOnboardingSummaryData | null
+  ) => {
+    if (employee.ResignDate) {
+      return "Karyawan sudah resign";
+    }
+
+    if (summary?.hasActiveAssignment) {
+      return "Onboarding masih aktif";
+    }
+
+    if (summary?.requiresDecision) {
+      return "Onboarding gagal membutuhkan keputusan HRD";
+    }
+
+    if (summary && !summary.hasOnboardingPlacement) {
+      return (
+        summary.onboardingBlockReason ||
+        "Karyawan belum ada di struktur organisasi atau PIC pilar/SBU/SBU SUB"
+      );
+    }
+
+    if (!summary) {
+      return "Status kelayakan onboarding belum tersedia";
+    }
+
+    return "";
+  };
 
   const fetchFingerMachines = async () => {
     if (isLoadingFingerMachines) {
@@ -839,6 +1003,32 @@ const HRDPage = () => {
     });
   }, [filteredEmployees, sortBy]);
 
+  const totalEmployeePages = Math.max(
+    1,
+    Math.ceil(sortedEmployees.length / pageSize)
+  );
+  const pageStartIndex = (currentPage - 1) * pageSize;
+  const paginatedEmployees = useMemo(
+    () => sortedEmployees.slice(pageStartIndex, pageStartIndex + pageSize),
+    [pageSize, pageStartIndex, sortedEmployees]
+  );
+  const pageRangeStart =
+    sortedEmployees.length === 0 ? 0 : pageStartIndex + 1;
+  const pageRangeEnd = Math.min(
+    pageStartIndex + paginatedEmployees.length,
+    sortedEmployees.length
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredSearch, departmentFilter, hireDateFrom, hireDateTo, pageSize, sortBy]);
+
+  useEffect(() => {
+    setCurrentPage((current) =>
+      Math.min(Math.max(current, 1), totalEmployeePages)
+    );
+  }, [totalEmployeePages]);
+
   const totalEmployees = employees.length;
   const activeEmployees = employees.filter(
     (employee) => !employee.ResignDate && isEmployeeLmsActive(employee.statusLMS)
@@ -878,7 +1068,7 @@ const HRDPage = () => {
     }).length;
   }, [employees]);
 
-  const selectableEmployeeIds = useMemo(
+  const allSelectableEmployeeIds = useMemo(
     () =>
       sortedEmployees
         .filter((employee) =>
@@ -890,6 +1080,22 @@ const HRDPage = () => {
         .map((employee) => employee.UserId),
     [onboardingSummaryMap, sortedEmployees]
   );
+  const allSelectableEmployeeIdSet = useMemo(
+    () => new Set(allSelectableEmployeeIds),
+    [allSelectableEmployeeIds]
+  );
+  const selectableEmployeeIds = useMemo(
+    () =>
+      paginatedEmployees
+        .filter((employee) =>
+          canStartEmployeeOnboarding(
+            employee,
+            onboardingSummaryMap[employee.UserId] ?? null
+          )
+        )
+        .map((employee) => employee.UserId),
+    [onboardingSummaryMap, paginatedEmployees]
+  );
   const selectableEmployeeIdSet = useMemo(
     () => new Set(selectableEmployeeIds),
     [selectableEmployeeIds]
@@ -899,7 +1105,11 @@ const HRDPage = () => {
     [selectedEmployeeIds]
   );
 
-  const selectedEligibleCount = selectedEmployeeIds.filter((userId) =>
+  const selectedStartableEmployeeIds = selectedEmployeeIds.filter((userId) =>
+    allSelectableEmployeeIdSet.has(userId)
+  );
+  const selectedEligibleCount = selectedStartableEmployeeIds.length;
+  const selectedPageEligibleCount = selectedEmployeeIds.filter((userId) =>
     selectableEmployeeIdSet.has(userId)
   ).length;
   const allSelectableChecked =
@@ -1215,13 +1425,18 @@ const HRDPage = () => {
       const skippedCount = Array.isArray(json?.response?.skipped)
         ? json.response.skipped.length
         : 0;
+      const firstSkippedReason =
+        Array.isArray(json?.response?.skipped) &&
+        typeof json.response.skipped[0]?.reason === "string"
+          ? json.response.skipped[0].reason
+          : null;
 
       showToast(
         startedCount > 0
           ? `Onboarding dimulai untuk ${startedCount} karyawan${
               skippedCount > 0 ? `, ${skippedCount} dilewati` : ""
             }.`
-          : "Tidak ada onboarding baru yang dimulai.",
+          : firstSkippedReason || "Tidak ada onboarding baru yang dimulai.",
         startedCount > 0 ? "success" : "error"
       );
 
@@ -1239,6 +1454,91 @@ const HRDPage = () => {
       setIsStartingOnboarding(false);
     }
   };
+
+  const openOnboardingDecision = (
+    employee: EmployeeData,
+    summary: EmployeeOnboardingSummaryData
+  ) => {
+    setDecisionTarget({
+      open: true,
+      employee,
+      summary,
+    });
+    setDecisionNote("");
+  };
+
+  const closeOnboardingDecision = () => {
+    if (isSubmittingDecision) return;
+    setDecisionTarget({
+      open: false,
+      employee: null,
+      summary: null,
+    });
+    setDecisionNote("");
+  };
+
+  const submitOnboardingDecision = async (decisionType: OnboardingDecisionType) => {
+    const summary = decisionTarget.summary;
+    if (!summary?.onboardingAssignmentId || isSubmittingDecision) return;
+
+    setIsSubmittingDecision(true);
+    try {
+      const res = await apiFetch("/onboarding/decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          onboardingAssignmentId: summary.onboardingAssignmentId,
+          decisionType,
+          nextDurationDay: decisionType === "EXTEND" ? 90 : null,
+          note: normalizeText(decisionNote),
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(
+          getApiErrorMessage(json, "Gagal menyimpan keputusan onboarding"),
+          "error"
+        );
+        return;
+      }
+
+      const label =
+        decisionType === "PASS_OVERRIDE"
+          ? "Onboarding diluluskan."
+          : decisionType === "EXTEND"
+            ? "Masa onboarding ditambah 90 hari."
+            : decisionType === "FREEZE_TRANSFER_REVIEW"
+              ? "Onboarding dibekukan untuk review HRD."
+              : "Onboarding ditetapkan gagal final.";
+      showToast(label, "success");
+      setDecisionTarget({
+        open: false,
+        employee: null,
+        summary: null,
+      });
+      setDecisionNote("");
+      await fetchPageData();
+    } catch (error) {
+      console.error("Error submitting onboarding decision:", error);
+      showToast("Terjadi kesalahan saat menyimpan keputusan onboarding", "error");
+    } finally {
+      setIsSubmittingDecision(false);
+    }
+  };
+
+  const recentlyCreatedOnboardingSummary = recentlyCreatedEmployee
+    ? onboardingSummaryMap[recentlyCreatedEmployee.UserId] ?? null
+    : null;
+  const canStartRecentlyCreatedEmployee = Boolean(
+    recentlyCreatedOnboardingSummary?.canStart
+  );
+  const decisionTargetStatus =
+    decisionTarget.summary?.status?.trim().toUpperCase() ?? "";
+  const isTransferReviewDecision =
+    decisionTargetStatus === "TRANSFER_REVIEW";
+  const isFailedDecision = decisionTargetStatus === "FAILED";
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50">
@@ -1349,7 +1649,8 @@ const HRDPage = () => {
                     {onboardingReadyEmployees}
                   </p>
                   <p className="mt-2 text-xs text-amber-100/75">
-                    Belum resign dan belum punya assignment aktif.
+                    Belum resign, belum punya assignment aktif, dan sudah masuk
+                    struktur/PIC.
                   </p>
                 </div>
                 <div className="rounded-[24px] border border-fuchsia-200/20 bg-fuchsia-400/10 p-5 backdrop-blur">
@@ -1381,8 +1682,15 @@ const HRDPage = () => {
                       {recentlyCreatedEmployee.Name ||
                         recentlyCreatedEmployee.BadgeNum}
                     </span>{" "}
-                    baru saja dibuat. Kalau memang langsung masuk jalur onboarding,
-                    prosesnya bisa dimulai dari sini tanpa kembali ke tabel.
+                    baru saja dibuat. Onboarding baru bisa dimulai setelah
+                    karyawan masuk struktur organisasi atau menjadi PIC pilar/SBU/SBU
+                    SUB.
+                    {!canStartRecentlyCreatedEmployee &&
+                      recentlyCreatedOnboardingSummary?.onboardingBlockReason && (
+                        <span className="mt-2 block text-xs font-semibold text-amber-700">
+                          {recentlyCreatedOnboardingSummary.onboardingBlockReason}
+                        </span>
+                      )}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -1390,9 +1698,13 @@ const HRDPage = () => {
                     onClick={() =>
                       startOnboardingForEmployees([recentlyCreatedEmployee.UserId])
                     }
-                    disabled={isStartingOnboarding}
+                    disabled={
+                      isStartingOnboarding || !canStartRecentlyCreatedEmployee
+                    }
                     className={`rounded-2xl bg-[#0f4c81] px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_-24px_rgba(15,76,129,0.7)] transition hover:bg-[#0c3d68] ${
-                      isStartingOnboarding ? "cursor-not-allowed opacity-60" : ""
+                      isStartingOnboarding || !canStartRecentlyCreatedEmployee
+                        ? "cursor-not-allowed opacity-60"
+                        : ""
                     }`}
                   >
                     {isStartingOnboarding ? "Memulai..." : "Mulai Onboarding"}
@@ -1551,9 +1863,10 @@ const HRDPage = () => {
                     Start onboarding banyak karyawan dalam satu langkah
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Checklist hanya aktif untuk employee yang belum resign dan belum
-                    punya onboarding aktif. `Select all` akan mengikuti hasil filter
-                    yang sedang aktif di halaman ini.
+                    Checklist hanya aktif untuk employee yang belum resign, belum
+                    punya onboarding aktif, dan sudah masuk struktur organisasi
+                    atau PIC pilar/SBU/SBU SUB. `Select all` akan memilih row yang
+                    sedang tampil di halaman tabel.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -1561,7 +1874,9 @@ const HRDPage = () => {
                     {selectedEligibleCount} dipilih
                   </span>
                   <button
-                    onClick={() => startOnboardingForEmployees(selectedEmployeeIds)}
+                    onClick={() =>
+                      startOnboardingForEmployees(selectedStartableEmployeeIds)
+                    }
                     disabled={selectedEligibleCount === 0 || isStartingOnboarding}
                     className={`rounded-2xl bg-[#272e79] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_42px_-24px_rgba(39,46,121,0.6)] transition hover:bg-[#1f255f] ${
                       selectedEligibleCount === 0 || isStartingOnboarding
@@ -1603,6 +1918,67 @@ const HRDPage = () => {
                 </div>
               </div>
             </div>
+            <div className="flex flex-col gap-3 border-b border-slate-100 bg-white px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-sm text-slate-500">
+                Menampilkan{" "}
+                <span className="font-semibold text-slate-800">
+                  {pageRangeStart}-{pageRangeEnd}
+                </span>{" "}
+                dari{" "}
+                <span className="font-semibold text-slate-800">
+                  {sortedEmployees.length}
+                </span>{" "}
+                row
+                {selectedPageEligibleCount > 0 && (
+                  <span className="ml-2 text-xs font-semibold text-[#272e79]">
+                    {selectedPageEligibleCount} dipilih di halaman ini
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Row
+                </label>
+                <select
+                  value={pageSize}
+                  onChange={(event) => setPageSize(Number(event.target.value))}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#272e79] focus:ring-1 focus:ring-[#272e79]/25"
+                >
+                  {EMPLOYEE_PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 ${
+                    currentPage === 1 ? "cursor-not-allowed opacity-45" : ""
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faChevronLeft} />
+                </button>
+                <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                  {currentPage} / {totalEmployeePages}
+                </span>
+                <button
+                  onClick={() =>
+                    setCurrentPage((page) =>
+                      Math.min(totalEmployeePages, page + 1)
+                    )
+                  }
+                  disabled={currentPage === totalEmployeePages}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 ${
+                    currentPage === totalEmployeePages
+                      ? "cursor-not-allowed opacity-45"
+                      : ""
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faChevronRight} />
+                </button>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-[1180px] w-full table-fixed text-sm">
                 <colgroup>
@@ -1612,7 +1988,7 @@ const HRDPage = () => {
                   <col className="w-[145px]" />
                   <col className="w-[190px]" />
                   <col className="w-[290px]" />
-                  {canCrud && <col className="w-[160px]" />}
+                  {canCrud && <col className="w-[150px]" />}
                 </colgroup>
                 <thead className="bg-slate-950/[0.03] text-left text-[11px] uppercase tracking-[0.24em] text-slate-500">
                   <tr>
@@ -1638,7 +2014,7 @@ const HRDPage = () => {
                     <th className="px-5 py-4">Kontak</th>
                     <th className="px-5 py-4">Status</th>
                     {canCrud && (
-                      <th className="w-[168px] min-w-[168px] px-5 py-4 text-right whitespace-nowrap">
+                      <th className="w-[150px] min-w-[150px] py-4 pl-4 pr-8 text-right whitespace-nowrap">
                         Aksi
                       </th>
                     )}
@@ -1668,16 +2044,27 @@ const HRDPage = () => {
                   )}
 
                   {!loading &&
-                    sortedEmployees.map((employee) => {
+                    paginatedEmployees.map((employee) => {
                       const status = getEmployeeStatus(employee);
                       const onboardingSummary =
                         onboardingSummaryMap[employee.UserId] ?? null;
                       const onboardingMeta = getOnboardingStatusMeta(
                         onboardingSummary
                       );
+                      const onboardingPlacementDetails =
+                        getOnboardingPlacementDetails(onboardingSummary);
                       const canStartOnboarding = canStartEmployeeOnboarding(
                         employee,
                         onboardingSummary
+                      );
+                      const startDisabledReason = canStartOnboarding
+                        ? ""
+                        : getStartOnboardingDisabledReason(
+                            employee,
+                            onboardingSummary
+                          );
+                      const canDecideOnboarding = Boolean(
+                        onboardingSummary?.requiresDecision
                       );
 
                       return (
@@ -1694,6 +2081,7 @@ const HRDPage = () => {
                                   handleToggleEmployeeSelection(employee.UserId)
                                 }
                                 disabled={!canStartOnboarding || isStartingOnboarding}
+                                title={startDisabledReason || undefined}
                                 className="mt-1 h-4 w-4 rounded border-slate-300 text-[#272e79] focus:ring-[#272e79]"
                               />
                             </td>
@@ -1758,6 +2146,36 @@ const HRDPage = () => {
                             <div className="mt-2 text-xs leading-5 text-slate-500">
                               {onboardingMeta.helper}
                             </div>
+                            {onboardingPlacementDetails.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {onboardingPlacementDetails.map((detail, index) => {
+                                  const rows = getPlacementDetailRows(detail).filter(
+                                    ([, value]) => value && value.trim().length > 0
+                                  );
+
+                                  return (
+                                    <div
+                                      key={`${detail.source}-${index}-${detail.label}`}
+                                      className="rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-2 text-xs leading-5 text-emerald-700"
+                                      >
+                                        <div className="font-semibold text-emerald-800">
+                                          Sebagai: {getPlacementDetailTitle(detail)}
+                                        </div>
+                                      <div className="mt-1 space-y-0.5">
+                                        {rows.map(([label, value]) => (
+                                          <div key={`${label}-${value}`}>
+                                            <span className="font-medium">
+                                              {label}:
+                                            </span>{" "}
+                                            {value}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                             <div className="mt-1 text-xs text-slate-400">
                               Hafal ibadah: {formatIsMemLabel(employee.isMem)}
                             </div>
@@ -1766,12 +2184,24 @@ const HRDPage = () => {
                             </div>
                           </td>
                           {canCrud && (
-                            <td className="w-[168px] min-w-[168px] px-5 py-4 align-top whitespace-nowrap">
-                              <div className="flex flex-nowrap items-center justify-end gap-1.5">
+                            <td className="w-[150px] min-w-[150px] py-4 pl-4 pr-8 align-top">
+                              <div className="flex flex-col items-stretch gap-2">
+                                {canDecideOnboarding && onboardingSummary && (
+                                  <button
+                                    onClick={() =>
+                                      openOnboardingDecision(employee, onboardingSummary)
+                                    }
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-3 py-2 text-xs font-semibold text-white shadow-[0_14px_28px_-18px_rgba(245,158,11,0.75)] transition hover:bg-amber-600"
+                                  >
+                                    <FontAwesomeIcon icon={faScaleBalanced} />
+                                    Keputusan
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => openEditForm(employee)}
-                                  className="inline-flex min-w-[58px] items-center justify-center rounded-xl bg-[#272e79] px-3 py-2 text-xs font-semibold text-white shadow-[0_14px_28px_-18px_rgba(39,46,121,0.75)] transition hover:bg-[#1f255f]"
+                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#272e79] px-3 py-2 text-xs font-semibold text-white shadow-[0_14px_28px_-18px_rgba(39,46,121,0.75)] transition hover:bg-[#1f255f]"
                                 >
+                                  <FontAwesomeIcon icon={faPenToSquare} />
                                   Edit
                                 </button>
                                 <button
@@ -1782,8 +2212,9 @@ const HRDPage = () => {
                                       label: employee.Name || getEmployeeCardNumber(employee),
                                     })
                                   }
-                                  className="inline-flex min-w-[70px] items-center justify-center rounded-xl bg-rose-400 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-50"
+                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-rose-400 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-50"
                                 >
+                                  <FontAwesomeIcon icon={faTrash} />
                                   Delete
                                 </button>
                               </div>
@@ -1794,6 +2225,44 @@ const HRDPage = () => {
                     })}
                 </tbody>
               </table>
+            </div>
+            <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/70 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">
+                Halaman{" "}
+                <span className="font-semibold text-slate-800">{currentPage}</span>{" "}
+                dari{" "}
+                <span className="font-semibold text-slate-800">
+                  {totalEmployeePages}
+                </span>
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 ${
+                    currentPage === 1 ? "cursor-not-allowed opacity-45" : ""
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faChevronLeft} />
+                  Sebelumnya
+                </button>
+                <button
+                  onClick={() =>
+                    setCurrentPage((page) =>
+                      Math.min(totalEmployeePages, page + 1)
+                    )
+                  }
+                  disabled={currentPage === totalEmployeePages}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 ${
+                    currentPage === totalEmployeePages
+                      ? "cursor-not-allowed opacity-45"
+                      : ""
+                  }`}
+                >
+                  Berikutnya
+                  <FontAwesomeIcon icon={faChevronRight} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2245,6 +2714,108 @@ const HRDPage = () => {
                 }`}
               >
                 {isSubmitting ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {decisionTarget.open && decisionTarget.summary && decisionTarget.employee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="border-b border-slate-100 pb-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-500">
+                Keputusan onboarding
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+                {decisionTarget.employee.Name ||
+                  getEmployeeCardNumber(decisionTarget.employee)}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {isTransferReviewDecision
+                  ? "Onboarding sedang dibekukan oleh PIC SBU Sub. HRD bisa lanjutkan lagi jika sudah cocok dengan departemen baru, atau tetapkan gagal final jika tidak dilanjutkan."
+                  : (
+                    <>
+                      Tenggat berakhir pada{" "}
+                      <span className="font-semibold text-slate-900">
+                        {formatCompactDate(decisionTarget.summary.dueAt)}
+                      </span>
+                      . Pilih keputusan HRD untuk membuka atau menutup status onboarding.
+                    </>
+                  )}
+              </p>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              {isFailedDecision ? (
+                <button
+                  onClick={() => submitOnboardingDecision("PASS_OVERRIDE")}
+                  disabled={isSubmittingDecision}
+                  className={`rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-left transition hover:bg-emerald-100 ${
+                    isSubmittingDecision ? "cursor-not-allowed opacity-60" : ""
+                  }`}
+                >
+                  <span className="block text-sm font-semibold text-emerald-700">
+                    Langsung lulus
+                  </span>
+                  <span className="mt-2 block text-xs leading-5 text-emerald-700/80">
+                    Status menjadi lulus onboarding dan Learning dibuka.
+                  </span>
+                </button>
+              ) : null}
+              <button
+                onClick={() => submitOnboardingDecision("EXTEND")}
+                disabled={isSubmittingDecision}
+                className={`rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-left transition hover:bg-sky-100 ${
+                  isSubmittingDecision ? "cursor-not-allowed opacity-60" : ""
+                }`}
+              >
+                <span className="block text-sm font-semibold text-sky-700">
+                  {isTransferReviewDecision ? "Lanjutkan onboarding" : "Lanjut 3 bulan"}
+                </span>
+                <span className="mt-2 block text-xs leading-5 text-sky-700/80">
+                  {isTransferReviewDecision
+                    ? "Onboarding dibuka lagi dengan tenggat baru 90 hari."
+                    : "Tenggat baru dihitung 90 hari dari hari keputusan."}
+                </span>
+              </button>
+              <button
+                onClick={() => submitOnboardingDecision("FAIL_FINAL")}
+                disabled={isSubmittingDecision}
+                className={`rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-left transition hover:bg-rose-100 ${
+                  isSubmittingDecision ? "cursor-not-allowed opacity-60" : ""
+                }`}
+              >
+                <span className="block text-sm font-semibold text-rose-700">
+                  Gagal final
+                </span>
+                <span className="mt-2 block text-xs leading-5 text-rose-700/80">
+                  Onboarding tetap terkunci dan tidak lanjut ke Learning.
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <label className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                Catatan keputusan
+                <OptionalMark />
+              </label>
+              <textarea
+                value={decisionNote}
+                onChange={(event) => setDecisionNote(event.target.value)}
+                maxLength={2000}
+                className="mt-2 h-28 w-full rounded-2xl border-2 border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-300"
+                placeholder="Opsional"
+              />
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <button
+                onClick={closeOnboardingDecision}
+                disabled={isSubmittingDecision}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                Batal
               </button>
             </div>
           </div>

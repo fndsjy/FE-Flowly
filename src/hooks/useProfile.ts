@@ -14,6 +14,8 @@ export type UserProfile = {
   roleLevel: number;
   email?: string | null;
   phone?: string | null;
+  statusLMS?: boolean;
+  onboardingPassed?: boolean;
   mustChangePassword?: boolean;
 };
 
@@ -162,6 +164,11 @@ export const invalidateProfile = () => {
   profileStore.fetchedAt = null;
   writeProfileSnapshot(null);
   emitProfileChange();
+};
+
+export const refreshProfile = () => {
+  invalidateProfile();
+  return fetchProfile();
 };
 
 export const useProfile = ({ enabled = true }: UseProfileOptions = {}) => {
