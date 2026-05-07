@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import OnboardingAdministratorExamsPage from "./onboarding/OnboardingAdministratorExamsPage";
 import OnboardingAdministratorMaterialsPage from "./onboarding/OnboardingAdministratorMaterialsPage";
+import OnboardingAdministratorStagesPage from "./onboarding/OnboardingAdministratorStagesPage";
 import AdministratorNotificationTemplatePage from "./AdministratorNotificationTemplatePage";
 import OnboardingPortalWorkspace from "../../features/onboarding/OnboardingPortalWorkspace";
 import isOnboardingExamPath from "../../features/onboarding/isOnboardingExamPath";
@@ -103,6 +104,10 @@ const AdministratorWorkspacePage = () => {
             <Route
               path="onboarding/*"
               element={<OnboardingPortalWorkspace portalKey="ADMINISTRATOR" />}
+            />
+            <Route
+              path="onboarding-stages"
+              element={<OnboardingAdministratorStagesPage />}
             />
             <Route
               path="onboarding-materials"

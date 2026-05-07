@@ -25,66 +25,6 @@ type AdministratorSidebarProps = {
   onLogout: () => void;
 };
 
-const localMenuItems: PortalSidebarItem[] = [
-  {
-    id: "ADMINISTRATOR_ONBOARDING",
-    label: "Onboarding",
-    path: "/portal-administrator/onboarding",
-    icon: <i className="fa-solid fa-user-shield h-5 w-5" aria-hidden="true"></i>,
-    resourceKey: "ADMINISTRATOR_ONBOARDING",
-  },
-  {
-    id: "ADMINISTRATOR_ONBOARDING_MATERIALS",
-    label: "Materi onboarding",
-    path: "/portal-administrator/onboarding-materials",
-    icon: <i className="fa-solid fa-book-open h-5 w-5" aria-hidden="true"></i>,
-    resourceKey: "ADMINISTRATOR_ONBOARDING_MATERIALS",
-  },
-  {
-    id: "ADMINISTRATOR_ONBOARDING_EXAMS",
-    label: "Ujian onboarding",
-    path: "/portal-administrator/onboarding-exams",
-    icon: <i className="fa-solid fa-file-circle-check h-5 w-5" aria-hidden="true"></i>,
-    resourceKey: "ADMINISTRATOR_ONBOARDING_EXAMS",
-  },
-  {
-    id: "ADMINISTRATOR_NOTIF_TEMPLATE",
-    label: "Template Notif",
-    path: "/portal-administrator/notification-template",
-    icon: <i className="fa-solid fa-envelope-open-text h-5 w-5" aria-hidden="true"></i>,
-    resourceKey: "ADMINISTRATOR_NOTIF_TEMPLATE",
-  },
-];
-
-const mergeMenuItems = (items: PortalSidebarItem[]) => {
-  const map = new Map(items.map((item) => [item.resourceKey.toUpperCase(), item]));
-
-  localMenuItems.forEach((item) => {
-    const key = item.resourceKey.toUpperCase();
-    if (!map.has(key)) {
-      map.set(key, item);
-    }
-  });
-
-  return [...map.values()].sort((left, right) => {
-    const order = [
-      "ADMINISTRATOR_ONBOARDING",
-      "ADMINISTRATOR_NOTIFICATION_TEMPLATE",
-      "ADMINISTRATOR_ONBOARDING_MATERIALS",
-      "ADMINISTRATOR_ONBOARDING_EXAMS",
-    ];
-    const leftIndex = order.indexOf(left.resourceKey.toUpperCase());
-    const rightIndex = order.indexOf(right.resourceKey.toUpperCase());
-
-    if (leftIndex !== -1 || rightIndex !== -1) {
-      return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) -
-        (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex);
-    }
-
-    return left.label.localeCompare(right.label);
-  });
-};
-
 const getInitials = (name?: string | null) => {
   const normalized = name?.trim();
   if (!normalized) {
@@ -104,6 +44,10 @@ const getAdministratorMenuIcon = (resourceKey: string) => {
 
   if (normalized.includes("MATERIAL") || normalized.includes("MATERI")) {
     return <i className="fa-solid fa-book-open h-5 w-5" aria-hidden="true"></i>;
+  }
+
+  if (normalized.includes("STAGE") || normalized.includes("TAHAP")) {
+    return <i className="fa-solid fa-layer-group h-5 w-5" aria-hidden="true"></i>;
   }
 
   if (normalized.includes("EXAM") || normalized.includes("UJIAN")) {
@@ -155,7 +99,7 @@ const AdministratorSidebar = ({
           return;
         }
 
-        setMenuItems(mergeMenuItems(nextMenuItems.length > 0 ? nextMenuItems : localMenuItems));
+        setMenuItems(nextMenuItems);
         setModuleRoutesByParent(nextModuleRoutes);
       })
       .catch(() => {
@@ -163,7 +107,7 @@ const AdministratorSidebar = ({
           return;
         }
 
-        setMenuItems(localMenuItems);
+        setMenuItems([]);
         setModuleRoutesByParent(new Map());
       });
 

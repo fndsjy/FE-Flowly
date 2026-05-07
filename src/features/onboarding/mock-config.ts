@@ -61,6 +61,7 @@ export type OnboardingAssessment = {
   questionBankCount: number;
   passScore: number;
   score: number | null;
+  previousScore?: number | null;
   status: AssessmentStatus;
   submittedAt: string | null;
   reviewedAt: string | null;
@@ -185,6 +186,7 @@ const assessment = (
   questionBankCount,
   passScore,
   score,
+  previousScore: null,
   status,
   submittedAt,
   reviewedAt,

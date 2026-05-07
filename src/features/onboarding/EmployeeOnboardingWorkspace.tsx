@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/organisms/MessageToast";
+import { refreshProfile } from "../../hooks/useProfile";
 import { apiFetch, buildApiUrl, getApiErrorMessage } from "../../lib/api";
 import OnboardingPortalWorkspace from "./OnboardingPortalWorkspace";
 import {
@@ -88,6 +89,7 @@ type WorkspaceStage = {
   failedAt: string | null;
   note: string | null;
   examScore: number | null;
+  examPreviousScore: number | null;
   examAttemptStatus: string | null;
   examSubmittedAt: string | null;
   examReviewedAt: string | null;
@@ -133,6 +135,13 @@ const safePortalKey = (value?: string | null): OnboardingPortalKey => {
     : "EMPLOYEE";
 };
 
+const hasPassedAllStages = (portal: WorkspacePortal) =>
+  portal.stages.length > 0 &&
+  portal.stages.every((stage) => {
+    const status = stage.status.trim().toUpperCase();
+    return status === "PASSED" || status === "COMPLETED";
+  });
+
 const formatDate = (value?: string | null) =>
   value
     ? new Date(value).toLocaleDateString("id-ID", {
@@ -154,6 +163,7 @@ const mapAssignmentStatus = (status: string): OverallOnboardingStatus => {
     case "PASSED":
     case "COMPLETED":
       return "passed_to_lms";
+    case "TRANSFER_REVIEW":
     case "FAILED":
     case "FAIL_FINAL":
     case "CANCELLED":
@@ -176,6 +186,7 @@ const mapStageStatus = (status: string): StageStatus => {
       return "passed";
     case "REMEDIAL":
       return "remedial";
+    case "TRANSFER_REVIEW":
     case "FAILED":
     case "FAIL_FINAL":
       return "failed_window";
@@ -195,6 +206,7 @@ const mapAssessmentStatus = (status: string): AssessmentStatus => {
       return "passed";
     case "REMEDIAL":
       return "remedial";
+    case "TRANSFER_REVIEW":
     case "FAILED":
     case "FAIL_FINAL":
       return "failed_window";
@@ -409,6 +421,7 @@ const buildScenario = (
         questionBankCount: examQuestionCount,
         passScore: stagePassScore,
         score: stage.examScore ?? (assessmentStatus === "passed" ? 100 : null),
+        previousScore: stage.examPreviousScore ?? null,
         status: assessmentStatus,
         submittedAt,
         reviewedAt,
@@ -466,6 +479,7 @@ export default function EmployeeOnboardingWorkspace() {
   const [portals, setPortals] = useState<WorkspacePortal[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
+  const profileRefreshRequestedRef = useRef(false);
 
   const loadWorkspace = async (isMounted?: () => boolean) => {
     if (!isMounted || isMounted()) {
@@ -482,7 +496,18 @@ export default function EmployeeOnboardingWorkspace() {
       }
 
       if (!isMounted || isMounted()) {
-        setPortals(Array.isArray(json?.response?.portals) ? json.response.portals : []);
+        const nextPortals: WorkspacePortal[] = Array.isArray(json?.response?.portals)
+          ? json.response.portals
+          : [];
+        setPortals(nextPortals);
+
+        if (
+          !profileRefreshRequestedRef.current &&
+          nextPortals.some(hasPassedAllStages)
+        ) {
+          profileRefreshRequestedRef.current = true;
+          void refreshProfile().catch(() => undefined);
+        }
       }
     } catch (error) {
       if (!isMounted || isMounted()) {

@@ -68,6 +68,12 @@ export type AdminOnboardingParticipantStage = {
   completedAt: string | null;
   failedAt: string | null;
   note: string | null;
+  examScore: number | null;
+  examPreviousScore: number | null;
+  examAttemptStatus: string | null;
+  examSubmittedAt: string | null;
+  examReviewedAt: string | null;
+  examNote: string | null;
   totalMaterialCount: number;
   readMaterialCount: number;
   totalOpenCount: number;
@@ -77,6 +83,7 @@ export type AdminOnboardingParticipantStage = {
 };
 
 export type AdminPortalParticipant = {
+  onboardingAssignmentId: string;
   participantId: string;
   participantReferenceType: string;
   participantReferenceId: string;
@@ -96,6 +103,7 @@ export type AdminPortalParticipant = {
   totalOpenCount: number;
   firstReadAt: string | null;
   lastReadAt: string | null;
+  canFreezeForTransferReview?: boolean;
   stages: AdminOnboardingParticipantStage[];
 };
 
@@ -152,7 +160,9 @@ export const isManagedPortalKey = (
       )
   );
 
-export const useAdministratorOnboardingMonitoring = () => {
+export const useAdministratorOnboardingMonitoring = (
+  endpoint = "/onboarding/admin-monitoring"
+) => {
   const [portals, setPortals] = useState<AdminOnboardingPortal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +176,7 @@ export const useAdministratorOnboardingMonitoring = () => {
       setError(null);
 
       try {
-        const res = await apiFetch("/onboarding/admin-monitoring", {
+        const res = await apiFetch(endpoint, {
           method: "GET",
           credentials: "include",
         });
@@ -210,7 +220,7 @@ export const useAdministratorOnboardingMonitoring = () => {
     return () => {
       mounted = false;
     };
-  }, [refreshTick]);
+  }, [endpoint, refreshTick]);
 
   return {
     portals,

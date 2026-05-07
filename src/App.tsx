@@ -35,6 +35,7 @@ import CommunityPage from './community/pages/CommunityPage';
 import CustomerPage from './customer/pages/CustomerPage';
 import InfluencerPage from './influencer/pages/InfluencerPage';
 import SupplierPage from './supplier/pages/SupplierPage';
+import CustomerSsoCallbackPage from './pages/CustomerSsoCallbackPage';
 
 const App = () => {
   return (
@@ -43,6 +44,7 @@ const App = () => {
         <Routes>
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/custid/:token" element={<CustomerSsoCallbackPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/pilar" element={<ProtectedRoute menuKey="ORGANISASI"><PilarPage /></ProtectedRoute>} />
           <Route path="/pilar/sbu/:pilarId" element={<ProtectedRoute menuKey="ORGANISASI"><SBUPage /></ProtectedRoute>} />
@@ -58,7 +60,7 @@ const App = () => {
           <Route path="/karyawan" element={<ProtectedRoute menuKey="HRD"><HRDPage /></ProtectedRoute>} />
           <Route path="/hrd/employee" element={<ProtectedRoute menuKey="HRD"><HRDPage /></ProtectedRoute>} />
           <Route path="/supplier/*" element={<ProtectedRoute><SupplierPage /></ProtectedRoute>} />
-          <Route path="/customer/*" element={<ProtectedRoute><CustomerPage /></ProtectedRoute>} />
+          <Route path="/customer/*" element={<ProtectedRoute customerAllowed><CustomerPage /></ProtectedRoute>} />
           <Route path="/affiliate/*" element={<ProtectedRoute><AffiliatePage /></ProtectedRoute>} />
           <Route path="/influencer/*" element={<ProtectedRoute><InfluencerPage /></ProtectedRoute>} />
           <Route path="/community/*" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>} />

@@ -82,6 +82,9 @@ type DashboardMetrics = {
 
 const LMS_URL = "https://lms.domas.co.id/";
 
+const shouldShowAssessmentFeatures = (scenario: OnboardingScenario) =>
+  scenario.portalKey !== "CUSTOMER";
+
 const portalVisuals: Record<OnboardingPortalKey, PortalVisual> = {
   EMPLOYEE: {
     accent: "#4054b6",
@@ -375,6 +378,7 @@ const buildCompletionPercent = (scenario: OnboardingScenario) => {
     return 0;
   }
 
+  const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
   const weightedProgress = scenario.stages.reduce((sum, stage) => {
     if (stage.status === "passed") {
       return sum + 1;
@@ -389,6 +393,10 @@ const buildCompletionPercent = (scenario: OnboardingScenario) => {
     ).length;
     const materialRatio =
       (completedMaterials + readingMaterials * 0.55) / totalMaterials;
+    if (!showAssessmentFeatures) {
+      return sum + clamp(materialRatio, 0, 1);
+    }
+
     const assessmentRatio = getAssessmentProgress(
       stage.assessment.status,
       stage.assessment.score
@@ -401,6 +409,41 @@ const buildCompletionPercent = (scenario: OnboardingScenario) => {
 };
 
 const buildNextAction = (scenario: OnboardingScenario, currentStage: OnboardingStage) => {
+  if (!shouldShowAssessmentFeatures(scenario)) {
+    switch (scenario.overallStatus) {
+      case "extension_pending":
+        return {
+          label: "Pantau kelanjutan onboarding",
+          detail:
+            "Window onboarding sudah lewat. Aktivitas berikutnya menunggu keputusan perpanjangan dari admin.",
+        };
+      case "returned_to_oms":
+        return {
+          label: "Lanjutkan materi prioritas",
+          detail:
+            "Customer kembali ke OMS untuk membaca ulang materi prioritas dan melanjutkan tahap aktif.",
+        };
+      case "passed_to_lms":
+        return {
+          label: "Transisi ke LMS",
+          detail:
+            "Onboarding OMS sudah selesai. Customer tinggal melanjutkan materi lanjutan dan monitoring pembelajaran di LMS.",
+        };
+      case "failed_nonactive":
+        return {
+          label: "Butuh keputusan admin",
+          detail:
+            "Onboarding dinyatakan tidak aktif. Jika ingin dibuka kembali, perlu keputusan admin dan skenario onboarding baru.",
+        };
+      default:
+        return {
+          label: `Tinjau ${currentStage.phase}`,
+          detail:
+            "Lanjutkan membaca materi dan informasi customer yang tersedia pada tahap aktif.",
+        };
+    }
+  }
+
   switch (scenario.overallStatus) {
     case "waiting_admin":
       return {
@@ -835,6 +878,7 @@ const PortalOnboardingDashboard = ({
   const visual = portalVisuals[portalKey];
   const metrics = buildMetrics(scenario);
   const shouldReduceMotion = useReducedMotion();
+  const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
 
   const ringValue = clamp(metrics.completionPercent);
   const ringRadius = 58;
@@ -1048,22 +1092,28 @@ const PortalOnboardingDashboard = ({
               label="Completion"
               target={metrics.completionPercent}
               formatValue={(value) => `${value}%`}
-              helper={`${metrics.passedStages}/${metrics.totalStages} tahap sudah lewat gerbang lulus`}
+              helper={
+                showAssessmentFeatures
+                  ? `${metrics.passedStages}/${metrics.totalStages} tahap sudah lewat gerbang lulus`
+                  : `${metrics.passedStages}/${metrics.totalStages} tahap sudah selesai`
+              }
               visual={visual}
               delay={0.18}
             />
-            <MetricTile
-              label="Nilai rata-rata"
-              target={metrics.scoreCount ? metrics.avgScore : null}
-              fallbackValue="-"
-              helper={
-                metrics.scoreCount
-                  ? `Best score ${metrics.bestScore} dari ${metrics.scoreCount} assessment`
-                  : "Belum ada assessment yang dinilai"
-              }
-              visual={visual}
-              delay={0.26}
-            />
+            {showAssessmentFeatures ? (
+              <MetricTile
+                label="Nilai rata-rata"
+                target={metrics.scoreCount ? metrics.avgScore : null}
+                fallbackValue="-"
+                helper={
+                  metrics.scoreCount
+                    ? `Best score ${metrics.bestScore} dari ${metrics.scoreCount} assessment`
+                    : "Belum ada assessment yang dinilai"
+                }
+                visual={visual}
+                delay={0.26}
+              />
+            ) : null}
             <MetricTile
               label="Material selesai"
               target={metrics.completedMaterials}
@@ -1072,22 +1122,32 @@ const PortalOnboardingDashboard = ({
               visual={visual}
               delay={0.34}
             />
-            <MetricTile
-              label="Sertifikat"
-              target={metrics.issuedCertificates}
-              formatValue={(value) => `${value}/${metrics.totalCertificates}`}
-              helper={`${metrics.pendingCertificates} pending, ${metrics.blockedCertificates} blocked`}
-              visual={visual}
-              delay={0.42}
-            />
+            {showAssessmentFeatures ? (
+              <MetricTile
+                label="Sertifikat"
+                target={metrics.issuedCertificates}
+                formatValue={(value) => `${value}/${metrics.totalCertificates}`}
+                helper={`${metrics.pendingCertificates} pending, ${metrics.blockedCertificates} blocked`}
+                visual={visual}
+                delay={0.42}
+              />
+            ) : null}
           </motion.div>
         </div>
       </motion.section>
       <WaveDivider visual={visual} />
-      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+      <div
+        className={`grid gap-6 ${
+          showAssessmentFeatures ? "xl:grid-cols-[0.92fr_1.08fr]" : ""
+        }`}
+      >
         <DashboardCard
           title="Completion radar"
-          description="Ring progres utama ini menggabungkan penyelesaian materi, kesiapan ujian, dan status tiap tahap agar cepat terbaca dalam satu glance."
+          description={
+            showAssessmentFeatures
+              ? "Ring progres utama ini menggabungkan penyelesaian materi, kesiapan ujian, dan status tiap tahap agar cepat terbaca dalam satu glance."
+              : "Ring progres utama ini menggabungkan penyelesaian materi dan status tiap tahap agar cepat terbaca dalam satu glance."
+          }
           visual={visual}
           revealFrom="left"
         >
@@ -1239,13 +1299,17 @@ const PortalOnboardingDashboard = ({
                   }}
                 >
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                    Remedial total
+                    {showAssessmentFeatures ? "Remedial total" : "Materi aktif"}
                   </p>
                   <div className="mt-2 text-lg font-semibold text-slate-900">
-                    {metrics.remedialCount} kali
+                    {showAssessmentFeatures
+                      ? `${metrics.remedialCount} kali`
+                      : `${metrics.readingMaterials}/${metrics.totalMaterials}`}
                   </div>
                   <div className="mt-1 text-sm text-slate-600">
-                    Akumulasi attempt remedial lintas tahap
+                    {showAssessmentFeatures
+                      ? "Akumulasi attempt remedial lintas tahap"
+                      : "Materi customer yang sedang atau baru dibaca"}
                   </div>
                 </motion.div>
               </div>
@@ -1253,12 +1317,13 @@ const PortalOnboardingDashboard = ({
           </div>
         </DashboardCard>
 
-        <DashboardCard
-          title="Assessment performance"
-          description="Perbandingan score per tahap terhadap pass line. Jika score belum muncul, dashboard menampilkan estimasi readiness dari status assessment saat ini."
-          visual={visual}
-          revealFrom="right"
-        >
+        {showAssessmentFeatures ? (
+          <DashboardCard
+            title="Assessment performance"
+            description="Perbandingan score per tahap terhadap pass line. Jika score belum muncul, dashboard menampilkan estimasi readiness dari status assessment saat ini."
+            visual={visual}
+            revealFrom="right"
+          >
           <div className="grid gap-6 lg:grid-cols-[1.18fr_0.82fr]">
             <motion.div
               initial={{ opacity: 0, x: -24 }}
@@ -1518,7 +1583,8 @@ const PortalOnboardingDashboard = ({
               </div>
             </motion.div>
           </div>
-        </DashboardCard>
+          </DashboardCard>
+        ) : null}
       </div>
 
     </div>

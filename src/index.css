@@ -29,6 +29,67 @@ body {
   height: 0;
 }
 
+.employee-sidebar-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.employee-sidebar-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.customer-float-soft {
+  animation: customer-float-soft 5.5s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.customer-card-shine::before {
+  content: "";
+  position: absolute;
+  inset: -40% auto -40% -65%;
+  width: 44%;
+  transform: rotate(16deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.72),
+    transparent
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 700ms ease, opacity 700ms ease;
+}
+
+.customer-card-shine:hover::before {
+  opacity: 1;
+  transform: translateX(380%) rotate(16deg);
+}
+
+@keyframes customer-float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customer-motion {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .customer-float-soft {
+    animation: none !important;
+  }
+}
+
 @media (max-width: 1023px) {
   .ml-16,
   .ml-64 {

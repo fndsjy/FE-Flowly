@@ -13,6 +13,9 @@ import { useProfile } from "../../hooks/useProfile";
 import { useToast } from "./MessageToast";
 
 const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
+const visibleChildModuleKeysByParent = new Map<string, Set<string>>([
+  ["ONBOARDING", new Set(["ONBOARDING_DECISION"])],
+]);
 
 const getIsDesktopViewport = () => {
   if (typeof window === "undefined") {
@@ -63,6 +66,9 @@ const Sidebar = ({
   const [internalIsDesktop, setInternalIsDesktop] = useState(getIsDesktopViewport);
   const [fallbackMobileOpen, setFallbackMobileOpen] = useState(false);
   const [moduleRoutesByParent, setModuleRoutesByParent] = useState<Map<string, string[]>>(
+    new Map()
+  );
+  const [moduleItemsByParent, setModuleItemsByParent] = useState<Map<string, MenuItem[]>>(
     new Map()
   );
   const { profile: user } = useProfile();
@@ -184,6 +190,7 @@ const Sidebar = ({
           ? moduleResult.value.response
           : [];
         const nextRoutes = new Map<string, string[]>();
+        const nextModuleItems = new Map<string, MenuItem[]>();
 
         response
           .filter(
@@ -201,13 +208,27 @@ const Sidebar = ({
             }
 
             const routes = nextRoutes.get(parentKey) ?? [];
-            routes.push(normalizeAppRoute(item.route));
+            const modulePath = normalizeAppRoute(item.route);
+            routes.push(modulePath);
             nextRoutes.set(parentKey, routes);
+
+            const children = nextModuleItems.get(parentKey) ?? [];
+            children.push({
+              id: item.resourceKey,
+              label: item.displayName,
+              icon: getModuleIcon(item.resourceKey),
+              path: modulePath,
+              resourceType: "MODULE",
+              resourceKey: item.resourceKey,
+            });
+            nextModuleItems.set(parentKey, children);
           });
 
         setModuleRoutesByParent(nextRoutes);
+        setModuleItemsByParent(nextModuleItems);
       } else {
         setModuleRoutesByParent(new Map());
+        setModuleItemsByParent(new Map());
       }
     });
 
@@ -244,12 +265,16 @@ const Sidebar = ({
       return false;
     }
 
+    const normalizedKey = item.resourceKey.toUpperCase();
+    if (normalizedKey === "EMPLOYEE_LEARNING" && !user?.onboardingPassed) {
+      return false;
+    }
+
     const isAdmin = accessIsAdmin || user?.roleLevel === 1;
     if (isAdmin) {
       return true;
     }
 
-    const normalizedKey = item.resourceKey.toUpperCase();
     if (normalizedKey === "ADMIN") {
       return false;
     }
@@ -263,6 +288,30 @@ const Sidebar = ({
       publicMenuKeys,
     });
   });
+
+  const getVisibleModuleItems = (parentKey: string) => {
+    if (accessLoading) {
+      return [];
+    }
+
+    const normalizedParentKey = parentKey.toUpperCase();
+    const visibleChildKeys = visibleChildModuleKeysByParent.get(normalizedParentKey);
+    if (!visibleChildKeys) {
+      return [];
+    }
+
+    const childItems = (moduleItemsByParent.get(normalizedParentKey) ?? []).filter(
+      (child) => visibleChildKeys.has(child.resourceKey.toUpperCase())
+    );
+    const isAdmin = accessIsAdmin || user?.roleLevel === 1;
+    if (isAdmin) {
+      return childItems;
+    }
+
+    return childItems.filter((child) =>
+      moduleAccessMap.has(child.resourceKey.toUpperCase())
+    );
+  };
 
   const isPathActive = (targetPath: string) =>
     !isExternalRoute(targetPath) &&
@@ -310,7 +359,7 @@ const Sidebar = ({
         <button
           type="button"
           onClick={handleSidebarToggle}
-          className="fixed left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))] z-[60] inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-950 text-white shadow-[0_20px_40px_-24px_rgba(15,23,42,0.8)]"
+          className="fixed left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))] z-[60] inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-gray-300 bg-white/78 text-slate-800 shadow-[0_14px_30px_-22px_rgba(15,23,42,0.75)] backdrop-blur-md transition-colors hover:bg-white"
           aria-label="Buka sidebar employee"
         >
           <svg
@@ -350,7 +399,7 @@ const Sidebar = ({
               : "w-[min(20rem,calc(100vw-1rem))] -translate-x-full"
         }`}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col">
           <div className="flex items-center justify-between border-b border-gray-700 p-4">
             {isSidebarVisible ? (
               <Link
@@ -402,45 +451,53 @@ const Sidebar = ({
             </button>
           </div>
 
-          <nav className="mt-6 flex-1 overflow-hidden pb-36 pl-2 pr-0">
-            {isPasswordResetRequired && isSidebarVisible ? (
-              <div className="mx-2 mb-4 rounded-[22px] border border-amber-300/20 bg-amber-400/10 px-4 py-4 text-sm leading-6 text-amber-100">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-100/70">
-                  Langkah Wajib
-                </p>
-                <p className="mt-2 font-semibold">
-                  Ganti password dulu sebelum membuka menu OMS lainnya.
-                </p>
-                <p className="mt-1 text-amber-100/80">
-                  Gunakan password sementara dari notifikasi onboarding, lalu simpan password baru Anda di halaman ini.
-                </p>
-              </div>
-            ) : null}
+          <nav className="employee-sidebar-scrollbar mt-6 min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-36 pl-1 pr-0 [direction:rtl] [scrollbar-gutter:stable]">
+            <div className="pl-1 pr-0 [direction:ltr]">
+              {isPasswordResetRequired && isSidebarVisible ? (
+                <div className="mx-2 mb-4 rounded-[22px] border border-amber-300/20 bg-amber-400/10 px-4 py-4 text-sm leading-6 text-amber-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-100/70">
+                    Langkah Wajib
+                  </p>
+                  <p className="mt-2 font-semibold">
+                    Ganti password dulu sebelum membuka menu OMS lainnya.
+                  </p>
+                  <p className="mt-1 text-amber-100/80">
+                    Gunakan password sementara dari notifikasi onboarding, lalu simpan password baru Anda di halaman ini.
+                  </p>
+                </div>
+              ) : null}
 
-            {visibleMenuItems.map((item) => (
-              <div key={item.id} className="group relative overflow-hidden">
-                {(() => {
-                  const isNavigationLocked = isPasswordResetRequired;
+              {visibleMenuItems.map((item) => {
+              const isNavigationLocked = isPasswordResetRequired;
+              const isActive = isMenuActive(item);
+              const childItems = getVisibleModuleItems(item.resourceKey);
+              const shouldAlwaysShowChildren =
+                item.resourceKey.toUpperCase() === "ONBOARDING";
+              const shouldRenderChildren =
+                isSidebarVisible &&
+                childItems.length > 0 &&
+                (isActive || shouldAlwaysShowChildren);
 
-                  return (
-                <button
-                  type="button"
-                  onClick={() =>
-                    isNavigationLocked
-                      ? handleLockedNavigationAttempt()
-                      : handleMenuClick(item.path, item.resourceKey)
-                  }
-                  aria-disabled={isNavigationLocked}
-                  aria-current={isMenuActive(item) ? "page" : undefined}
-                  className={`flex min-h-[48px] w-full items-center rounded-lg p-3 transition-colors ${
-                    isNavigationLocked
-                      ? "cursor-not-allowed border border-white/5 bg-white/[0.03] text-gray-500"
-                      : isMenuActive(item)
-                      ? isSidebarVisible
-                        ? "border border-white bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] pr-8 font-semibold text-white"
-                        : "border border-white bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] font-semibold text-white"
-                      : "text-gray-300 hover:bg-gray-700"
-                  }`}
+              return (
+                <div key={item.id} className="group relative overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      isNavigationLocked
+                        ? handleLockedNavigationAttempt()
+                        : handleMenuClick(item.path, item.resourceKey)
+                    }
+                    aria-disabled={isNavigationLocked}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`flex min-h-[48px] w-full items-center rounded-lg p-3 transition-colors ${
+                      isNavigationLocked
+                        ? "cursor-not-allowed border border-white/5 bg-white/[0.03] text-gray-500"
+                        : isActive
+                        ? isSidebarVisible
+                          ? "border border-rose-200/35 bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] pr-8 font-semibold text-white"
+                          : "border border-rose-200/35 bg-gradient-to-r from-rose-400 via-[#111827] to-[#111827] font-semibold text-white"
+                        : "text-gray-300 hover:bg-gray-700"
+                    }`}
                   >
                     <span
                       className={`flex flex-shrink-0 items-center justify-center transition-transform duration-200 ${
@@ -457,24 +514,58 @@ const Sidebar = ({
                         Kunci
                       </span>
                     ) : null}
-                </button>
-                  );
-                })()}
+                  </button>
 
-                {isMenuActive(item) && isSidebarVisible ? (
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute right-0 top-1/2 h-0 w-0 -translate-y-1/2 border-b-[24px] border-l-0 border-r-[24px] border-t-[24px] border-b-[#111827] border-r-gray-50 border-t-[#111827]"
-                  ></div>
-                ) : null}
+                  {shouldRenderChildren ? (
+                    <div className="ml-6 mt-1 space-y-1 border-l border-white/15 pl-3">
+                      {childItems.map((child) => {
+                        const childActive = isPathActive(child.path);
 
-                {!isSidebarVisible && isDesktopLayout ? (
-                  <div className="pointer-events-none absolute left-full ml-2 rounded bg-gray-800 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity group-hover:opacity-100">
-                    {item.label}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                        return (
+                          <button
+                            key={child.id}
+                            type="button"
+                            onClick={() =>
+                              isNavigationLocked
+                                ? handleLockedNavigationAttempt()
+                                : handleMenuClick(child.path, child.resourceKey)
+                            }
+                            aria-disabled={isNavigationLocked}
+                            aria-current={childActive ? "page" : undefined}
+                            className={`flex min-h-[38px] w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                              isNavigationLocked
+                                ? "cursor-not-allowed text-gray-500"
+                                : childActive
+                                ? "bg-white/10 font-semibold text-white"
+                                : "text-gray-300 hover:bg-gray-700/70 hover:text-white"
+                            }`}
+                          >
+                            <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-[0.7rem]">
+                              {child.icon}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {isActive && isSidebarVisible ? (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-[-1px] top-6 h-12 w-6 -translate-y-1/2 bg-[#f8faff] [clip-path:polygon(100%_0,100%_100%,0_50%)]"
+                    ></div>
+                  ) : null}
+
+                  {!isSidebarVisible && isDesktopLayout ? (
+                    <div className="pointer-events-none absolute left-full ml-2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      {item.label}
+                    </div>
+                  ) : null}
+                </div>
+              );
+              })}
+            </div>
           </nav>
 
           <div className="border-t border-gray-700 py-2">
@@ -579,6 +670,15 @@ const getMenuIcon = (resourceKey: string) => {
       return <AdministratorIcon />;
     default:
       return <DefaultMenuIcon />;
+  }
+};
+
+const getModuleIcon = (resourceKey: string) => {
+  switch (resourceKey) {
+    case "ONBOARDING_DECISION":
+      return <i className="fa-solid fa-clipboard-check" aria-hidden="true"></i>;
+    default:
+      return <i className="fa-solid fa-circle" aria-hidden="true"></i>;
   }
 };
 

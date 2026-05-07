@@ -1,6 +1,7 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import EmployeeOnboardingWorkspace from "../features/onboarding/EmployeeOnboardingWorkspace";
+import PicOnboardingDecisionWorkspace from "../features/onboarding/PicOnboardingDecisionWorkspace";
 import { useProfile } from "../hooks/useProfile";
 import { useResponsiveSidebar } from "../hooks/useResponsiveSidebar";
 
@@ -44,7 +45,13 @@ const EmployeeOnboardingPage = () => {
         }`}
       >
         <div className="mx-auto w-full max-w-[1600px] 2xl:max-w-[1880px]">
-          <EmployeeOnboardingWorkspace />
+          <Routes>
+            <Route
+              path="decision/*"
+              element={<PicOnboardingDecisionWorkspace />}
+            />
+            <Route path="*" element={<EmployeeOnboardingWorkspace />} />
+          </Routes>
         </div>
       </div>
     </div>

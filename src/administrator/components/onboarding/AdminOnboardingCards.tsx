@@ -6,14 +6,13 @@ import type {
 } from "../../lib/onboarding/onboarding-admin-monitoring";
 import type { AdminOnboardingNavigation } from "../../lib/onboarding/onboarding-admin-navigation";
 import {
-  adminButtonClass,
-  adminMutedPanelClass,
-  adminPanelClass,
-  adminProgressBarClass,
+  formatExamScore,
   formatDate,
   formatDateTime,
+  getAdminOnboardingTheme,
   getCurrentStage,
   getInitials,
+  getParticipantLatestExamScore,
   getParticipantLastActivityAt,
   getParticipantMaterialProgress,
   getParticipantNextAction,
@@ -22,6 +21,7 @@ import {
   normalizeStageStatus,
   stageStatusClass,
   stageStatusLabel,
+  type AdminOnboardingVisualMode,
 } from "../../lib/onboarding/adminOnboardingUtils";
 
 const portalToneMap: Record<
@@ -83,13 +83,16 @@ export const getPortalTone = (portalKey: string) => portalToneMap[safePortalKey(
 export const PortalSummaryCard = ({
   adminNavigation,
   portal,
+  visualMode = "admin",
 }: {
   adminNavigation: AdminOnboardingNavigation;
   portal: AdminOnboardingPortal;
+  visualMode?: AdminOnboardingVisualMode;
 }) => {
   const metrics = getPortalMetrics(portal);
   const portalHref = `${adminNavigation.basePath}/portal/${portal.portalKey}`;
   const tone = getPortalTone(portal.portalKey);
+  const theme = getAdminOnboardingTheme(visualMode);
   const stageSummaryText =
     portal.stages.length > 0
       ? portal.stages
@@ -108,11 +111,11 @@ export const PortalSummaryCard = ({
       aria-label={`Buka detail portal ${portal.portalName}`}
     >
       <article
-        className={`relative overflow-hidden rounded-[36px] border p-6 transition duration-200 group-hover:-translate-y-1 group-hover:shadow-[0_30px_70px_-44px_rgba(74,53,31,0.34)] group-focus-visible:-translate-y-1 group-focus-visible:shadow-[0_30px_70px_-44px_rgba(74,53,31,0.34)] ${adminPanelClass}`}
+        className={`relative overflow-hidden rounded-[36px] border p-6 transition duration-200 group-hover:-translate-y-1 group-focus-visible:-translate-y-1 ${theme.hoverShadowClass} ${theme.panelClass}`}
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute right-5 top-5 hidden h-24 w-24 rounded-[30px] border border-[#e3d5c2] bg-[#f8efe3] lg:block"
+          className={`pointer-events-none absolute right-5 top-5 hidden h-24 w-24 rounded-[30px] border lg:block ${theme.heroDecorClass}`}
         />
 
         <div className="relative">
@@ -124,7 +127,7 @@ export const PortalSummaryCard = ({
                 >
                   {portal.portalName}
                 </span>
-                <span className="rounded-full border border-[#e4d5c3] bg-[#fff7ec] px-4 py-2 text-xs font-semibold text-[#6a6258]">
+                <span className={`rounded-full border px-4 py-2 text-xs font-semibold ${theme.chipClass}`}>
                   {metrics.needsAttentionCount} follow-up
                 </span>
               </div>
@@ -134,9 +137,9 @@ export const PortalSummaryCard = ({
                   <h2 className="max-w-2xl text-[42px] font-semibold leading-[0.92] tracking-[-0.07em] text-[#1b2238] md:text-[48px]">
                     {metrics.totalParticipants} peserta dipantau
                   </h2>
-                  <p className="mt-4 max-w-2xl text-[15px] leading-8 text-[#615a52] md:text-base">
+                  <p className={`mt-4 max-w-2xl text-[15px] leading-8 md:text-base ${theme.bodyTextClass}`}>
                     {stageSummaryText} Total baca materi saat ini sudah{" "}
-                    <span className="font-semibold text-[#1b2238]">
+                    <span className={`font-semibold ${theme.accentTextClass}`}>
                       {metrics.totalOpenCount} kali
                     </span>
                     .
@@ -144,7 +147,7 @@ export const PortalSummaryCard = ({
                 </div>
 
                 <span
-                  className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition ${adminButtonClass}`}
+                  className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition ${theme.buttonClass}`}
                 >
                   Lihat detail
                 </span>
@@ -162,14 +165,12 @@ export const PortalSummaryCard = ({
                 ].map(([label, value], index) => (
                   <div
                     key={label}
-                    className={`rounded-[22px] border px-4 py-4 ${
-                      index === 0 ? "bg-[#fffdf8]" : "bg-[#fbf3e9]"
-                    } border-[#e5d6c4]`}
+                    className={`rounded-[22px] border px-4 py-4 ${index === 0 ? theme.infoClass : theme.mutedPanelClass}`}
                   >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+                    <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${theme.labelClass}`}>
                       {label}
                     </p>
-                    <p className="mt-2 text-base font-semibold text-[#1b2238]">{value}</p>
+                    <p className={`mt-2 text-base font-semibold ${theme.accentTextClass}`}>{value}</p>
                   </div>
                 ))}
               </div>
@@ -185,16 +186,16 @@ export const PortalSummaryCard = ({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+                      <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${theme.labelClass}`}>
                         Tahap {stage.stageOrder}
                       </p>
-                      <h3 className="mt-2 text-base font-semibold text-[#1b2238]">
+                      <h3 className={`mt-2 text-base font-semibold ${theme.accentTextClass}`}>
                         {stage.stageName}
                       </h3>
                     </div>
                     <span className={`mt-1 h-3 w-3 rounded-full ${tone.markerClass}`}></span>
                   </div>
-                  <div className="mt-4 space-y-1.5 text-sm leading-6 text-[#5f584f]">
+                  <div className={`mt-4 space-y-1.5 text-sm leading-6 ${theme.bodyTextClass}`}>
                     <p>Aktif: {metrics.activeByStage[index] ?? 0} peserta</p>
                     <p>Belum selesai: {metrics.pendingByStage[index] ?? 0} peserta</p>
                     <p>{stage.materialCount} materi dipasang</p>
@@ -213,15 +214,19 @@ export const ParticipantCard = ({
   adminNavigation,
   portal,
   participant,
+  visualMode = "admin",
 }: {
   adminNavigation: AdminOnboardingNavigation;
   portal: AdminOnboardingPortal;
   participant: AdminPortalParticipant;
+  visualMode?: AdminOnboardingVisualMode;
 }) => {
   const progress = getParticipantProgress(participant);
   const currentStage = getCurrentStage(participant);
   const currentStageStatus = normalizeStageStatus(currentStage?.status);
   const participantHref = `${adminNavigation.basePath}/portal/${portal.portalKey}/user/${encodeURIComponent(participant.participantId)}`;
+  const theme = getAdminOnboardingTheme(visualMode);
+  const latestExamScore = getParticipantLatestExamScore(participant);
 
   return (
     <Link
@@ -230,25 +235,27 @@ export const ParticipantCard = ({
       aria-label={`Buka detail user ${participant.participantName}`}
     >
       <article
-        className={`rounded-[30px] border p-5 transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_26px_56px_-40px_rgba(74,53,31,0.28)] group-focus-visible:-translate-y-0.5 group-focus-visible:shadow-[0_26px_56px_-40px_rgba(74,53,31,0.28)] ${adminPanelClass}`}
+        className={`rounded-[30px] border p-5 transition duration-200 group-hover:-translate-y-0.5 group-focus-visible:-translate-y-0.5 ${theme.hoverShadowClass} ${theme.panelClass}`}
       >
         <div className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
           <div>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-start gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-[#1b2238] text-sm font-semibold text-[#fff8ed] shadow-[0_16px_32px_-24px_rgba(27,34,56,0.45)]">
+                <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] text-sm font-semibold shadow-[0_16px_32px_-24px_rgba(36,48,111,0.45)] ${
+                  visualMode === "employee" ? "bg-[#24306f] text-white" : "bg-[#1b2238] text-[#fff8ed]"
+                }`}>
                   {getInitials(participant.participantName)}
                 </div>
                 <div>
-                  <h3 className="text-[28px] font-semibold leading-none tracking-[-0.05em] text-[#1b2238]">
+                  <h3 className={`text-[28px] font-semibold leading-none tracking-[-0.05em] ${theme.accentTextClass}`}>
                     {participant.participantName}
                   </h3>
-                  <p className="mt-2 text-sm leading-6 text-[#625a50]">
+                  <p className={`mt-2 text-sm leading-6 ${theme.bodyTextClass}`}>
                     {participant.departmentName ?? "Departemen belum diisi"} |{" "}
                     {participant.cardNumber ?? participant.badgeNumber ?? participant.participantReferenceId}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-[#e0d1bf] bg-[#fbf3e9] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#6f6458]">
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${theme.chipClass}`}>
                       {currentStage
                         ? `Tahap ${currentStage.stageOrder}`
                         : "Belum ada tahap"}
@@ -263,23 +270,23 @@ export const ParticipantCard = ({
               </div>
 
               <span
-                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${adminButtonClass}`}
+                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${theme.buttonClass}`}
               >
                 Detail user
               </span>
             </div>
 
-            <div className={`mt-5 rounded-[22px] border px-4 py-4 ${adminMutedPanelClass}`}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+            <div className={`mt-5 rounded-[22px] border px-4 py-4 ${theme.mutedPanelClass}`}>
+              <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${theme.labelClass}`}>
                 Langkah berikutnya
               </p>
-              <p className="mt-2 text-sm leading-7 text-[#5d564d]">
+              <p className={`mt-2 text-sm leading-7 ${theme.bodyTextClass}`}>
                 {getParticipantNextAction(participant)}
               </p>
             </div>
 
             {currentStage?.note ? (
-              <div className="mt-3 rounded-[20px] border border-[#e6d7c5] bg-[#fffdf8] px-4 py-4 text-sm leading-7 text-[#5d564d]">
+              <div className={`mt-3 rounded-[20px] border px-4 py-4 text-sm leading-7 ${theme.infoClass} ${theme.bodyTextClass}`}>
                 {currentStage.note}
               </div>
             ) : null}
@@ -289,49 +296,49 @@ export const ParticipantCard = ({
             <div className="grid gap-3 sm:grid-cols-2">
               {[
                 ["Materi dibuka", getParticipantMaterialProgress(participant)],
-                ["Baca pertama", formatDateTime(participant.firstReadAt)],
+                ["Nilai ujian", formatExamScore(latestExamScore)],
                 [
                   "Aktivitas terakhir",
                   formatDateTime(getParticipantLastActivityAt(participant)),
                 ],
                 ["Progress", `${progress}%`],
               ].map(([label, value]) => (
-                <div key={label} className={`rounded-[18px] border px-4 py-3 ${adminMutedPanelClass}`}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+                <div key={label} className={`rounded-[18px] border px-4 py-3 ${theme.mutedPanelClass}`}>
+                  <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${theme.labelClass}`}>
                     {label}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-[#5d564d]">{value}</p>
+                  <p className={`mt-2 text-sm leading-6 ${theme.bodyTextClass}`}>{value}</p>
                 </div>
               ))}
             </div>
 
             <div className="mt-5 space-y-2">
-              <div className="flex items-center justify-between text-sm font-semibold text-[#514a42]">
+              <div className={`flex items-center justify-between text-sm font-semibold ${theme.bodyTextClass}`}>
                 <span>Progres onboarding</span>
                 <span>{progress}%</span>
               </div>
-              <div className="h-3 overflow-hidden rounded-full bg-[#eadfce]">
+              <div className={`h-3 overflow-hidden rounded-full ${theme.progressTrackClass}`}>
                 <div
-                  className={`h-full rounded-full ${adminProgressBarClass}`}
+                  className={`h-full rounded-full ${theme.progressBarClass}`}
                   style={{ width: `${progress}%` }}
                 />
               </div>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className={`rounded-[18px] border px-4 py-3 ${adminMutedPanelClass}`}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+              <div className={`rounded-[18px] border px-4 py-3 ${theme.mutedPanelClass}`}>
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${theme.labelClass}`}>
                   Deadline
                 </p>
-                <p className="mt-2 text-sm leading-6 text-[#5d564d]">
+                <p className={`mt-2 text-sm leading-6 ${theme.bodyTextClass}`}>
                   {formatDate(participant.dueAt)}
                 </p>
               </div>
-              <div className={`rounded-[18px] border px-4 py-3 ${adminMutedPanelClass}`}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a6d4b]">
+              <div className={`rounded-[18px] border px-4 py-3 ${theme.mutedPanelClass}`}>
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${theme.labelClass}`}>
                   Total baca
                 </p>
-                <p className="mt-2 text-sm leading-6 text-[#5d564d]">
+                <p className={`mt-2 text-sm leading-6 ${theme.bodyTextClass}`}>
                   {participant.totalOpenCount} kali
                 </p>
               </div>
