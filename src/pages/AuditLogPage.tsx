@@ -37,6 +37,12 @@ type AuditLogResponse = {
   total: number;
 };
 
+type AuditLogPageProps = {
+  embedded?: boolean;
+  defaultPortalKey?: string;
+  title?: string;
+};
+
 type PilarItem = { id: number; pilarName: string };
 type SbuItem = { id: number; sbuName: string; sbuCode: string };
 type SbuSubItem = { id: number; sbuSubName: string; sbuSubCode: string };
@@ -50,12 +56,151 @@ const formatEmployeeLabel = (employee?: EmployeeItem | null) => {
   return deptName ? `${name} - ${deptName}` : name;
 };
 
-const AuditLogPage = () => {
+const portalOptions = [
+  { value: "ALL", label: "Semua portal" },
+  { value: "EMPLOYEE", label: "Employee" },
+  { value: "SUPPLIER", label: "Supplier" },
+  { value: "CUSTOMER", label: "Customer" },
+  { value: "AFFILIATE", label: "Affiliate" },
+  { value: "INFLUENCER", label: "Influencer" },
+  { value: "COMMUNITY", label: "Community" },
+  { value: "ADMINISTRATOR", label: "Administrator" },
+];
+
+const auditGridClass =
+  "grid grid-cols-1 gap-3 xl:grid-cols-[minmax(7rem,0.8fr)_minmax(6rem,0.7fr)_minmax(7rem,0.8fr)_minmax(8rem,0.8fr)_minmax(16rem,2fr)_6rem]";
+
+const moduleLabelFallbacks: Record<string, string> = {
+  PORTAL_ACTION: "Aktivitas portal",
+};
+
+const entityLabelFallbacks: Record<string, string> = {
+  ONBOARDING_STAGE: "Tahap onboarding",
+  ONBOARDING_MATERIAL: "Materi onboarding",
+  ONBOARDING_EXAM: "Ujian onboarding",
+  ONBOARDING_ASSIGNMENT: "Assignment onboarding",
+  ONBOARDING_PORTAL: "Portal onboarding",
+  NOTIFICATION_TEMPLATE: "Template notifikasi",
+  USERS: "Akun user",
+  REGISTER: "Registrasi akun",
+};
+
+const fieldLabelFallbacks: Record<string, string> = {
+  badgeNumber: "Badge number",
+  cardNumber: "Nomor kartu",
+  durationDay: "Durasi hari",
+  examId: "Ujian",
+  fileName: "Nama file",
+  fileTitle: "Judul file",
+  isActive: "Status aktif",
+  isDeleted: "Status hapus",
+  materialDescription: "Deskripsi materi",
+  materialTitle: "Judul materi",
+  name: "Nama",
+  note: "Catatan",
+  onboardingAssignmentId: "ID assignment onboarding",
+  onboardingPortalTemplateId: "ID portal onboarding",
+  onboardingStageExamId: "ID ujian tahap",
+  onboardingStageMaterialId: "ID materi tahap",
+  onboardingStageTemplateId: "ID tahap onboarding",
+  orderIndex: "Urutan",
+  passScore: "Nilai lulus",
+  portalKey: "Portal",
+  portalName: "Nama portal",
+  roleId: "Role",
+  selectedFileIds: "File yang dipilih",
+  sourceFileId: "File sumber",
+  stageCode: "Kode tahap",
+  stageDescription: "Deskripsi tahap",
+  stageName: "Nama tahap",
+  stageOrder: "Urutan tahap",
+  username: "Username",
+};
+
+const lowValueTechnicalFields = new Set([
+  "onboardingAssignmentId",
+  "onboardingPortalTemplateId",
+  "onboardingStageExamId",
+  "onboardingStageMaterialId",
+  "onboardingStageTemplateId",
+]);
+
+const actionLabels: Record<string, string> = {
+  AUTO_DEACTIVATE: "Auto nonaktif",
+  CREATE: "Tambah",
+  DELETE: "Hapus",
+  UPDATE: "Ubah",
+};
+
+const methodLabels: Record<string, string> = {
+  DELETE: "Hapus data",
+  PATCH: "Ubah sebagian data",
+  POST: "Tambah data",
+  PUT: "Ubah data",
+};
+
+const humanizeKey = (value: string) =>
+  value
+    .replace(/_/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^./, (char) => char.toUpperCase());
+
+const resolveKnownLabel = (
+  key: string,
+  fallbackMap: Record<string, string>
+) => fallbackMap[key] ?? fallbackMap[key.toUpperCase()] ?? humanizeKey(key);
+
+const formatAuditValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Ya" : "Tidak";
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(formatAuditValue).join(", ") : "-";
+  }
+  if (value instanceof Date) return value.toLocaleString("id-ID");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+};
+
+const getRequestSnapshot = (item: AuditLogItem) => {
+  const request = item.snapshot?.request;
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    return null;
+  }
+
+  return request as Record<string, unknown>;
+};
+
+const getReadableRequestEntries = (item: AuditLogItem) => {
+  const request = getRequestSnapshot(item);
+  if (!request) return [];
+
+  return Object.entries(request).filter(([field, value]) => {
+    if (lowValueTechnicalFields.has(field)) return false;
+    return value !== undefined && value !== null && value !== "";
+  });
+};
+
+const resolveActionLabel = (action: string) =>
+  actionLabels[action.toUpperCase()] ?? humanizeKey(action);
+
+const resolveMethodLabel = (method: unknown) =>
+  typeof method === "string"
+    ? methodLabels[method.toUpperCase()] ?? humanizeKey(method)
+    : "-";
+
+const AuditLogPage = ({
+  embedded = false,
+  defaultPortalKey = "ALL",
+  title = "Audit Log",
+}: AuditLogPageProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
   const { showToast } = useToast();
 
   const [search, setSearch] = useState("");
+  const [portalFilter, setPortalFilter] = useState(defaultPortalKey);
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -114,6 +259,9 @@ const AuditLogPage = () => {
       if (search.trim()) {
         params.set("q", search.trim());
       }
+      if (portalFilter !== "ALL") {
+        params.set("portalKey", portalFilter);
+      }
 
       const res = await apiFetch(`/audit-log?${params.toString()}`, {
         method: "GET",
@@ -152,7 +300,7 @@ const AuditLogPage = () => {
   useEffect(() => {
     fetchLogs();
     fetchLookupData();
-  }, [page]);
+  }, [page, portalFilter]);
 
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -160,22 +308,23 @@ const AuditLogPage = () => {
     fetchLogs();
   };
 
+  const handlePortalFilterChange = (value: string) => {
+    setPortalFilter(value);
+    setPage(1);
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return (
-      date
-        .toLocaleDateString("id-ID", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })
-        .replace(".", "") +
-      " • " +
-      date.toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
+    return `${date
+      .toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
       })
-    );
+      .replace(".", "")} - ${date.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
   };
 
   const totalPages = useMemo(
@@ -203,11 +352,55 @@ const AuditLogPage = () => {
     return name || "Akun";
   };
 
-  const buildChangeSummary = (changes: AuditChange[] | null) => {
-    if (!changes || changes.length === 0) return "—";
-    const preview = changes.slice(0, 2).map((change) => change.field);
-    const more = changes.length > 2 ? ` +${changes.length - 2}` : "";
+  const resolveModuleLabel = (item: AuditLogItem) =>
+    item.moduleLabel ?? resolveKnownLabel(item.module, moduleLabelFallbacks);
+
+  const resolveEntityLabel = (item: AuditLogItem) =>
+    item.entityLabel ?? resolveKnownLabel(item.entity, entityLabelFallbacks);
+
+  const resolveAuditTarget = (item: AuditLogItem) => {
+    const entityName = resolveEntityName(item);
+    if (entityName) return entityName;
+
+    const request = getRequestSnapshot(item);
+    const candidateFields = [
+      "stageName",
+      "materialTitle",
+      "fileTitle",
+      "portalName",
+      "examName",
+      "title",
+      "name",
+      "username",
+    ];
+    for (const field of candidateFields) {
+      const value = request?.[field];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+
+    return item.entityId;
+  };
+
+  const buildChangeSummary = (item: AuditLogItem) => {
+    const fields = item.changes?.length
+      ? item.changes.map((change) => resolveKnownLabel(change.field, fieldLabelFallbacks))
+      : getReadableRequestEntries(item).map(([field]) =>
+          resolveKnownLabel(field, fieldLabelFallbacks)
+        );
+
+    if (!fields.length) return "-";
+    const preview = fields.slice(0, 3);
+    const more = fields.length > 3 ? ` +${fields.length - 3}` : "";
     return `${preview.join(", ")}${more}`;
+  };
+
+  const resolvePortalLabel = (item: AuditLogItem) => {
+    const meta = item.meta ?? {};
+    const portalName = typeof meta.portalName === "string" ? meta.portalName : null;
+    const portalKey = typeof meta.portalKey === "string" ? meta.portalKey : null;
+    return portalName || portalKey || "-";
   };
 
   const actionColor = (action: string) => {
@@ -225,27 +418,24 @@ const AuditLogPage = () => {
     }
   };
 
-  return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <Sidebar isOpen={isOpen} onToggle={toggleSidebar} />
-
+  const content = (
       <div
         className={`transition-all duration-300 ${
-          isOpen ? "ml-64" : "ml-16"
-        } flex-1 p-8`}
+          embedded ? "flex-1 p-0" : `${isOpen ? "ml-64" : "ml-16"} flex-1 p-8`
+        }`}
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <BackButton />
+            {embedded ? null : <BackButton />}
             <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
-              Audit Log
+              {title}
             </h1>
           </div>
         </div>
 
-        <div className="flex flex-row items-center justify-between">
-          <form onSubmit={handleSearch} className="mb-6 flex flex-wrap gap-3 w-3/4">
-            <div className="w-full md:w-1/2 space-y-1">
+        <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <form onSubmit={handleSearch} className="flex flex-1 flex-wrap items-end gap-3">
+            <div className="w-full min-w-[16rem] flex-1 space-y-1">
               <label className="text-xs uppercase tracking-wide text-slate-400">
                 Pencarian
                 <OptionalMark />
@@ -258,6 +448,24 @@ const AuditLogPage = () => {
                 className="w-full px-4 py-2 rounded-xl bg-white border-2 border-gray-200
                   focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
               />
+            </div>
+            <div className="w-full min-w-[13rem] md:w-56 space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">
+                Portal
+                <OptionalMark />
+              </label>
+              <select
+                value={portalFilter}
+                onChange={(event) => handlePortalFilterChange(event.target.value)}
+                className="w-full px-4 py-2 rounded-xl bg-white border-2 border-gray-200
+                  focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none transition"
+              >
+                {portalOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <button
               type="submit"
@@ -273,8 +481,9 @@ const AuditLogPage = () => {
         
 
         <div className="bg-white rounded-2xl shadow-lg shadow-gray-200 overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-[160px_160px_160px_1fr_140px] gap-4 px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-100">
+          <div className={`${auditGridClass} px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-100`}>
             <span>Waktu</span>
+            <span>Portal</span>
             <span>Module</span>
             <span>Entity</span>
             <span>Detail</span>
@@ -287,28 +496,35 @@ const AuditLogPage = () => {
             <div className="p-6 text-sm text-gray-500">Belum ada data.</div>
           ) : (
             logs.map((item) => {
-              const entityName = resolveEntityName(item);
               const actorName = resolveActorName(item);
+              const targetName = resolveAuditTarget(item);
+              const moduleLabel = resolveModuleLabel(item);
+              const entityLabel = resolveEntityLabel(item);
+              const readableEntries = getReadableRequestEntries(item);
               const isExpanded = expandedId === item.logId;
               return (
                 <div key={item.logId} className="border-b border-slate-100">
-                  <div className="grid grid-cols-1 lg:grid-cols-[160px_160px_160px_1fr_140px] gap-4 px-6 py-4 text-sm">
-                    <div className="text-slate-500">{formatDate(item.createdAt)}</div>
-                    <div className="font-semibold text-slate-700">
-                      {item.moduleLabel ?? item.module}
+                  <div className={`${auditGridClass} px-6 py-4 text-sm`}>
+                    <div className="min-w-0 break-words text-slate-500">{formatDate(item.createdAt)}</div>
+                    <div className="min-w-0 break-words text-slate-600">
+                      {resolvePortalLabel(item)}
                     </div>
-                    <div className="text-slate-600">
-                      {item.entityLabel ?? item.entity}
+                    <div className="min-w-0 break-words font-semibold text-slate-700">
+                      {moduleLabel}
                     </div>
-                    <div className="text-slate-600">
-                      <div className="font-semibold text-slate-800">
-                        {entityName ? `${entityName} • ${item.entityId}` : item.entityId}
+                    <div className="min-w-0 break-words text-slate-600">
+                      {entityLabel}
+                    </div>
+                    <div className="min-w-0 break-words text-slate-600">
+                      <div className="font-semibold text-slate-800 break-words">
+                        {resolveActionLabel(item.action)} {entityLabel}
+                        {targetName ? `: ${targetName}` : ""}
                       </div>
                       <div className="text-xs text-slate-500 mt-1">
                         oleh {actorName}
                       </div>
                       <div className="text-xs text-slate-500 mt-1">
-                        Perubahan: {buildChangeSummary(item.changes)}
+                        Bagian diubah: {buildChangeSummary(item)}
                       </div>
                       <button
                         type="button"
@@ -324,7 +540,7 @@ const AuditLogPage = () => {
                           item.action
                         )}`}
                       >
-                        {item.action}
+                        {resolveActionLabel(item.action)}
                       </span>
                     </div>
                   </div>
@@ -333,47 +549,149 @@ const AuditLogPage = () => {
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div>
                           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                            Changes
+                            Ringkasan aktivitas
+                          </h3>
+                          <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Aktivitas
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-800">
+                                  {resolveActionLabel(item.action)} {entityLabel}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Data
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-800">
+                                  {targetName}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Portal
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-800">
+                                  {resolvePortalLabel(item)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Dilakukan oleh
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-800">
+                                  {actorName}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                            Bagian yang diisi atau diubah
                           </h3>
                           {item.changes && item.changes.length > 0 ? (
                             <ul className="space-y-2">
                               {item.changes.map((change, index) => (
-                                <li key={`${item.logId}-change-${index}`}>
-                                  <span className="font-semibold">{change.field}</span>
-                                  <div className="text-xs text-slate-500">
-                                    from: {String(change.from ?? "-")}
-                                  </div>
-                                  <div className="text-xs text-slate-500">
-                                    to: {String(change.to ?? "-")}
+                                <li
+                                  key={`${item.logId}-change-${index}`}
+                                  className="rounded-xl border border-slate-200 bg-white p-3"
+                                >
+                                  <span className="font-semibold text-slate-800">
+                                    {resolveKnownLabel(change.field, fieldLabelFallbacks)}
+                                  </span>
+                                  <div className="mt-2 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                                    <div>
+                                      <span className="font-semibold text-slate-400">
+                                        Sebelum:
+                                      </span>{" "}
+                                      {formatAuditValue(change.from)}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-slate-400">
+                                        Sesudah:
+                                      </span>{" "}
+                                      {formatAuditValue(change.to)}
+                                    </div>
                                   </div>
                                 </li>
                               ))}
                             </ul>
+                          ) : readableEntries.length > 0 ? (
+                            <div className="grid gap-2">
+                              {readableEntries.map(([field, value]) => (
+                                <div
+                                  key={`${item.logId}-${field}`}
+                                  className="rounded-xl border border-slate-200 bg-white p-3"
+                                >
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    {resolveKnownLabel(field, fieldLabelFallbacks)}
+                                  </p>
+                                  <p className="mt-1 font-semibold text-slate-800">
+                                    {formatAuditValue(value)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
                           ) : (
-                            <p className="text-xs text-slate-400">Tidak ada perubahan.</p>
+                            <p className="text-xs text-slate-400">
+                              Sistem tidak menerima detail field yang bisa ditampilkan.
+                            </p>
                           )}
                         </div>
                         <div>
                           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                            Snapshot
+                            Informasi proses
                           </h3>
-                          {item.snapshot ? (
-                            <pre className="text-xs bg-white border border-slate-200 rounded-lg p-3 overflow-auto">
-                              {JSON.stringify(item.snapshot, null, 2)}
-                            </pre>
-                          ) : (
-                            <p className="text-xs text-slate-400">Snapshot tidak tersedia.</p>
-                          )}
-                          {item.meta && (
-                            <>
-                              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mt-3 mb-2">
-                                Meta
-                              </h3>
-                              <pre className="text-xs bg-white border border-slate-200 rounded-lg p-3 overflow-auto">
-                                {JSON.stringify(item.meta, null, 2)}
-                              </pre>
-                            </>
-                          )}
+                          <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Jenis proses
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-800">
+                                  {resolveMethodLabel(item.meta?.method)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Status
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-800">
+                                  {item.meta?.statusCode
+                                    ? `Berhasil (${String(item.meta.statusCode)})`
+                                    : "-"}
+                                </p>
+                              </div>
+                              <div className="sm:col-span-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Kode referensi
+                                </p>
+                                <p className="mt-1 break-all font-semibold text-slate-800">
+                                  {item.entityId}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <details className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Data teknis
+                            </summary>
+                            <div className="mt-3 space-y-3">
+                              {item.snapshot ? (
+                                <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-auto">
+                                  {JSON.stringify(item.snapshot, null, 2)}
+                                </pre>
+                              ) : null}
+                              {item.meta ? (
+                                <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-auto">
+                                  {JSON.stringify(item.meta, null, 2)}
+                                </pre>
+                              ) : null}
+                            </div>
+                          </details>
                         </div>
                       </div>
                     </div>
@@ -416,6 +734,16 @@ const AuditLogPage = () => {
           </div>
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+      <Sidebar isOpen={isOpen} onToggle={toggleSidebar} />
+      {content}
     </div>
   );
 };

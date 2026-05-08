@@ -569,6 +569,13 @@ const getEmbeddedPreviewUrl = (
   return `${urlWithoutHash}#${hashParams.toString()}`;
 };
 
+const openPreviewInNewTab = (url: string) => {
+  const previewWindow = window.open(url, "_blank", "noopener,noreferrer");
+  if (previewWindow) {
+    previewWindow.opener = null;
+  }
+};
+
 const formatCustomerLearningDate = (value: string | null) => {
   if (!value) {
     return "-";
@@ -714,7 +721,6 @@ const CustomerOnboardingHome = ({
   };
 
   const handlePreviewFile = (
-    stage: CustomerLearningStage,
     material: CustomerLearningMaterial,
     file: CustomerLearningMaterialFile
   ) => {
@@ -734,12 +740,13 @@ const CustomerOnboardingHome = ({
       return;
     }
 
-    setPreviewState({
-      stage,
-      material,
-      file,
-      previewUrl,
-    });
+    const sourceImageUrl = file.url?.trim();
+    if (previewKind === "image" && sourceImageUrl) {
+      openPreviewInNewTab(sourceImageUrl);
+      return;
+    }
+
+    openPreviewInNewTab(getEmbeddedPreviewUrl(previewUrl, file));
   };
 
   const introBaseClass =
@@ -1095,11 +1102,7 @@ const CustomerOnboardingHome = ({
                                     type="button"
                                     disabled={isDownloadOnly}
                                     onClick={() =>
-                                      void handlePreviewFile(
-                                        selectedStage,
-                                        material,
-                                        file
-                                      )
+                                      void handlePreviewFile(material, file)
                                     }
                                     className="inline-flex min-h-[38px] items-center gap-2 rounded-full bg-[linear-gradient(135deg,_#2f68ff,_#7c3aed)] px-4 text-xs font-extrabold text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.9)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-none disabled:bg-[#d9e4f8] disabled:text-[#7f92b6] disabled:shadow-none disabled:hover:translate-y-0"
                                   >
