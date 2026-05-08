@@ -4,6 +4,7 @@ import OnboardingAdministratorExamsPage from "./onboarding/OnboardingAdministrat
 import OnboardingAdministratorMaterialsPage from "./onboarding/OnboardingAdministratorMaterialsPage";
 import OnboardingAdministratorStagesPage from "./onboarding/OnboardingAdministratorStagesPage";
 import AdministratorNotificationTemplatePage from "./AdministratorNotificationTemplatePage";
+import AuditLogPage from "../../pages/AuditLogPage";
 import OnboardingPortalWorkspace from "../../features/onboarding/OnboardingPortalWorkspace";
 import isOnboardingExamPath from "../../features/onboarding/isOnboardingExamPath";
 import { invalidateAccessSummary } from "../../hooks/useAccessSummary";
@@ -120,6 +121,10 @@ const AdministratorWorkspacePage = () => {
             <Route
               path="notification-template"
               element={<AdministratorNotificationTemplatePage />}
+            />
+            <Route
+              path="audit-log"
+              element={<AuditLogPage embedded title="Audit Log Portal" />}
             />
             <Route path="*" element={<Navigate to="/portal-administrator/onboarding" replace />} />
           </Routes>

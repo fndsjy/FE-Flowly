@@ -21,10 +21,15 @@ const panel = "rounded-[28px] border border-[#e6ebf1] bg-white shadow-[0_20px_50
 const safeJson = async (res: Response) => { try { return await res.json(); } catch { return {}; } };
 const fileUrl = (
   fileName: string,
-  _url: string | null,
+  url: string | null,
   fileType: number | null,
   disposition: "inline" | "attachment" = "inline"
 ) => {
+  const sourceUrl = url?.trim();
+  if (sourceUrl && /^https?:\/\//i.test(sourceUrl)) {
+    return sourceUrl;
+  }
+
   const baseUrl = buildApiUrl(`/onboarding-material/file/${encodeURIComponent(fileName)}`);
   const query = new URLSearchParams();
   if (fileType !== null && !Number.isNaN(fileType)) {
