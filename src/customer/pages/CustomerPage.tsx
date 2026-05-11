@@ -52,6 +52,7 @@ type CustomerLearningMaterial = {
 type CustomerLearningStage = {
   onboardingStageTemplateId: string;
   onboardingStageProgressId: string | null;
+  programType: string;
   stageOrder: number;
   stageCode: string;
   stageName: string;
@@ -78,6 +79,10 @@ type CustomerMaterialPreviewState = {
 };
 
 type CustomerMaterialFileDisposition = "inline" | "attachment";
+type CustomerLearningMode = "onboarding" | "lms";
+
+const getCustomerLearningProgramType = (mode: CustomerLearningMode) =>
+  mode === "lms" ? "LEARNING" : "ONBOARDING";
 
 const getPublicImageUrl = (path: string) =>
   `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
@@ -450,11 +455,67 @@ const customerStageVisuals = [
 const getCustomerStageVisual = (index: number) =>
   customerStageVisuals[index % customerStageVisuals.length];
 
-const getStageDescription = (stage: CustomerLearningStage) =>
-  stage.stageDescription ??
-  stage.materials.find((material) => material.materialDescription)
-    ?.materialDescription ??
-  "Materi onboarding customer siap dipelajari.";
+const replaceOnboardingTerm = (value: string) =>
+  value.replace(/onboarding/gi, (match) => {
+    if (match === match.toUpperCase()) {
+      return "LEARNING";
+    }
+
+    return match.charAt(0) === match.charAt(0).toUpperCase()
+      ? "Learning"
+      : "learning";
+  });
+
+const getLearningModeText = (
+  value: string | null | undefined,
+  mode: CustomerLearningMode
+) => {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return "";
+  }
+
+  return mode === "lms" ? replaceOnboardingTerm(normalized) : normalized;
+};
+
+const getCustomerLearningModeCopy = (mode: CustomerLearningMode) =>
+  mode === "lms"
+    ? {
+        eyebrow: "LMS",
+        title: "Materi Learning",
+        unit: "Learning",
+        emptyUnit: "learning",
+        emptyStages: "Belum ada materi learning customer aktif.",
+        emptyStage: "Tahap ini belum punya materi learning aktif.",
+        emptyFile: "Belum ada file di learning ini.",
+        detailEyebrow: "Detail Learning",
+        previewEyebrow: "Preview Learning",
+        fallbackDescription: "Materi learning customer siap dipelajari.",
+      }
+    : {
+        eyebrow: "Menu Belajar",
+        title: "Materi Onboarding",
+        unit: "Materi",
+        emptyUnit: "materi",
+        emptyStages: "Belum ada materi onboarding customer aktif.",
+        emptyStage: "Tahap ini belum punya materi aktif.",
+        emptyFile: "Belum ada file di materi ini.",
+        detailEyebrow: "Detail Materi",
+        previewEyebrow: "Preview Materi",
+        fallbackDescription: "Materi onboarding customer siap dipelajari.",
+      };
+
+const getStageDescription = (
+  stage: CustomerLearningStage,
+  mode: CustomerLearningMode
+) =>
+  getLearningModeText(
+    stage.stageDescription ??
+      stage.materials.find((material) => material.materialDescription)
+        ?.materialDescription ??
+      getCustomerLearningModeCopy(mode).fallbackDescription,
+    mode
+  );
 
 const getStageFileCount = (stage: CustomerLearningStage) =>
   stage.materials.reduce(
@@ -477,10 +538,12 @@ const getMaterialOpenLabel = (count: number) =>
 const getCustomerMaterialFileUrl = (
   material: CustomerLearningMaterial,
   file: CustomerLearningMaterialFile,
-  disposition: CustomerMaterialFileDisposition
+  disposition: CustomerMaterialFileDisposition,
+  programType: string
 ) => {
   const query = new URLSearchParams({
     onboardingStageMaterialId: material.onboardingStageMaterialId,
+    programType,
     sourceFileId: String(file.id),
     fileName: file.fileName,
     disposition,
@@ -606,6 +669,8 @@ const CustomerOnboardingHome = ({
   const [previewState, setPreviewState] =
     useState<CustomerMaterialPreviewState | null>(null);
   const [introReady, setIntroReady] = useState(false);
+  const [learningMode, setLearningMode] =
+    useState<CustomerLearningMode>("onboarding");
   const customer = getCustomerRecord(user);
   const customerName = readCustomerValue(
     customer,
@@ -619,12 +684,35 @@ const CustomerOnboardingHome = ({
   );
   const isAdminView = user?.roleLevel === 1;
   const logoHomeTarget = isCustomerPortalUser(user, customer) ? "/customer" : "/";
+  const learningCopy = getCustomerLearningModeCopy(learningMode);
+  const switchLearningMode = (
+    mode: CustomerLearningMode,
+    options?: { scrollToSection?: boolean }
+  ) => {
+    setLearningMode(mode);
+    setSelectedStageId(null);
+    setPreviewState(null);
+
+    if (options?.scrollToSection) {
+      window.setTimeout(() => {
+        document
+          .getElementById("customer-onboarding-stages")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+    }
+  };
   const handleLogoClick = () => {
+    switchLearningMode("onboarding");
+
     if (logoHomeTarget === "/customer") {
       window.setTimeout(() => {
         window.scrollTo({ left: 0, top: 0, behavior: "smooth" });
       }, 0);
     }
+  };
+
+  const handleOpenLms = () => {
+    switchLearningMode("lms", { scrollToSection: true });
   };
 
   useLayoutEffect(() => {
@@ -651,7 +739,11 @@ const CustomerOnboardingHome = ({
       setLearningError(null);
 
       try {
-        const res = await apiFetch("/onboarding-stage/customer-learning", {
+        const expectedProgramType = getCustomerLearningProgramType(learningMode);
+        const query = new URLSearchParams({
+          programType: expectedProgramType,
+        });
+        const res = await apiFetch(`/onboarding-stage/customer-learning?${query}`, {
           method: "GET",
           credentials: "include",
         });
@@ -659,14 +751,17 @@ const CustomerOnboardingHome = ({
 
         if (!res.ok) {
           throw new Error(
-            getApiErrorMessage(json, "Gagal memuat materi onboarding customer")
+            getApiErrorMessage(json, "Gagal memuat materi customer")
           );
         }
 
         const portalKey = json.response?.portal?.portalKey?.trim().toUpperCase();
         const stages =
           portalKey === "CUSTOMER" && Array.isArray(json.response?.stages)
-            ? json.response.stages
+            ? json.response.stages.filter(
+                (stage) =>
+                  stage.programType?.trim().toUpperCase() === expectedProgramType
+              )
             : [];
 
         if (mounted) {
@@ -678,7 +773,7 @@ const CustomerOnboardingHome = ({
           setLearningError(
             err instanceof Error
               ? err.message
-              : "Gagal memuat materi onboarding customer"
+              : "Gagal memuat materi customer"
           );
         }
       } finally {
@@ -693,7 +788,7 @@ const CustomerOnboardingHome = ({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [learningMode]);
 
   useEffect(() => {
     if (
@@ -728,7 +823,8 @@ const CustomerOnboardingHome = ({
     const previewUrl = getCustomerMaterialFileUrl(
       material,
       file,
-      "inline"
+      "inline",
+      getCustomerLearningProgramType(learningMode)
     );
 
     if (previewKind === "download") {
@@ -765,7 +861,7 @@ const CustomerOnboardingHome = ({
     <div className="relative min-h-screen w-full overflow-hidden bg-[#edf4ff] shadow-[0_30px_90px_-62px_rgba(30,64,175,0.42)]">
       <header
         className={`absolute left-3 right-3 top-2 z-40 flex min-h-[60px] items-center justify-between gap-2 rounded-[24px] border border-white/80 bg-white/70 px-3 shadow-[0_22px_58px_-40px_rgba(30,64,175,0.5)] backdrop-blur-xl sm:left-4 sm:right-4 sm:min-h-[68px] sm:gap-3 sm:rounded-[30px] sm:px-4 md:left-8 md:right-8 md:px-5 ${introBaseClass} ${introHeaderClass}`}
-      >
+        >
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Link
             to={logoHomeTarget}
@@ -830,7 +926,7 @@ const CustomerOnboardingHome = ({
               <span className="block md:whitespace-nowrap">Selamat Datang di</span>
               <span className="block md:whitespace-nowrap">
                 <span className="relative inline-block bg-[linear-gradient(135deg,_#1f5cff,_#7c3aed)] bg-clip-text text-transparent">
-                  Onboarding
+                  Pelatihan
                   <span className="absolute -bottom-0.5 left-0 h-1.5 w-[82px] rounded-full bg-[linear-gradient(90deg,_#1f5cff,_#7c3aed)] sm:-bottom-2 sm:h-2" />
                 </span>{" "}
                 <span className="text-[#050a2f]">Domas!</span>
@@ -845,11 +941,12 @@ const CustomerOnboardingHome = ({
             </p>
             <a
               href="#customer-onboarding-stages"
+              onClick={handleOpenLms}
               className={`mt-8 inline-flex items-center gap-3 rounded-full bg-[linear-gradient(135deg,_#2f68ff,_#7c3aed)] px-8 py-4 text-sm font-extrabold text-white shadow-[0_24px_46px_-24px_rgba(37,99,235,0.9)] hover:-translate-y-0.5 ${introBaseClass} ${introUpClass}`}
               style={{ transitionDelay: "480ms" }}
             >
-              <i className="fa-solid fa-book-open-reader" aria-hidden="true"></i>
-              Mulai Belajar
+              <i className="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+              LMS
               <i className="fa-solid fa-arrow-right" aria-hidden="true"></i>
             </a>
           </div>
@@ -880,11 +977,37 @@ const CustomerOnboardingHome = ({
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#7e65e8]">
-                Menu Belajar
+                {learningCopy.eyebrow}
               </p>
               <h2 className="mt-2 text-2xl font-extrabold text-[#07103d] md:text-3xl">
-                Materi Onboarding
+                {learningCopy.title}
               </h2>
+            </div>
+            <div className="inline-flex w-full max-w-sm rounded-full border border-[#dbe7ff] bg-[#f7faff] p-1 shadow-[0_12px_28px_-24px_rgba(30,64,175,0.34)] md:w-auto">
+              <button
+                type="button"
+                onClick={() => switchLearningMode("onboarding")}
+                className={`inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-full px-4 text-xs font-extrabold transition md:flex-none ${
+                  learningMode === "onboarding"
+                    ? "bg-white text-[#2458f2] shadow-[0_12px_26px_-20px_rgba(37,99,235,0.55)]"
+                    : "text-[#60739a] hover:text-[#2458f2]"
+                }`}
+              >
+                <i className="fa-solid fa-book-open-reader" aria-hidden="true"></i>
+                Onboarding
+              </button>
+              <button
+                type="button"
+                onClick={() => switchLearningMode("lms")}
+                className={`inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-full px-4 text-xs font-extrabold transition md:flex-none ${
+                  learningMode === "lms"
+                    ? "bg-[linear-gradient(135deg,_#2f68ff,_#7c3aed)] text-white shadow-[0_16px_28px_-20px_rgba(37,99,235,0.75)]"
+                    : "text-[#60739a] hover:text-[#2458f2]"
+                }`}
+              >
+                <i className="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+                LMS
+              </button>
             </div>
           </div>
 
@@ -914,7 +1037,7 @@ const CustomerOnboardingHome = ({
             </div>
           ) : learningStages.length === 0 ? (
             <div className="mt-6 rounded-[24px] border border-[#e3ebff] bg-[#f8fbff] px-5 py-4 text-sm font-semibold text-[#53698f]">
-              Belum ada materi onboarding customer aktif.
+              {learningCopy.emptyStages}
             </div>
           ) : (
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -950,10 +1073,10 @@ const CustomerOnboardingHome = ({
                       </div>
                       <div className="flex flex-col justify-center">
                         <h3 className="text-sm font-extrabold leading-6 text-[#07103d]">
-                          {stage.stageName}
+                          {getLearningModeText(stage.stageName, learningMode)}
                         </h3>
                         <p className="mt-3 text-xs leading-6 text-[#53698f]">
-                          {getStageDescription(stage)}
+                          {getStageDescription(stage, learningMode)}
                         </p>
                       </div>
                     </div>
@@ -961,8 +1084,8 @@ const CustomerOnboardingHome = ({
                     <div className="mt-4 flex items-center gap-3">
                       <span className="rounded-full bg-[#eef4ff] px-2.5 py-1 text-[10px] font-bold text-[#2458f2]">
                         {materialCount > 0
-                          ? `${materialCount} Materi`
-                          : "Belum ada materi"}
+                          ? `${materialCount} ${learningCopy.unit}`
+                          : `Belum ada ${learningCopy.emptyUnit}`}
                       </span>
                       <span className="hidden rounded-full bg-[#f7faff] px-2.5 py-1 text-[10px] font-bold text-[#60739a] sm:inline-flex">
                         {fileCount} File
@@ -979,7 +1102,10 @@ const CustomerOnboardingHome = ({
                             ? `bg-gradient-to-br ${visual.tone} text-white shadow-[0_12px_24px_-16px_rgba(37,99,235,0.75)]`
                             : "bg-[#eef4ff] text-[#9aacce]"
                         } transition group-hover:scale-105`}
-                        aria-label={`Lihat detail ${stage.stageName}`}
+                        aria-label={`Lihat detail ${getLearningModeText(
+                          stage.stageName,
+                          learningMode
+                        )}`}
                       >
                         <i className="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                       </span>
@@ -1003,18 +1129,18 @@ const CustomerOnboardingHome = ({
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#7e65e8]">
-                    Detail Materi
+                    {learningCopy.detailEyebrow}
                   </p>
                   <h3 className="mt-2 text-2xl font-extrabold text-[#07103d]">
-                    {selectedStage.stageName}
+                    {getLearningModeText(selectedStage.stageName, learningMode)}
                   </h3>
                   <p className="mt-2 max-w-3xl text-sm leading-7 text-[#53698f]">
-                    {getStageDescription(selectedStage)}
+                    {getStageDescription(selectedStage, learningMode)}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full bg-[#eef4ff] px-3 py-2 text-xs font-extrabold text-[#2458f2]">
-                    {selectedStage.materialCount} Materi
+                    {selectedStage.materialCount} {learningCopy.unit}
                   </span>
                   <span className="rounded-full bg-[#f5f8ff] px-3 py-2 text-xs font-extrabold text-[#60739a]">
                     {getStageFileCount(selectedStage)} File
@@ -1029,7 +1155,7 @@ const CustomerOnboardingHome = ({
 
               {selectedStage.materials.length === 0 ? (
                 <div className="mt-5 rounded-[22px] border border-[#e3ebff] bg-[#f8fbff] px-5 py-4 text-sm font-semibold text-[#53698f]">
-                  Tahap ini belum punya materi aktif.
+                  {learningCopy.emptyStage}
                 </div>
               ) : (
                 <div className="mt-5 overflow-hidden rounded-[24px] border border-[#dfe8ff] bg-white">
@@ -1043,11 +1169,14 @@ const CustomerOnboardingHome = ({
                           {material.materialCode}
                         </p>
                         <h4 className="mt-2 text-base font-extrabold leading-6 text-[#07103d]">
-                          {material.materialTitle}
+                          {getLearningModeText(material.materialTitle, learningMode)}
                         </h4>
                         {material.materialDescription ? (
                           <p className="mt-2 max-w-3xl text-sm leading-7 text-[#53698f]">
-                            {material.materialDescription}
+                            {getLearningModeText(
+                              material.materialDescription,
+                              learningMode
+                            )}
                           </p>
                         ) : null}
                       </div>
@@ -1066,7 +1195,7 @@ const CustomerOnboardingHome = ({
                       <div className="lg:col-span-2">
                         {material.files.length === 0 ? (
                           <div className="rounded-[18px] bg-[#f8fbff] px-4 py-3 text-sm font-semibold text-[#60739a]">
-                            Belum ada file di materi ini.
+                            {learningCopy.emptyFile}
                           </div>
                         ) : (
                           <div className="grid gap-3 xl:grid-cols-2">
@@ -1081,7 +1210,10 @@ const CustomerOnboardingHome = ({
                               >
                                 <div className="min-w-0">
                                   <p className="break-words text-sm font-extrabold leading-5 text-[#07103d]">
-                                    {file.title ?? material.materialTitle}
+                                    {getLearningModeText(
+                                      file.title ?? material.materialTitle,
+                                      learningMode
+                                    )}
                                   </p>
                                   <p className="mt-1 break-all text-xs font-semibold leading-5 text-[#60739a]">
                                     {file.fileName || file.url || "File materi"}
@@ -1119,7 +1251,8 @@ const CustomerOnboardingHome = ({
                                       href={getCustomerMaterialFileUrl(
                                         material,
                                         file,
-                                        "attachment"
+                                        "attachment",
+                                        getCustomerLearningProgramType(learningMode)
                                       )}
                                       className="inline-flex min-h-[38px] items-center gap-2 rounded-full border border-[#dbe7ff] bg-white px-4 text-xs font-extrabold text-[#2458f2] transition hover:border-[#96b4ff] hover:bg-[#f8fbff]"
                                     >
@@ -1152,14 +1285,22 @@ const CustomerOnboardingHome = ({
             <div className="flex flex-col gap-3 border-b border-[#e3ebff] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-[#7e65e8]">
-                  Preview Materi
+                  {learningCopy.previewEyebrow}
                 </p>
                 <h3 className="mt-1 truncate text-lg font-extrabold text-[#07103d]">
-                  {previewState.file.title ??
-                    previewState.material.materialTitle}
+                  {getLearningModeText(
+                    previewState.file.title ??
+                      previewState.material.materialTitle,
+                    learningMode
+                  )}
                 </h3>
                 <p className="mt-1 truncate text-xs font-semibold text-[#60739a]">
-                  {previewState.stage.stageName} - {previewState.material.materialTitle}
+                  {getLearningModeText(previewState.stage.stageName, learningMode)}
+                  {" - "}
+                  {getLearningModeText(
+                    previewState.material.materialTitle,
+                    learningMode
+                  )}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
@@ -1168,7 +1309,8 @@ const CustomerOnboardingHome = ({
                     href={getCustomerMaterialFileUrl(
                       previewState.material,
                       previewState.file,
-                      "attachment"
+                      "attachment",
+                      getCustomerLearningProgramType(learningMode)
                     )}
                     className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#dbe7ff] bg-white px-4 text-xs font-extrabold text-[#2458f2] transition hover:border-[#96b4ff] hover:bg-[#f8fbff]"
                   >
@@ -1192,7 +1334,11 @@ const CustomerOnboardingHome = ({
                 <div className="flex h-[58svh] min-h-[260px] items-center justify-center overflow-hidden rounded-[18px] bg-white sm:h-[70vh] sm:min-h-[420px] sm:rounded-[20px]">
                   <img
                     src={previewState.previewUrl}
-                    alt={previewState.file.title ?? previewState.material.materialTitle}
+                    alt={getLearningModeText(
+                      previewState.file.title ??
+                        previewState.material.materialTitle,
+                      learningMode
+                    )}
                     className="max-h-full max-w-full object-contain"
                   />
                 </div>
@@ -1208,7 +1354,11 @@ const CustomerOnboardingHome = ({
                     previewState.previewUrl,
                     previewState.file
                   )}
-                  title={previewState.file.title ?? previewState.material.materialTitle}
+                  title={getLearningModeText(
+                    previewState.file.title ??
+                      previewState.material.materialTitle,
+                    learningMode
+                  )}
                   className="h-[58svh] min-h-[260px] w-full rounded-[18px] border-0 bg-white sm:h-[70vh] sm:min-h-[420px] sm:rounded-[20px]"
                 />
               )}

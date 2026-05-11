@@ -5,6 +5,7 @@ import { apiFetch, getApiErrorMessage } from "../../../lib/api";
 
 type Stage = {
   onboardingStageTemplateId: string;
+  programType: string;
   stageOrder: number;
   stageCode: string;
   stageName: string;
@@ -30,6 +31,7 @@ type StageFormState =
       mode: "create";
       portal: Portal;
       stage: null;
+      programType: string;
       stageName: string;
       stageDescription: string;
       isActive: true;
@@ -45,6 +47,45 @@ type StageFormState =
 
 const panel =
   "rounded-[28px] border border-[#e6ebf1] bg-white shadow-[0_20px_50px_-40px_rgba(15,23,42,0.18)]";
+
+const PROGRAM_OPTIONS = [
+  { value: "ONBOARDING", label: "Onboarding" },
+  { value: "LEARNING", label: "LMS" },
+] as const;
+
+const CUSTOMER_PORTAL_KEY = "CUSTOMER";
+
+const getProgramLabel = (programType: string) =>
+  PROGRAM_OPTIONS.find((item) => item.value === programType)?.label ??
+  programType;
+
+const getProgramPillClass = (programType: string) =>
+  programType === "LEARNING"
+    ? "border-sky-200 bg-sky-50 text-sky-700"
+    : "border-violet-200 bg-violet-50 text-violet-700";
+
+const getStageProgramGroups = (stages: Stage[]) => {
+  const knownProgramValues = new Set<string>(
+    PROGRAM_OPTIONS.map((program) => program.value)
+  );
+  const orderedProgramTypes = [
+    ...PROGRAM_OPTIONS.map((program) => program.value),
+    ...Array.from(
+      new Set(
+        stages
+          .map((stage) => stage.programType)
+          .filter((programType) => !knownProgramValues.has(programType))
+      )
+    ).sort(),
+  ];
+
+  return orderedProgramTypes
+    .map((programType) => ({
+      programType,
+      stages: stages.filter((stage) => stage.programType === programType),
+    }))
+    .filter((group) => group.stages.length > 0);
+};
 
 const safeJson = async (res: Response) => {
   try {
@@ -86,6 +127,107 @@ const StageStatusPill = ({ active }: { active: boolean }) => (
   </span>
 );
 
+const StageProgramPill = ({ programType }: { programType: string }) => (
+  <span
+    className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${getProgramPillClass(
+      programType
+    )}`}
+  >
+    {getProgramLabel(programType)}
+  </span>
+);
+
+const StageCard = ({
+  stage,
+  showProgramPill,
+  onEdit,
+  onDelete,
+}: {
+  stage: Stage;
+  showProgramPill: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) => {
+  const canDelete = stage.progressCount === 0;
+
+  return (
+    <article
+      className={`rounded-[24px] border p-4 ${
+        stage.isActive
+          ? "border-[#ebeff4] bg-[linear-gradient(180deg,#fbfdff_0%,#f8fafc_100%)]"
+          : "border-slate-200 bg-slate-50"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+            Tahap {stage.stageOrder} / {stage.stageCode}
+          </p>
+          <h3 className="mt-2 text-lg font-semibold text-slate-900">
+            {stage.stageName}
+          </h3>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {showProgramPill ? <StageProgramPill programType={stage.programType} /> : null}
+          <StageStatusPill active={stage.isActive} />
+        </div>
+      </div>
+
+      <p className="mt-3 min-h-[3.5rem] text-sm leading-7 text-slate-600">
+        {stage.stageDescription ?? "Belum ada deskripsi tahap."}
+      </p>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="rounded-[16px] border border-white bg-white px-3 py-2">
+          <p className="text-[11px] font-semibold text-slate-400">Materi</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {stage.materialCount}
+          </p>
+        </div>
+        <div className="rounded-[16px] border border-white bg-white px-3 py-2">
+          <p className="text-[11px] font-semibold text-slate-400">Ujian</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {stage.examCount}
+          </p>
+        </div>
+        <div className="rounded-[16px] border border-white bg-white px-3 py-2">
+          <p className="text-[11px] font-semibold text-slate-400">Peserta</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {stage.progressCount}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+        >
+          Edit tahap
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={!canDelete}
+          className={`rounded-full border px-3 py-2 text-sm font-semibold ${
+            canDelete
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+          }`}
+        >
+          Hapus
+        </button>
+      </div>
+      {!canDelete ? (
+        <p className="mt-3 text-xs leading-6 text-slate-500">
+          Tahap sudah dipakai peserta, jadi tidak bisa dihapus atau dinonaktifkan.
+        </p>
+      ) : null}
+    </article>
+  );
+};
+
 export default function OnboardingAdministratorStagesPage() {
   const { showToast } = useToast();
   const [portals, setPortals] = useState<Portal[]>([]);
@@ -94,6 +236,7 @@ export default function OnboardingAdministratorStagesPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [portalFilter, setPortalFilter] = useState("ALL");
+  const [programFilter, setProgramFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState<StageFormState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -154,12 +297,18 @@ export default function OnboardingAdministratorStagesPage() {
     return portals
       .filter((portal) => portalFilter === "ALL" || portal.portalKey === portalFilter)
       .map((portal) => {
-        if (!term) {
-          return portal;
-        }
+        const stages = portal.stages.filter((stage) => {
+          if (programFilter !== "ALL" && stage.programType !== programFilter) {
+            return false;
+          }
 
-        const stages = portal.stages.filter((stage) =>
-          [
+          if (!term) {
+            return true;
+          }
+
+          return [
+            stage.programType,
+            getProgramLabel(stage.programType),
             stage.stageCode,
             stage.stageName,
             stage.stageDescription,
@@ -167,22 +316,23 @@ export default function OnboardingAdministratorStagesPage() {
             portal.portalKey,
           ]
             .filter(Boolean)
-            .some((value) => String(value).toLowerCase().includes(term))
-        );
+            .some((value) => String(value).toLowerCase().includes(term));
+        });
 
         return {
           ...portal,
           stages,
         };
       })
-      .filter((portal) => !term || portal.stages.length > 0);
-  }, [portalFilter, portals, search]);
+      .filter((portal) => portal.stages.length > 0 || (!term && programFilter === "ALL"));
+  }, [portalFilter, portals, programFilter, search]);
 
   const openCreateForm = (portal: Portal) => {
     setForm({
       mode: "create",
       portal,
       stage: null,
+      programType: "ONBOARDING",
       stageName: "",
       stageDescription: "",
       isActive: true,
@@ -217,6 +367,7 @@ export default function OnboardingAdministratorStagesPage() {
         form.mode === "create"
           ? {
               onboardingPortalTemplateId: form.portal.onboardingPortalTemplateId,
+              programType: form.programType,
               stageName,
               stageDescription: form.stageDescription.trim() || null,
             }
@@ -353,7 +504,7 @@ export default function OnboardingAdministratorStagesPage() {
         </section>
 
         <section className={`${panel} p-5 md:p-6`}>
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem_14rem]">
             <input
               type="search"
               value={search}
@@ -373,6 +524,18 @@ export default function OnboardingAdministratorStagesPage() {
                   value={portal.portalKey}
                 >
                   {portal.portalName}
+                </option>
+              ))}
+            </select>
+            <select
+              value={programFilter}
+              onChange={(event) => setProgramFilter(event.target.value)}
+              className="rounded-[18px] border border-[#d8e0e8] bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+            >
+              <option value="ALL">Semua program</option>
+              {PROGRAM_OPTIONS.map((program) => (
+                <option key={program.value} value={program.value}>
+                  {program.label}
                 </option>
               ))}
             </select>
@@ -417,100 +580,57 @@ export default function OnboardingAdministratorStagesPage() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-                {portal.stages.length === 0 ? (
-                  <div className="rounded-[22px] border border-dashed border-[#d9e0e8] bg-[#f8fafc] px-5 py-8 text-sm leading-7 text-slate-500 lg:col-span-2 xl:col-span-4">
-                    Portal ini belum punya tahap onboarding. Tekan Tambah tahap
-                    untuk membuat tahap pertama.
-                  </div>
-                ) : (
-                  portal.stages.map((stage) => {
-                    const canDelete = stage.progressCount === 0;
-
-                    return (
-                      <article
-                        key={stage.onboardingStageTemplateId}
-                        className={`rounded-[24px] border p-4 ${
-                          stage.isActive
-                            ? "border-[#ebeff4] bg-[linear-gradient(180deg,#fbfdff_0%,#f8fafc_100%)]"
-                            : "border-slate-200 bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                              Tahap {stage.stageOrder} / {stage.stageCode}
-                            </p>
-                            <h3 className="mt-2 text-lg font-semibold text-slate-900">
-                              {stage.stageName}
-                            </h3>
-                          </div>
-                          <StageStatusPill active={stage.isActive} />
+              {portal.stages.length === 0 ? (
+                <div className="mt-5 rounded-[22px] border border-dashed border-[#d9e0e8] bg-[#f8fafc] px-5 py-8 text-sm leading-7 text-slate-500">
+                  Portal ini belum punya tahap onboarding. Tekan Tambah tahap untuk
+                  membuat tahap pertama.
+                </div>
+              ) : portal.portalKey.toUpperCase() === CUSTOMER_PORTAL_KEY ? (
+                <div className="mt-5 space-y-5">
+                  {getStageProgramGroups(portal.stages).map((group) => (
+                    <section
+                      key={`${portal.onboardingPortalTemplateId}-${group.programType}`}
+                      className="rounded-[24px] border border-[#ebeff4] bg-[#fbfdff] p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf1f5] pb-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StageProgramPill programType={group.programType} />
+                          <span className="text-sm font-semibold text-slate-900">
+                            Program {getProgramLabel(group.programType)}
+                          </span>
                         </div>
-
-                        <p className="mt-3 min-h-[3.5rem] text-sm leading-7 text-slate-600">
-                          {stage.stageDescription ?? "Belum ada deskripsi tahap."}
-                        </p>
-
-                        <div className="mt-4 grid grid-cols-3 gap-2">
-                          <div className="rounded-[16px] border border-white bg-white px-3 py-2">
-                            <p className="text-[11px] font-semibold text-slate-400">
-                              Materi
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-900">
-                              {stage.materialCount}
-                            </p>
-                          </div>
-                          <div className="rounded-[16px] border border-white bg-white px-3 py-2">
-                            <p className="text-[11px] font-semibold text-slate-400">
-                              Ujian
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-900">
-                              {stage.examCount}
-                            </p>
-                          </div>
-                          <div className="rounded-[16px] border border-white bg-white px-3 py-2">
-                            <p className="text-[11px] font-semibold text-slate-400">
-                              Peserta
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-900">
-                              {stage.progressCount}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEditForm(portal, stage)}
-                            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                          >
-                            Edit tahap
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirm({ open: true, stage })}
-                            disabled={!canDelete}
-                            className={`rounded-full border px-3 py-2 text-sm font-semibold ${
-                              canDelete
-                                ? "border-rose-200 bg-rose-50 text-rose-700"
-                                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                            }`}
-                          >
-                            Hapus
-                          </button>
-                        </div>
-                        {!canDelete ? (
-                          <p className="mt-3 text-xs leading-6 text-slate-500">
-                            Tahap sudah dipakai peserta, jadi tidak bisa dihapus
-                            atau dinonaktifkan.
-                          </p>
-                        ) : null}
-                      </article>
-                    );
-                  })
-                )}
-              </div>
+                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500">
+                          {group.stages.filter((stage) => stage.isActive).length}/
+                          {group.stages.length} tahap aktif
+                        </span>
+                      </div>
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+                        {group.stages.map((stage) => (
+                          <StageCard
+                            key={stage.onboardingStageTemplateId}
+                            stage={stage}
+                            showProgramPill
+                            onEdit={() => openEditForm(portal, stage)}
+                            onDelete={() => setDeleteConfirm({ open: true, stage })}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+                  {portal.stages.map((stage) => (
+                    <StageCard
+                      key={stage.onboardingStageTemplateId}
+                      stage={stage}
+                      showProgramPill={false}
+                      onEdit={() => openEditForm(portal, stage)}
+                      onDelete={() => setDeleteConfirm({ open: true, stage })}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           ))
         )}
@@ -545,6 +665,40 @@ export default function OnboardingAdministratorStagesPage() {
               </div>
 
               <div className="mt-5 space-y-4">
+                {form.mode === "create" ? (
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-700">
+                      Program
+                    </span>
+                    <select
+                      value={form.programType}
+                      onChange={(event) =>
+                        setForm((current) =>
+                          current && current.mode === "create"
+                            ? { ...current, programType: event.target.value }
+                            : current
+                        )
+                      }
+                      className="mt-2 w-full rounded-[18px] border border-[#d8e0e8] bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                    >
+                      {PROGRAM_OPTIONS.map((program) => (
+                        <option key={program.value} value={program.value}>
+                          {program.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="rounded-[18px] border border-[#d8e0e8] bg-[#f8fafc] px-4 py-3">
+                    <span className="block text-sm font-semibold text-slate-700">
+                      Program
+                    </span>
+                    <span className="mt-1 block text-sm text-slate-600">
+                      {getProgramLabel(form.stage.programType)}
+                    </span>
+                  </div>
+                )}
+
                 <label className="block">
                   <span className="text-sm font-semibold text-slate-700">
                     Nama tahap
