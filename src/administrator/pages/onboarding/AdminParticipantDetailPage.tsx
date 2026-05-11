@@ -288,13 +288,32 @@ export default function AdminParticipantDetailPage({
   const lastActivityAt = getParticipantLastActivityAt(participant);
   const latestExamScore = getParticipantLatestExamScore(participant);
   const normalizedAssignmentStatus = participant.status.trim().toUpperCase();
+  const isDecisionTerminal =
+    normalizedAssignmentStatus === "COMPLETED" ||
+    normalizedAssignmentStatus === "PASSED" ||
+    normalizedAssignmentStatus === "PASSED_TO_LMS" ||
+    normalizedAssignmentStatus === "PASSED_OVERRIDE" ||
+    normalizedAssignmentStatus === "FAIL_FINAL" ||
+    normalizedAssignmentStatus === "CANCELLED";
   const canResolveFailedDecision =
-    enableDecisionActions && participant.status.trim().toUpperCase() === "FAILED";
+    enableDecisionActions && normalizedAssignmentStatus === "FAILED";
   const isTransferReview = normalizedAssignmentStatus === "TRANSFER_REVIEW";
-  const canFreezeForTransferReview =
+  const canDirectSbuSubDecision =
     enableDecisionActions && Boolean(participant.canFreezeForTransferReview);
+  const canFreezeForTransferReview =
+    canDirectSbuSubDecision && !isTransferReview && !isDecisionTerminal;
+  const canCancelTransferReview =
+    canDirectSbuSubDecision && isTransferReview;
+  const canFailInProgress =
+    canDirectSbuSubDecision &&
+    !isTransferReview &&
+    normalizedAssignmentStatus !== "FAILED" &&
+    !isDecisionTerminal;
   const shouldShowDecisionInput =
-    canResolveFailedDecision || canFreezeForTransferReview;
+    canResolveFailedDecision ||
+    canFreezeForTransferReview ||
+    canCancelTransferReview ||
+    canFailInProgress;
   const canShowDecisionActions =
     shouldShowDecisionInput || isTransferReview;
 
@@ -304,7 +323,17 @@ export default function AdminParticipantDetailPage({
       | "EXTEND"
       | "FAIL_FINAL"
       | "FREEZE_TRANSFER_REVIEW"
+      | "CANCEL_TRANSFER_REVIEW"
   ) => {
+    const trimmedDecisionNote = decisionNote.trim();
+    if (decisionType === "FAIL_FINAL" && !trimmedDecisionNote) {
+      showToast(
+        "Alasan wajib diisi kalau ingin menetapkan bawahan gagal onboarding final.",
+        "error"
+      );
+      return;
+    }
+
     if (submittingDecision) {
       return;
     }
@@ -312,16 +341,17 @@ export default function AdminParticipantDetailPage({
     setSubmittingDecision(decisionType);
 
     try {
+      const payload = {
+        onboardingAssignmentId: participant.onboardingAssignmentId,
+        decisionType,
+        nextDurationDay: decisionType === "EXTEND" ? 90 : null,
+        ...(trimmedDecisionNote ? { note: trimmedDecisionNote } : {}),
+      };
       const res = await apiFetch("/onboarding/decision", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          onboardingAssignmentId: participant.onboardingAssignmentId,
-          decisionType,
-          nextDurationDay: decisionType === "EXTEND" ? 90 : null,
-          note: decisionNote.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
 
@@ -336,6 +366,8 @@ export default function AdminParticipantDetailPage({
             ? "Keputusan tersimpan: onboarding diulang 3 bulan lagi."
             : decisionType === "FREEZE_TRANSFER_REVIEW"
               ? "Keputusan tersimpan: onboarding dibekukan untuk review HRD."
+              : decisionType === "CANCEL_TRANSFER_REVIEW"
+                ? "Keputusan tersimpan: status beku onboarding dibatalkan."
               : "Keputusan tersimpan: peserta gagal total.",
         "success"
       );
@@ -465,8 +497,8 @@ export default function AdminParticipantDetailPage({
               </h3>
               <p className={`mt-3 max-w-3xl text-sm leading-7 ${theme.bodyTextClass}`}>
                 {isTransferReview
-                  ? "Status ini menunggu HRD cek kebutuhan departemen lain dan interview manual. Jika cocok, HRD bisa melanjutkan onboarding lagi."
-                  : "Keputusan aktif ketika status assignment gagal otomatis atau ketika PIC SBU Sub langsung merasa peserta tidak cocok di departemennya. PIC bisa membekukan onboarding untuk review HRD."}
+                  ? "Status ini menunggu HRD cek kebutuhan departemen lain dan interview manual. PIC SBU Sub langsung bisa membatalkan beku jika onboarding boleh dilanjutkan."
+                  : "Keputusan aktif ketika status assignment gagal otomatis atau ketika PIC SBU Sub langsung merasa peserta tidak cocok di departemennya. PIC bisa membekukan atau menggagalkan onboarding dengan alasan."}
               </p>
             </div>
 
@@ -493,8 +525,9 @@ export default function AdminParticipantDetailPage({
                   value={decisionNote}
                   onChange={(event) => setDecisionNote(event.target.value)}
                   rows={4}
+                  maxLength={2000}
                   className={`mt-2 w-full rounded-[22px] border px-4 py-3 text-sm leading-7 outline-none transition ${theme.infoClass} ${theme.accentTextClass} focus:border-[#24306f] focus:ring-2 focus:ring-[#24306f]/10`}
-                  placeholder="Tulis alasan atau catatan singkat untuk keputusan ini."
+                  placeholder="Tulis alasan atau catatan singkat untuk keputusan ini. Wajib untuk keputusan gagal total atau gagalkan onboarding."
                 />
               </label>
 
@@ -519,7 +552,7 @@ export default function AdminParticipantDetailPage({
                     </button>
                     <button
                       type="button"
-                      disabled={Boolean(submittingDecision)}
+                      disabled={Boolean(submittingDecision) || !decisionNote.trim()}
                       onClick={() => submitOnboardingDecision("FAIL_FINAL")}
                       className="rounded-full border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -535,6 +568,26 @@ export default function AdminParticipantDetailPage({
                     className="rounded-full border border-indigo-200 bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Bekukan onboarding
+                  </button>
+                ) : null}
+                {canCancelTransferReview ? (
+                  <button
+                    type="button"
+                    disabled={Boolean(submittingDecision)}
+                    onClick={() => submitOnboardingDecision("CANCEL_TRANSFER_REVIEW")}
+                    className="rounded-full border border-sky-200 bg-sky-50 px-5 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Batal bekukan
+                  </button>
+                ) : null}
+                {canFailInProgress ? (
+                  <button
+                    type="button"
+                    disabled={Boolean(submittingDecision) || !decisionNote.trim()}
+                    onClick={() => submitOnboardingDecision("FAIL_FINAL")}
+                    className="rounded-full border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Gagalkan onboarding
                   </button>
                 ) : null}
               </div>

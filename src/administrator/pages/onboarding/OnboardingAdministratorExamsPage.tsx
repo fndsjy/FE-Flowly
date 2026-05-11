@@ -20,6 +20,7 @@ type ExamQuestion = {
 
 type Stage = {
   onboardingStageTemplateId: string;
+  programType: string;
   stageNumber: number;
   stageLabel: string;
   stageTitle: string;
@@ -52,6 +53,7 @@ type SourceExam = {
 type Assignment = {
   assignmentId: string;
   onboardingStageTemplateId: string;
+  programType: string;
   examId: number;
   examCode: string;
   examName: string;
@@ -81,6 +83,7 @@ type Assignment = {
 
 type PickerTarget = {
   onboardingStageTemplateId: string;
+  programType: string;
   portalKey: string;
   portalLabel: string;
   stageNumber: number;
@@ -89,7 +92,9 @@ type PickerTarget = {
 };
 
 type ViewerTarget = {
+  onboardingStageTemplateId: string;
   portalKey: string;
+  programType: string;
   stageNumber: number;
 };
 
@@ -123,6 +128,7 @@ type QuestionBankRow = ExamQuestion & {
 type SelectedQuestionRow = {
   assignmentId: string;
   onboardingStageTemplateId: string;
+  programType: string;
   examId: number;
   examCode: string;
   examName: string;
@@ -149,6 +155,13 @@ type ViewerExamSummary = {
 const pagePanelClass =
   "rounded-[28px] border border-[#e6ebf1] bg-white shadow-[0_20px_50px_-40px_rgba(15,23,42,0.18)]";
 const DEFAULT_STAGE_PASS_SCORE = 60;
+const PROGRAM_OPTIONS = [
+  { value: "ONBOARDING", label: "Onboarding" },
+  { value: "LEARNING", label: "LMS" },
+] as const;
+
+const getProgramLabel = (programType: string) =>
+  PROGRAM_OPTIONS.find((item) => item.value === programType)?.label ?? programType;
 
 const categoryLabel: Record<AdminOnboardingExamQuestionCategory, string> = {
   MCQ: "Pilihan ganda",
@@ -655,6 +668,7 @@ const OnboardingAdministratorExamsPage = () => {
   const [savingTypeOrderId, setSavingTypeOrderId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [portalFilter, setPortalFilter] = useState("ALL");
+  const [programFilter, setProgramFilter] = useState("ALL");
   const [searchInput, setSearchInput] = useState("");
   const [pickerSearchInput, setPickerSearchInput] = useState("");
   const [pickerQuestionSearchInput, setPickerQuestionSearchInput] = useState("");
@@ -786,6 +800,9 @@ const OnboardingAdministratorExamsPage = () => {
         if (left.portalOrderIndex !== right.portalOrderIndex) {
           return left.portalOrderIndex - right.portalOrderIndex;
         }
+        if (left.programType !== right.programType) {
+          return left.programType.localeCompare(right.programType);
+        }
         if (left.stageNumber !== right.stageNumber) {
           return left.stageNumber - right.stageNumber;
         }
@@ -802,7 +819,9 @@ const OnboardingAdministratorExamsPage = () => {
       sourceExams: sourceExams.length,
       questionBank: sourceQuestionRows.length,
       placedQuestions: assignments.reduce((sum, row) => sum + row.questionCount, 0),
-      activeSlots: new Set(assignments.map((row) => `${row.portalKey}-${row.stageNumber}`)).size,
+      activeSlots: new Set(
+        assignments.map((row) => `${row.portalKey}-${row.programType}-${row.stageNumber}`)
+      ).size,
     }),
     [assignments, sourceExams.length, sourceQuestionRows.length]
   );
@@ -814,6 +833,9 @@ const OnboardingAdministratorExamsPage = () => {
       if (portalFilter !== "ALL" && row.portalKey !== portalFilter) {
         return false;
       }
+      if (programFilter !== "ALL" && row.programType !== programFilter) {
+        return false;
+      }
 
       if (!term) {
         return true;
@@ -823,6 +845,8 @@ const OnboardingAdministratorExamsPage = () => {
         row.examCode,
         row.examName,
         row.examDescription,
+        row.programType,
+        getProgramLabel(row.programType),
         row.portalLabel,
         row.portalKey,
         row.stageLabel,
@@ -833,17 +857,25 @@ const OnboardingAdministratorExamsPage = () => {
 
       return searchableValues.some((value) => includesTerm(value, term));
     });
-  }, [deferredSearch, portalFilter, sortedAssignments]);
+  }, [deferredSearch, portalFilter, programFilter, sortedAssignments]);
 
   const displayedPortals = useMemo(() => {
-    const base = portals.filter((portal) => portalFilter === "ALL" || portal.portalKey === portalFilter);
+    const base = portals
+      .filter((portal) => portalFilter === "ALL" || portal.portalKey === portalFilter)
+      .map((portal) => ({
+        ...portal,
+        stages: portal.stages.filter(
+          (stage) => programFilter === "ALL" || stage.programType === programFilter
+        ),
+      }))
+      .filter((portal) => portal.stages.length > 0);
     if (!deferredSearch.trim()) {
       return base;
     }
 
     const matchedPortalKeys = new Set(filteredAssignments.map((row) => row.portalKey));
     return base.filter((portal) => matchedPortalKeys.has(portal.portalKey));
-  }, [deferredSearch, filteredAssignments, portalFilter, portals]);
+  }, [deferredSearch, filteredAssignments, portalFilter, portals, programFilter]);
 
   const pickerPortal =
     pickerTarget == null
@@ -862,7 +894,9 @@ const OnboardingAdministratorExamsPage = () => {
   const viewerStage =
     viewerTarget == null
       ? null
-      : viewerPortal?.stages.find((stage) => stage.stageNumber === viewerTarget.stageNumber) ?? null;
+      : viewerPortal?.stages.find(
+          (stage) => stage.onboardingStageTemplateId === viewerTarget.onboardingStageTemplateId
+        ) ?? null;
 
   const currentStageAssignments = useMemo(() => {
     if (!pickerTarget) {
@@ -1052,12 +1086,13 @@ const OnboardingAdministratorExamsPage = () => {
       .filter(
         (row) =>
           row.portalKey === viewerTarget.portalKey &&
-          row.stageNumber === viewerTarget.stageNumber
+          row.onboardingStageTemplateId === viewerTarget.onboardingStageTemplateId
       )
       .flatMap((row) =>
         row.questions.map((question) => ({
           assignmentId: row.assignmentId,
           onboardingStageTemplateId: row.onboardingStageTemplateId,
+          programType: row.programType,
           examId: row.examId,
           examCode: row.examCode,
           examName: row.examName,
@@ -1202,6 +1237,7 @@ const OnboardingAdministratorExamsPage = () => {
     }));
     setPickerTarget({
       onboardingStageTemplateId: stage.onboardingStageTemplateId,
+      programType: stage.programType,
       portalKey: portal.portalKey,
       portalLabel: portal.portalLabel,
       stageNumber: stage.stageNumber,
@@ -1230,8 +1266,13 @@ const OnboardingAdministratorExamsPage = () => {
     setPickerCategoryFilter("ALL");
   };
 
-  const openStageViewer = (portalKey: string, stageNumber: number) => {
-    setViewerTarget({ portalKey, stageNumber });
+  const openStageViewer = (portal: Portal, stage: Stage) => {
+    setViewerTarget({
+      onboardingStageTemplateId: stage.onboardingStageTemplateId,
+      portalKey: portal.portalKey,
+      programType: stage.programType,
+      stageNumber: stage.stageNumber,
+    });
     setViewerSearchInput("");
   };
 
@@ -1424,6 +1465,7 @@ const OnboardingAdministratorExamsPage = () => {
 
       showToast("Pilihan soal onboarding berhasil disimpan", "success");
       setPortalFilter(pickerTarget.portalKey);
+      setProgramFilter(pickerTarget.programType);
       closeQuestionPicker();
       await loadAssignments();
     } catch (error) {
@@ -1596,13 +1638,13 @@ const OnboardingAdministratorExamsPage = () => {
             <SummaryCard
               label="Tahap terisi"
               value={loadingAssignments ? "..." : `${summary.activeSlots}`}
-              helper="Jumlah kombinasi portal dan tahap yang sudah berisi soal onboarding."
+              helper="Jumlah kombinasi portal, program, dan tahap yang sudah berisi soal onboarding."
             />
           </div>
         </section>
 
         <section className={`${pagePanelClass} p-5 md:p-6`}>
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem_14rem]">
             <input
               type="search"
               value={searchInput}
@@ -1619,6 +1661,18 @@ const OnboardingAdministratorExamsPage = () => {
               {portals.map((portal) => (
                 <option key={portal.onboardingPortalTemplateId} value={portal.portalKey}>
                   {portal.portalLabel}
+                </option>
+              ))}
+            </select>
+            <select
+              value={programFilter}
+              onChange={(event) => setProgramFilter(event.target.value)}
+              className="rounded-[18px] border border-[#d8e0e8] bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+            >
+              <option value="ALL">Semua program</option>
+              {PROGRAM_OPTIONS.map((program) => (
+                <option key={program.value} value={program.value}>
+                  {program.label}
                 </option>
               ))}
             </select>
@@ -1702,7 +1756,7 @@ const OnboardingAdministratorExamsPage = () => {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                              Tahap onboarding
+                              Tahap {getProgramLabel(stage.programType)}
                             </p>
                             <h3 className="mt-2 text-lg font-semibold text-slate-900">
                               {stage.stageLabel}
@@ -1896,7 +1950,7 @@ const OnboardingAdministratorExamsPage = () => {
                             <div className="mt-4 flex flex-wrap gap-2">
                               <button
                                 type="button"
-                                onClick={() => openStageViewer(portal.portalKey, stage.stageNumber)}
+                                onClick={() => openStageViewer(portal, stage)}
                                 className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
                               >
                                 Lihat daftar soal ({stageQuestionCount})
@@ -1930,7 +1984,9 @@ const OnboardingAdministratorExamsPage = () => {
                     Daftar soal tahap
                   </p>
                   <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.05em] text-slate-900">
-                    {viewerPortal?.portalLabel ?? "Portal"} / {viewerStage?.stageLabel ?? "Tahap"}
+                    {viewerPortal?.portalLabel ?? "Portal"} /{" "}
+                    {viewerStage ? getProgramLabel(viewerStage.programType) : "Program"} /{" "}
+                    {viewerStage?.stageLabel ?? "Tahap"}
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
                     {viewerStage?.stageTitle ??
@@ -2089,7 +2145,9 @@ const OnboardingAdministratorExamsPage = () => {
                     Tambah soal onboarding
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
-                    {pickerPortal?.portalLabel ?? "Portal"} / {pickerStage?.stageLabel ?? "Tahap"}
+                    {pickerPortal?.portalLabel ?? "Portal"} /{" "}
+                    {pickerStage ? getProgramLabel(pickerStage.programType) : "Program"} /{" "}
+                    {pickerStage?.stageLabel ?? "Tahap"}
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-600">
                     {pickerStage?.stageTitle ??
@@ -2187,7 +2245,8 @@ const OnboardingAdministratorExamsPage = () => {
                               <p>
                                 Tahap tujuan:{" "}
                                 <span className="font-semibold text-slate-900">
-                                  {pickerTarget.portalLabel} / {pickerTarget.stageLabel}
+                                  {pickerTarget.portalLabel} / {getProgramLabel(pickerTarget.programType)} /{" "}
+                                  {pickerTarget.stageLabel}
                                 </span>
                               </p>
                               <p>
@@ -2329,6 +2388,9 @@ const OnboardingAdministratorExamsPage = () => {
                 <div className="flex flex-wrap gap-2 text-sm text-slate-500">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
                     Portal: {pickerPortal?.portalLabel ?? "-"}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
+                    Program: {getProgramLabel(pickerTarget.programType)}
                   </span>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
                     Tahap: {pickerTarget.stageLabel}
