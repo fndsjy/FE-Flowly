@@ -4,7 +4,8 @@ import restart from 'vite-plugin-restart';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiProxyBase = {
-    target: env.VITE_BACKEND,
+    target: env.VITE_BACKEND ?? "http://10.0.1.155:5110",
+    // target: env.VITE_BACKEND,
     changeOrigin: true,
     secure: false,
   };
