@@ -26,7 +26,7 @@ const DeleteConfirmDialog = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
         <img
           src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
