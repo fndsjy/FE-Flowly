@@ -4,6 +4,7 @@ import { useToast } from "../../../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../../../lib/api";
 
 type AdminOnboardingExamQuestionCategory = "MCQ" | "ESSAY" | "TRUE_FALSE" | "POLLING";
+type AdminOnboardingExamTypeDurations = Record<AdminOnboardingExamQuestionCategory, number>;
 
 type ExamQuestion = {
   questionId: number;
@@ -78,6 +79,7 @@ type Assignment = {
   orderIndex: number;
   passScore: number | null;
   typeOrder: AdminOnboardingExamQuestionCategory[];
+  typeDurations: AdminOnboardingExamTypeDurations;
   assignmentNote: string | null;
 };
 
@@ -178,6 +180,12 @@ const categoryOrder: Record<AdminOnboardingExamQuestionCategory, number> = {
 };
 
 const onboardingQuestionCategories = ["MCQ", "ESSAY", "TRUE_FALSE", "POLLING"] as const;
+const defaultTypeDurations: AdminOnboardingExamTypeDurations = {
+  MCQ: 0,
+  ESSAY: 0,
+  TRUE_FALSE: 0,
+  POLLING: 0,
+};
 
 const safeJson = async (res: Response) => {
   try {
@@ -210,6 +218,31 @@ const getStageTypeOrder = (
       ?.typeOrder
   );
 
+const normalizeTypeDurations = (
+  value?: Partial<AdminOnboardingExamTypeDurations> | null
+): AdminOnboardingExamTypeDurations => ({
+  ...defaultTypeDurations,
+  ...(value ?? {}),
+});
+
+const getStageTypeDurations = (
+  rows: Array<Pick<Assignment, "typeDurations" | "orderIndex">>
+) =>
+  normalizeTypeDurations(
+    [...rows].sort((left, right) => left.orderIndex - right.orderIndex)[0]
+      ?.typeDurations
+  );
+
+const getActiveCategoriesFromQuestions = (
+  questions: Array<Pick<ExamQuestion, "category">>
+) =>
+  Array.from(new Set(questions.map((question) => question.category))).sort(
+    (left, right) => categoryOrder[left] - categoryOrder[right]
+  );
+
+const getStageActiveCategories = (rows: Array<Pick<Assignment, "questions">>) =>
+  getActiveCategoriesFromQuestions(rows.flatMap((row) => row.questions));
+
 const parsePassScoreInput = (value: string) => {
   const normalized = value.trim();
   if (!normalized) {
@@ -218,6 +251,16 @@ const parsePassScoreInput = (value: string) => {
 
   const parsed = Number(normalized);
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 100 ? parsed : null;
+};
+
+const parseDurationInput = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized) {
+    return 0;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 1440 ? parsed : null;
 };
 
 const formatDateTime = (value?: string | null) =>
@@ -666,6 +709,7 @@ const OnboardingAdministratorExamsPage = () => {
   const [saving, setSaving] = useState(false);
   const [savingPassScoreId, setSavingPassScoreId] = useState<string | null>(null);
   const [savingTypeOrderId, setSavingTypeOrderId] = useState<string | null>(null);
+  const [savingTypeDurationId, setSavingTypeDurationId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [portalFilter, setPortalFilter] = useState("ALL");
   const [programFilter, setProgramFilter] = useState("ALL");
@@ -680,6 +724,9 @@ const OnboardingAdministratorExamsPage = () => {
   const [stagePassScoreInputs, setStagePassScoreInputs] = useState<Record<string, string>>({});
   const [stageTypeOrderInputs, setStageTypeOrderInputs] = useState<
     Record<string, AdminOnboardingExamQuestionCategory[]>
+  >({});
+  const [stageTypeDurationInputs, setStageTypeDurationInputs] = useState<
+    Record<string, Partial<Record<AdminOnboardingExamQuestionCategory, string>>>
   >({});
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [viewerTarget, setViewerTarget] = useState<ViewerTarget | null>(null);
@@ -1077,6 +1124,28 @@ const OnboardingAdministratorExamsPage = () => {
     [allSelectableFilteredIds, selectedQuestionIds]
   );
 
+  const pickerActiveDurationCategories = useMemo(() => {
+    if (!pickerTarget) {
+      return [];
+    }
+
+    const selectedRows = sourceQuestionRows.filter(
+      (row) =>
+        selectedQuestionIds.includes(row.questionId) && !duplicateQuestionIds.has(row.questionId)
+    );
+
+    return getActiveCategoriesFromQuestions([
+      ...currentStageAssignments.flatMap((row) => row.questions),
+      ...selectedRows,
+    ]);
+  }, [
+    currentStageAssignments,
+    duplicateQuestionIds,
+    pickerTarget,
+    selectedQuestionIds,
+    sourceQuestionRows,
+  ]);
+
   const viewerStageRows = useMemo<SelectedQuestionRow[]>(() => {
     if (!viewerTarget) {
       return [];
@@ -1190,6 +1259,28 @@ const OnboardingAdministratorExamsPage = () => {
     stageRows: Array<Pick<Assignment, "typeOrder" | "orderIndex">>
   ) => stageTypeOrderInputs[stageTemplateId] ?? getStageTypeOrder(stageRows);
 
+  const getStageTypeDurationInput = (
+    stageTemplateId: string,
+    category: AdminOnboardingExamQuestionCategory,
+    stageRows: Array<Pick<Assignment, "typeDurations" | "orderIndex">>
+  ) =>
+    stageTypeDurationInputs[stageTemplateId]?.[category] ??
+    String(getStageTypeDurations(stageRows)[category] ?? 0);
+
+  const updateStageTypeDurationInput = (
+    stageTemplateId: string,
+    category: AdminOnboardingExamQuestionCategory,
+    value: string
+  ) => {
+    setStageTypeDurationInputs((current) => ({
+      ...current,
+      [stageTemplateId]: {
+        ...(current[stageTemplateId] ?? {}),
+        [category]: value,
+      },
+    }));
+  };
+
   const moveStageTypeOrder = (
     stageTemplateId: string,
     stageRows: Array<Pick<Assignment, "typeOrder" | "orderIndex">>,
@@ -1223,6 +1314,32 @@ const OnboardingAdministratorExamsPage = () => {
     return parsed ?? null;
   };
 
+  const getStageTypeDurationsForSubmit = (
+    stageTemplateId: string,
+    activeCategories: AdminOnboardingExamQuestionCategory[],
+    stageRows: Array<Pick<Assignment, "typeDurations" | "orderIndex">>
+  ) => {
+    const activeCategorySet = new Set(activeCategories);
+    const payload = { ...defaultTypeDurations };
+
+    for (const category of onboardingQuestionCategories) {
+      const parsed = parseDurationInput(
+        getStageTypeDurationInput(stageTemplateId, category, stageRows)
+      );
+      if (parsed === null) {
+        return null;
+      }
+
+      if (activeCategorySet.has(category) && parsed <= 0) {
+        return null;
+      }
+
+      payload[category] = activeCategorySet.has(category) ? parsed : 0;
+    }
+
+    return payload;
+  };
+
   const openQuestionPicker = (portal: Portal, stage: Stage) => {
     const stageRows = sortedAssignments.filter(
       (row) =>
@@ -1235,6 +1352,22 @@ const OnboardingAdministratorExamsPage = () => {
       [stage.onboardingStageTemplateId]:
         current[stage.onboardingStageTemplateId] ?? String(getStagePassScore(stageRows)),
     }));
+    setStageTypeDurationInputs((current) => {
+      if (current[stage.onboardingStageTemplateId]) {
+        return current;
+      }
+
+      const stageDurations = getStageTypeDurations(stageRows);
+      return {
+        ...current,
+        [stage.onboardingStageTemplateId]: {
+          MCQ: String(stageDurations.MCQ),
+          ESSAY: String(stageDurations.ESSAY),
+          TRUE_FALSE: String(stageDurations.TRUE_FALSE),
+          POLLING: String(stageDurations.POLLING),
+        },
+      };
+    });
     setPickerTarget({
       onboardingStageTemplateId: stage.onboardingStageTemplateId,
       programType: stage.programType,
@@ -1373,6 +1506,63 @@ const OnboardingAdministratorExamsPage = () => {
     }
   };
 
+  const handleSaveStageTypeDurations = async (
+    stageTemplateId: string,
+    stageRows: Assignment[]
+  ) => {
+    const activeCategories = getStageActiveCategories(stageRows);
+    if (activeCategories.length === 0) {
+      showToast("Durasi tipe soal akan muncul setelah soal ditambahkan", "error");
+      return;
+    }
+
+    const typeDurations = getStageTypeDurationsForSubmit(
+      stageTemplateId,
+      activeCategories,
+      stageRows
+    );
+    if (typeDurations === null) {
+      showToast("Durasi tipe soal aktif harus angka 1 sampai 1440 menit", "error");
+      return;
+    }
+
+    setSavingTypeDurationId(stageTemplateId);
+    try {
+      const res = await apiFetch("/onboarding-exam/stage-type-durations", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          onboardingStageTemplateId: stageTemplateId,
+          typeDurations,
+        }),
+      });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(json, "Gagal menyimpan durasi tipe soal"));
+      }
+
+      setStageTypeDurationInputs((current) => ({
+        ...current,
+        [stageTemplateId]: Object.fromEntries(
+          onboardingQuestionCategories.map((category) => [
+            category,
+            String(typeDurations[category]),
+          ])
+        ) as Record<AdminOnboardingExamQuestionCategory, string>,
+      }));
+      showToast("Durasi tipe soal tahap berhasil disimpan", "success");
+      await loadAssignments();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Gagal menyimpan durasi tipe soal",
+        "error"
+      );
+    } finally {
+      setSavingTypeDurationId(null);
+    }
+  };
+
   const toggleQuestionSelection = (questionId: number) => {
     if (duplicateQuestionIds.has(questionId)) {
       return;
@@ -1424,6 +1614,20 @@ const OnboardingAdministratorExamsPage = () => {
       return;
     }
 
+    const activeCategories = getActiveCategoriesFromQuestions([
+      ...currentStageAssignments.flatMap((row) => row.questions),
+      ...selectedRows,
+    ]);
+    const stageTypeDurations = getStageTypeDurationsForSubmit(
+      pickerTarget.onboardingStageTemplateId,
+      activeCategories,
+      currentStageAssignments
+    );
+    if (stageTypeDurations === null) {
+      showToast("Durasi tipe soal aktif harus angka 1 sampai 1440 menit", "error");
+      return;
+    }
+
     const groupedByExam = new Map<number, QuestionBankRow[]>();
     for (const row of selectedRows) {
       const existingRows = groupedByExam.get(row.examId) ?? [];
@@ -1454,6 +1658,7 @@ const OnboardingAdministratorExamsPage = () => {
               passScore: stagePassScore,
               selectedQuestionIds: nextSelectedIds,
               typeOrder: stageTypeOrder,
+              typeDurations: stageTypeDurations,
             }),
           });
           const json = await safeJson(res);
@@ -1731,6 +1936,19 @@ const OnboardingAdministratorExamsPage = () => {
                     const stageCategories = new Set(
                       stageRows.flatMap((row) => row.questions.map((question) => question.category))
                     ).size;
+                    const stageActiveCategories = getStageActiveCategories(stageRows);
+                    const stageTypeDurations = getStageTypeDurationsForSubmit(
+                      stage.onboardingStageTemplateId,
+                      stageActiveCategories,
+                      stageRows
+                    );
+                    const stageTotalDuration =
+                      stageTypeDurations == null
+                        ? 0
+                        : stageActiveCategories.reduce(
+                            (sum, category) => sum + stageTypeDurations[category],
+                            0
+                          );
                     const latestExamNames = Array.from(
                       new Set(stageRows.map((row) => row.examName))
                     ).slice(0, 3);
@@ -1747,6 +1965,8 @@ const OnboardingAdministratorExamsPage = () => {
                     );
                     const isSavingStageTypeOrder =
                       savingTypeOrderId === stage.onboardingStageTemplateId;
+                    const isSavingStageTypeDuration =
+                      savingTypeDurationId === stage.onboardingStageTemplateId;
 
                     return (
                       <section
@@ -1786,6 +2006,11 @@ const OnboardingAdministratorExamsPage = () => {
                           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
                             Pass {stagePassScore ?? DEFAULT_STAGE_PASS_SCORE}
                           </span>
+                          {stageActiveCategories.length > 0 ? (
+                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                              Durasi {stageTotalDuration} menit
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="mt-4 rounded-[18px] border border-[#ebeff4] bg-white p-4">
@@ -1828,6 +2053,76 @@ const OnboardingAdministratorExamsPage = () => {
                           <p className="mt-2 text-xs leading-6 text-slate-500">
                             Satu tahap hanya memakai satu pass score untuk semua master ujian.
                           </p>
+                        </div>
+
+                        <div className="mt-4 rounded-[18px] border border-[#ebeff4] bg-white p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                Durasi per tipe soal
+                              </p>
+                              <p className="mt-2 text-xs leading-6 text-slate-500">
+                                Durasi sesi dijumlah dari tipe soal aktif, bukan dari durasi per butir soal.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSaveStageTypeDurations(
+                                  stage.onboardingStageTemplateId,
+                                  stageRows
+                                )
+                              }
+                              disabled={isSavingStageTypeDuration || stageActiveCategories.length === 0}
+                              className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                                isSavingStageTypeDuration || stageActiveCategories.length === 0
+                                  ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+                                  : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
+                              }`}
+                            >
+                              {isSavingStageTypeDuration ? "Simpan..." : "Simpan"}
+                            </button>
+                          </div>
+                          {stageActiveCategories.length === 0 ? (
+                            <p className="mt-3 rounded-[14px] border border-dashed border-[#d9e0e8] bg-[#f8fafc] px-3 py-3 text-xs leading-6 text-slate-500">
+                              Pilih soal dulu, lalu isi durasi untuk tipe soal yang muncul di tahap ini.
+                            </p>
+                          ) : (
+                            <div className="mt-3 space-y-2">
+                              {stageActiveCategories.map((category) => (
+                                <label
+                                  key={`${stage.onboardingStageTemplateId}-${category}-duration`}
+                                  className="flex items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2"
+                                >
+                                  <span className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    {categoryLabel[category]}
+                                  </span>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={1440}
+                                      step={1}
+                                      value={getStageTypeDurationInput(
+                                        stage.onboardingStageTemplateId,
+                                        category,
+                                        stageRows
+                                      )}
+                                      onChange={(event) =>
+                                        updateStageTypeDurationInput(
+                                          stage.onboardingStageTemplateId,
+                                          category,
+                                          event.target.value
+                                        )
+                                      }
+                                      className="w-24 rounded-[12px] border border-[#d8e0e8] bg-white px-3 py-2 text-right text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-400"
+                                    />
+                                    <span className="text-xs font-semibold text-slate-500">menit</span>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <div className="mt-4 rounded-[18px] border border-[#ebeff4] bg-white p-4">
@@ -2421,6 +2716,48 @@ const OnboardingAdministratorExamsPage = () => {
                       className="mt-2 w-full rounded-[16px] border border-[#d8e0e8] bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-700 outline-none transition focus:border-slate-400"
                     />
                   </label>
+
+                  {pickerActiveDurationCategories.length > 0 ? (
+                    <div className="min-w-[18rem] rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Durasi per tipe
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {pickerActiveDurationCategories.map((category) => (
+                          <label
+                            key={`picker-${category}-duration`}
+                            className="flex items-center justify-between gap-3 rounded-[12px] border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-500"
+                          >
+                            <span className="min-w-0 uppercase tracking-[0.12em]">
+                              {categoryLabel[category]}
+                            </span>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={1440}
+                                step={1}
+                                value={getStageTypeDurationInput(
+                                  pickerTarget.onboardingStageTemplateId,
+                                  category,
+                                  currentStageAssignments
+                                )}
+                                onChange={(event) =>
+                                  updateStageTypeDurationInput(
+                                    pickerTarget.onboardingStageTemplateId,
+                                    category,
+                                    event.target.value
+                                  )
+                                }
+                                className="w-24 rounded-[12px] border border-[#d8e0e8] bg-white px-3 py-2 text-right text-sm font-semibold normal-case tracking-normal text-slate-700 outline-none transition focus:border-slate-400"
+                              />
+                              <span>menit</span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <button
                     type="button"

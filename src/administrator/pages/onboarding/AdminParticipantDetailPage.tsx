@@ -295,8 +295,6 @@ export default function AdminParticipantDetailPage({
     normalizedAssignmentStatus === "PASSED_OVERRIDE" ||
     normalizedAssignmentStatus === "FAIL_FINAL" ||
     normalizedAssignmentStatus === "CANCELLED";
-  const canResolveFailedDecision =
-    enableDecisionActions && normalizedAssignmentStatus === "FAILED";
   const isTransferReview = normalizedAssignmentStatus === "TRANSFER_REVIEW";
   const canDirectSbuSubDecision =
     enableDecisionActions && Boolean(participant.canFreezeForTransferReview);
@@ -304,16 +302,9 @@ export default function AdminParticipantDetailPage({
     canDirectSbuSubDecision && !isTransferReview && !isDecisionTerminal;
   const canCancelTransferReview =
     canDirectSbuSubDecision && isTransferReview;
-  const canFailInProgress =
-    canDirectSbuSubDecision &&
-    !isTransferReview &&
-    normalizedAssignmentStatus !== "FAILED" &&
-    !isDecisionTerminal;
   const shouldShowDecisionInput =
-    canResolveFailedDecision ||
     canFreezeForTransferReview ||
-    canCancelTransferReview ||
-    canFailInProgress;
+    canCancelTransferReview;
   const canShowDecisionActions =
     shouldShowDecisionInput || isTransferReview;
 
@@ -326,6 +317,14 @@ export default function AdminParticipantDetailPage({
       | "CANCEL_TRANSFER_REVIEW"
   ) => {
     const trimmedDecisionNote = decisionNote.trim();
+    if (decisionType === "FREEZE_TRANSFER_REVIEW" && !trimmedDecisionNote) {
+      showToast(
+        "Alasan wajib diisi sebelum membekukan onboarding.",
+        "error"
+      );
+      return;
+    }
+
     if (decisionType === "FAIL_FINAL" && !trimmedDecisionNote) {
       showToast(
         "Alasan wajib diisi kalau ingin menetapkan bawahan gagal onboarding final.",
@@ -486,7 +485,7 @@ export default function AdminParticipantDetailPage({
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${theme.labelClass}`}>
-                Keputusan PIC
+                Keputusan PIC SBU Sub
               </p>
               <h3 className={`mt-3 text-[32px] font-semibold tracking-[-0.06em] ${theme.accentTextClass}`}>
                 {isTransferReview
@@ -498,7 +497,7 @@ export default function AdminParticipantDetailPage({
               <p className={`mt-3 max-w-3xl text-sm leading-7 ${theme.bodyTextClass}`}>
                 {isTransferReview
                   ? "Status ini menunggu HRD cek kebutuhan departemen lain dan interview manual. PIC SBU Sub langsung bisa membatalkan beku jika onboarding boleh dilanjutkan."
-                  : "Keputusan aktif ketika status assignment gagal otomatis atau ketika PIC SBU Sub langsung merasa peserta tidak cocok di departemennya. PIC bisa membekukan atau menggagalkan onboarding dengan alasan."}
+                  : "PIC SBU Sub langsung bisa membekukan onboarding bila peserta perlu review kecocokan departemen. Keputusan gagal final dilakukan oleh HRD dari menu karyawan."}
               </p>
             </div>
 
@@ -520,6 +519,11 @@ export default function AdminParticipantDetailPage({
               <label className="block">
                 <span className={`text-sm font-semibold ${theme.accentTextClass}`}>
                   Catatan keputusan
+                  {canFreezeForTransferReview ? (
+                    <span className="ml-2 text-xs font-semibold text-rose-600">
+                      Wajib untuk bekukan
+                    </span>
+                  ) : null}
                 </span>
                 <textarea
                   value={decisionNote}
@@ -527,43 +531,19 @@ export default function AdminParticipantDetailPage({
                   rows={4}
                   maxLength={2000}
                   className={`mt-2 w-full rounded-[22px] border px-4 py-3 text-sm leading-7 outline-none transition ${theme.infoClass} ${theme.accentTextClass} focus:border-[#24306f] focus:ring-2 focus:ring-[#24306f]/10`}
-                  placeholder="Tulis alasan atau catatan singkat untuk keputusan ini. Wajib untuk keputusan gagal total atau gagalkan onboarding."
+                  placeholder={
+                    canFreezeForTransferReview
+                      ? "Tulis alasan kenapa onboarding perlu dibekukan."
+                      : "Tulis alasan atau catatan singkat untuk keputusan ini."
+                  }
                 />
               </label>
 
               <div className="flex flex-wrap gap-3">
-                {canResolveFailedDecision ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={Boolean(submittingDecision)}
-                      onClick={() => submitOnboardingDecision("PASS_OVERRIDE")}
-                      className="rounded-full border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Lulus OMS
-                    </button>
-                    <button
-                      type="button"
-                      disabled={Boolean(submittingDecision)}
-                      onClick={() => submitOnboardingDecision("EXTEND")}
-                      className="rounded-full border border-amber-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Ulang OMS 3 bulan lagi
-                    </button>
-                    <button
-                      type="button"
-                      disabled={Boolean(submittingDecision) || !decisionNote.trim()}
-                      onClick={() => submitOnboardingDecision("FAIL_FINAL")}
-                      className="rounded-full border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Gagal total
-                    </button>
-                  </>
-                ) : null}
                 {canFreezeForTransferReview ? (
                   <button
                     type="button"
-                    disabled={Boolean(submittingDecision)}
+                    disabled={Boolean(submittingDecision) || !decisionNote.trim()}
                     onClick={() => submitOnboardingDecision("FREEZE_TRANSFER_REVIEW")}
                     className="rounded-full border border-indigo-200 bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -578,16 +558,6 @@ export default function AdminParticipantDetailPage({
                     className="rounded-full border border-sky-200 bg-sky-50 px-5 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Batal bekukan
-                  </button>
-                ) : null}
-                {canFailInProgress ? (
-                  <button
-                    type="button"
-                    disabled={Boolean(submittingDecision) || !decisionNote.trim()}
-                    onClick={() => submitOnboardingDecision("FAIL_FINAL")}
-                    className="rounded-full border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Gagalkan onboarding
                   </button>
                 ) : null}
               </div>
