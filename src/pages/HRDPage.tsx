@@ -34,6 +34,7 @@ interface EmployeeData {
   isMemDate: string | null;
   Nik: string | null;
   ResignDate: string | null;
+  status: string | null;
   statusLMS: string;
   jobDesc: string | null;
   city: string | null;
@@ -95,7 +96,8 @@ type OnboardingDecisionType =
   | "PASS_OVERRIDE"
   | "EXTEND"
   | "FAIL_FINAL"
-  | "FREEZE_TRANSFER_REVIEW";
+  | "FREEZE_TRANSFER_REVIEW"
+  | "CANCEL_TRANSFER_REVIEW";
 
 const HRD_ONBOARDING_PORTAL_KEY = "EMPLOYEE";
 const EMPLOYEE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
@@ -419,6 +421,16 @@ const isEmployeeLmsActive = (statusLMS?: string | null) => {
   return !code || code === "A" || code === "0";
 };
 
+const isEmployeeMainStatusInactive = (status?: string | null) => {
+  const code = status?.trim().toUpperCase();
+  return code === "I" || code === "N";
+};
+
+const isEmployeeOperationalActive = (employee: EmployeeData) =>
+  !employee.ResignDate &&
+  !isEmployeeMainStatusInactive(employee.status) &&
+  isEmployeeLmsActive(employee.statusLMS);
+
 const validateForm = (formData: FormState, employees: EmployeeData[]) => {
   const requiredFields: Array<[keyof FormState, string]> = [
     ["CardNo", "Card number wajib diisi."],
@@ -538,6 +550,13 @@ const getEmployeeStatus = (employee: EmployeeData) => {
     };
   }
 
+  if (isEmployeeMainStatusInactive(employee.status)) {
+    return {
+      label: "Nonaktif",
+      className: "bg-rose-100 text-rose-700",
+    };
+  }
+
   if (isEmployeeLmsActive(employee.statusLMS)) {
     return {
       label: "Aktif",
@@ -546,7 +565,7 @@ const getEmployeeStatus = (employee: EmployeeData) => {
   }
 
   return {
-    label: `Status ${employee.statusLMS}`,
+    label: `Status ${employee.status ?? employee.statusLMS}`,
     className: "bg-amber-100 text-amber-700",
   };
 };
@@ -765,7 +784,7 @@ const HRDPage = () => {
   const canStartEmployeeOnboarding = (
     employee: EmployeeData,
     summary?: EmployeeOnboardingSummaryData | null
-  ) => !employee.ResignDate && (summary?.canStart ?? false);
+  ) => isEmployeeOperationalActive(employee) && (summary?.canStart ?? false);
 
   const getStartOnboardingDisabledReason = (
     employee: EmployeeData,
@@ -773,6 +792,14 @@ const HRDPage = () => {
   ) => {
     if (employee.ResignDate) {
       return "Karyawan sudah resign";
+    }
+
+    if (isEmployeeMainStatusInactive(employee.status)) {
+      return "Karyawan nonaktif";
+    }
+
+    if (!isEmployeeLmsActive(employee.statusLMS)) {
+      return "Status LMS karyawan belum aktif";
     }
 
     if (summary?.hasActiveAssignment) {
@@ -1031,7 +1058,7 @@ const HRDPage = () => {
 
   const totalEmployees = employees.length;
   const activeEmployees = employees.filter(
-    (employee) => !employee.ResignDate && isEmployeeLmsActive(employee.statusLMS)
+    (employee) => isEmployeeOperationalActive(employee)
   ).length;
   const resignedEmployees = employees.filter(
     (employee) => Boolean(employee.ResignDate)
@@ -1511,6 +1538,8 @@ const HRDPage = () => {
             ? "Masa onboarding ditambah 90 hari."
             : decisionType === "FREEZE_TRANSFER_REVIEW"
               ? "Onboarding dibekukan untuk review HRD."
+              : decisionType === "CANCEL_TRANSFER_REVIEW"
+                ? "Status beku onboarding dibatalkan."
               : "Onboarding ditetapkan gagal final.";
       showToast(label, "success");
       setDecisionTarget({
@@ -2764,18 +2793,22 @@ const HRDPage = () => {
                 </button>
               ) : null}
               <button
-                onClick={() => submitOnboardingDecision("EXTEND")}
+                onClick={() =>
+                  submitOnboardingDecision(
+                    isTransferReviewDecision ? "CANCEL_TRANSFER_REVIEW" : "EXTEND"
+                  )
+                }
                 disabled={isSubmittingDecision}
                 className={`rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-left transition hover:bg-sky-100 ${
                   isSubmittingDecision ? "cursor-not-allowed opacity-60" : ""
                 }`}
               >
                 <span className="block text-sm font-semibold text-sky-700">
-                  {isTransferReviewDecision ? "Lanjutkan onboarding" : "Lanjut 3 bulan"}
+                  {isTransferReviewDecision ? "Batalkan beku" : "Lanjut 3 bulan"}
                 </span>
                 <span className="mt-2 block text-xs leading-5 text-sky-700/80">
                   {isTransferReviewDecision
-                    ? "Onboarding dibuka lagi dengan tenggat baru 90 hari."
+                    ? "Onboarding dibuka lagi setelah HRD selesai review departemen."
                     : "Tenggat baru dihitung 90 hari dari hari keputusan."}
                 </span>
               </button>

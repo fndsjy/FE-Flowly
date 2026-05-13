@@ -71,13 +71,6 @@ type CustomerLearningStagesApiResponse = {
   };
 };
 
-type CustomerMaterialPreviewState = {
-  stage: CustomerLearningStage;
-  material: CustomerLearningMaterial;
-  file: CustomerLearningMaterialFile;
-  previewUrl: string;
-};
-
 type CustomerMaterialFileDisposition = "inline" | "attachment";
 type CustomerLearningMode = "onboarding" | "lms";
 
@@ -86,6 +79,19 @@ const getCustomerLearningProgramType = (mode: CustomerLearningMode) =>
 
 const getPublicImageUrl = (path: string) =>
   `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
+const ONBOARDING_DOCUMENT_BASE_URL = String(
+  import.meta.env.VITE_ONBOARDING_DOCUMENT_BASE_URL ??
+    "https://lms.domas.co.id/uploads/materi/dokumen/"
+).trim();
+const OFFICE_VIEWER_BASE_URL =
+  "https://view.officeapps.live.com/op/view.aspx?src=";
+const OFFICE_FILE_EXTENSIONS = ["doc", "docx", "ppt", "pptx", "xls", "xlsx"];
+const PDF_VIEWER_HASH_PARAMS: Record<string, string> = {
+  toolbar: "0",
+  navpanes: "0",
+  scrollbar: "0",
+  view: "FitH",
+};
 
 const getCustomerRecord = (user: CustomerUserProfile | null) =>
   user?.customer ?? user?.customerData?.[0] ?? null;
@@ -577,6 +583,48 @@ const getFileExtension = (file: CustomerLearningMaterialFile) => {
   return match?.[1]?.toLowerCase() ?? "";
 };
 
+const isHttpUrl = (value: string | null | undefined) =>
+  /^https?:\/\//i.test(value ?? "");
+
+const toAbsoluteUrl = (value: string) => {
+  if (isHttpUrl(value)) {
+    return value;
+  }
+
+  try {
+    return new URL(value, window.location.origin).toString();
+  } catch {
+    return value;
+  }
+};
+
+const buildConfiguredDocumentUrl = (fileName: string) => {
+  if (!ONBOARDING_DOCUMENT_BASE_URL) {
+    return null;
+  }
+
+  return `${ONBOARDING_DOCUMENT_BASE_URL.replace(/\/+$/, "")}/${encodeURIComponent(
+    fileName
+  )}`;
+};
+
+const getDirectOfficeSourceUrl = (
+  file: CustomerLearningMaterialFile,
+  fallbackUrl: string
+) => {
+  const sourceUrl = file.url?.trim();
+  if (sourceUrl && isHttpUrl(sourceUrl)) {
+    return sourceUrl;
+  }
+
+  return buildConfiguredDocumentUrl(file.fileName) ?? toAbsoluteUrl(fallbackUrl);
+};
+
+const getOfficeViewerUrl = (
+  file: CustomerLearningMaterialFile,
+  fallbackUrl: string
+) => `${OFFICE_VIEWER_BASE_URL}${encodeURIComponent(getDirectOfficeSourceUrl(file, fallbackUrl))}`;
+
 const getPreviewKind = (file: CustomerLearningMaterialFile) => {
   const extension = getFileExtension(file);
   if (
@@ -594,21 +642,12 @@ const getPreviewKind = (file: CustomerLearningMaterialFile) => {
     return "video";
   }
 
-  if (
-    [
-      "pdf",
-      "doc",
-      "docx",
-      "ppt",
-      "pptx",
-      "xls",
-      "xlsx",
-      "odt",
-      "odp",
-      "ods",
-    ].includes(extension)
-  ) {
-    return "document";
+  if (extension === "pdf") {
+    return "pdf";
+  }
+
+  if (OFFICE_FILE_EXTENSIONS.includes(extension)) {
+    return "office";
   }
 
   return "download";
@@ -618,22 +657,25 @@ const getEmbeddedPreviewUrl = (
   previewUrl: string,
   file: CustomerLearningMaterialFile
 ) => {
-  if (getPreviewKind(file) !== "document") {
+  if (getPreviewKind(file) !== "pdf") {
     return previewUrl;
   }
 
   const [urlWithoutHash, rawHash = ""] = previewUrl.split("#");
   const hashParams = new URLSearchParams(rawHash);
-  hashParams.set("toolbar", "0");
-  hashParams.set("navpanes", "0");
-  hashParams.set("scrollbar", "0");
-  hashParams.set("view", "FitH");
+  Object.entries(PDF_VIEWER_HASH_PARAMS).forEach(([key, value]) => {
+    hashParams.set(key, value);
+  });
 
   return `${urlWithoutHash}#${hashParams.toString()}`;
 };
 
 const openPreviewInNewTab = (url: string) => {
-  const previewWindow = window.open(url, "_blank", "noopener,noreferrer");
+  const previewWindow = window.open(
+    toAbsoluteUrl(url),
+    "_blank",
+    "noopener,noreferrer"
+  );
   if (previewWindow) {
     previewWindow.opener = null;
   }
@@ -666,8 +708,6 @@ const CustomerOnboardingHome = ({
   const [learningLoading, setLearningLoading] = useState(true);
   const [learningError, setLearningError] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
-  const [previewState, setPreviewState] =
-    useState<CustomerMaterialPreviewState | null>(null);
   const [introReady, setIntroReady] = useState(false);
   const [learningMode, setLearningMode] =
     useState<CustomerLearningMode>("onboarding");
@@ -691,7 +731,6 @@ const CustomerOnboardingHome = ({
   ) => {
     setLearningMode(mode);
     setSelectedStageId(null);
-    setPreviewState(null);
 
     if (options?.scrollToSection) {
       window.setTimeout(() => {
@@ -837,12 +876,14 @@ const CustomerOnboardingHome = ({
     }
 
     const sourceImageUrl = file.url?.trim();
-    if (previewKind === "image" && sourceImageUrl) {
-      openPreviewInNewTab(sourceImageUrl);
-      return;
-    }
+    const resolvedPreviewUrl =
+      previewKind === "image" && sourceImageUrl && isHttpUrl(sourceImageUrl)
+        ? sourceImageUrl
+        : previewKind === "office"
+          ? getOfficeViewerUrl(file, previewUrl)
+          : getEmbeddedPreviewUrl(previewUrl, file);
 
-    openPreviewInNewTab(getEmbeddedPreviewUrl(previewUrl, file));
+    openPreviewInNewTab(resolvedPreviewUrl);
   };
 
   const introBaseClass =
@@ -1278,94 +1319,6 @@ const CustomerOnboardingHome = ({
           ) : null}
         </div>
       </section>
-
-      {previewState ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#06102f]/72 px-3 py-4 backdrop-blur-sm sm:items-center sm:px-4 sm:py-5">
-          <div className="flex max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-[22px] border border-white/20 bg-white shadow-[0_34px_88px_-44px_rgba(0,0,0,0.65)] sm:rounded-[28px]">
-            <div className="flex flex-col gap-3 border-b border-[#e3ebff] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-[#7e65e8]">
-                  {learningCopy.previewEyebrow}
-                </p>
-                <h3 className="mt-1 truncate text-lg font-extrabold text-[#07103d]">
-                  {getLearningModeText(
-                    previewState.file.title ??
-                      previewState.material.materialTitle,
-                    learningMode
-                  )}
-                </h3>
-                <p className="mt-1 truncate text-xs font-semibold text-[#60739a]">
-                  {getLearningModeText(previewState.stage.stageName, learningMode)}
-                  {" - "}
-                  {getLearningModeText(
-                    previewState.material.materialTitle,
-                    learningMode
-                  )}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                {isAdminView ? (
-                  <a
-                    href={getCustomerMaterialFileUrl(
-                      previewState.material,
-                      previewState.file,
-                      "attachment",
-                      getCustomerLearningProgramType(learningMode)
-                    )}
-                    className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#dbe7ff] bg-white px-4 text-xs font-extrabold text-[#2458f2] transition hover:border-[#96b4ff] hover:bg-[#f8fbff]"
-                  >
-                    <i className="fa-solid fa-download" aria-hidden="true"></i>
-                    Download Asli
-                  </a>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setPreviewState(null)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eef4ff] text-[#60739a] transition hover:bg-[#dfeaff] hover:text-[#07103d]"
-                  aria-label="Tutup preview"
-                >
-                  <i className="fa-solid fa-xmark" aria-hidden="true"></i>
-                </button>
-              </div>
-            </div>
-
-            <div className="min-h-[260px] flex-1 bg-[#edf4ff] p-2 sm:min-h-[420px] sm:p-3">
-              {getPreviewKind(previewState.file) === "image" ? (
-                <div className="flex h-[58svh] min-h-[260px] items-center justify-center overflow-hidden rounded-[18px] bg-white sm:h-[70vh] sm:min-h-[420px] sm:rounded-[20px]">
-                  <img
-                    src={previewState.previewUrl}
-                    alt={getLearningModeText(
-                      previewState.file.title ??
-                        previewState.material.materialTitle,
-                      learningMode
-                    )}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </div>
-              ) : getPreviewKind(previewState.file) === "video" ? (
-                <video
-                  src={previewState.previewUrl}
-                  controls
-                  className="h-[58svh] min-h-[260px] w-full rounded-[18px] bg-black sm:h-[70vh] sm:min-h-[420px] sm:rounded-[20px]"
-                />
-              ) : (
-                <iframe
-                  src={getEmbeddedPreviewUrl(
-                    previewState.previewUrl,
-                    previewState.file
-                  )}
-                  title={getLearningModeText(
-                    previewState.file.title ??
-                      previewState.material.materialTitle,
-                    learningMode
-                  )}
-                  className="h-[58svh] min-h-[260px] w-full rounded-[18px] border-0 bg-white sm:h-[70vh] sm:min-h-[420px] sm:rounded-[20px]"
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <footer className="relative z-20 px-5 pb-2 pt-2 text-center text-xs font-semibold leading-none text-[#60739a] sm:px-8">
         Copyright 2026 Domas. All rights reserved.
