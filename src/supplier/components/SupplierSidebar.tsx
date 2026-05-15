@@ -4,6 +4,8 @@ import {
   loadPortalSidebarData,
   type PortalSidebarItem,
 } from "../../lib/portal-sidebar";
+import DomasLogo from "../../components/atoms/DomasLogo";
+import SidebarMenuSkeleton from "../../components/organisms/SidebarMenuSkeleton";
 
 export type SupplierUserProfile = {
   userId: string;
@@ -89,6 +91,7 @@ const SupplierSidebar = ({
   onLogout,
 }: SupplierSidebarProps) => {
   const [menuItems, setMenuItems] = useState<SupplierSidebarItem[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [moduleRoutesByParent, setModuleRoutesByParent] = useState<Map<string, string[]>>(
     new Map()
   );
@@ -97,6 +100,7 @@ const SupplierSidebar = ({
 
   useEffect(() => {
     let isMounted = true;
+    setMenuLoading(true);
 
     loadPortalSidebarData({
       portalKey: "SUPPLIER",
@@ -117,6 +121,11 @@ const SupplierSidebar = ({
 
         setMenuItems([]);
         setModuleRoutesByParent(new Map());
+      })
+      .finally(() => {
+        if (isMounted) {
+          setMenuLoading(false);
+        }
       });
 
     return () => {
@@ -204,11 +213,7 @@ const SupplierSidebar = ({
             onClick={dismissMobileSidebar}
             className="mx-auto transition-transform hover:scale-105"
           >
-            <img
-              src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
-              alt="Logo Domas"
-              width={80}
-            />
+            <DomasLogo />
           </Link>
         )}
 
@@ -251,7 +256,10 @@ const SupplierSidebar = ({
           isDesktop ? "pl-2" : "px-2"
         }`}
       >
-        {visibleMenuItems.map((item) => {
+        {menuLoading ? (
+          <SidebarMenuSkeleton isOpen={isOpen} />
+        ) : (
+          visibleMenuItems.map((item) => {
           const active = isItemActive(item);
 
           return (
@@ -302,7 +310,8 @@ const SupplierSidebar = ({
               ) : null}
             </div>
           );
-        })}
+          })
+        )}
       </nav>
 
       <div className="absolute bottom-0 left-0 w-full border-t border-gray-700 py-2">

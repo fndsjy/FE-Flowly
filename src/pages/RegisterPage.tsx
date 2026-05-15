@@ -87,7 +87,8 @@ const RegisterPage = () => {
         {/* MIDDLE IMAGE */}
         <div className="flex justify-center">
           <img
-            src={`${import.meta.env.BASE_URL}images/register.png`}
+            src={`/images/register.png`}
+            // src={`${import.meta.env.BASE_URL}images/register.png`}
             alt="Register Illustration"
             className="w-80 drop-shadow-2xl animate-float"
           />

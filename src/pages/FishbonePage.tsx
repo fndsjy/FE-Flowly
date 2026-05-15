@@ -1,6 +1,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/organisms/Sidebar";
+import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
@@ -3015,41 +3016,19 @@ const FishbonePage = () => {
         </div>
       )}
 
-      {deleteConfirm.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-96">
-            <img
-              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
-              alt="Delete Confirmation"
-              className="w-80 mx-auto"
-            />
-            <h2 className="text-lg text-center font-semibold mt-4 mb-1">
-              Hapus <span className="text-rose-500">{deleteConfirm.label}</span>?
-            </h2>
-            <p className="text-gray-600 mb-4 text-center">
-              Data ini akan sulit dipulihkan.
-            </p>
-
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={() => setDeleteConfirm({ open: false, type: "", id: "", label: "" })}
-                className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg"
-              >
-                Batal
-              </button>
-              <button
-                disabled={isDeleting}
-                onClick={handleDelete}
-                className={`px-4 py-2 bg-rose-400 text-white rounded-lg ${
-                  isDeleting && "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                {isDeleting ? "Deleting..." : "Hapus"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{deleteConfirm.label}</span>?
+          </>
+        }
+        description="Data ini akan sulit dipulihkan."
+        onClose={() => setDeleteConfirm({ open: false, type: "", id: "", label: "" })}
+        onConfirm={handleDelete}
+        isLoading={isDeleting}
+        loadingLabel="Deleting..."
+      />
     </div>
   );
 };

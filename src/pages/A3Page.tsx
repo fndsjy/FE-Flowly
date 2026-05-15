@@ -5775,50 +5775,24 @@ const A3Page = () => {
           </div>
         </div>
       </div>
-      {attachmentDeleteConfirm.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-96">
-            <img
-              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
-              alt="Delete Confirmation"
-              className="w-80 mx-auto"
-            />
-            <h2 className="text-lg text-center font-semibold mt-4 mb-1">
-              Hapus{" "}
-              <span className="text-rose-500">
-                {attachmentDeleteConfirm.item?.caption ||
-                  attachmentDeleteConfirm.item?.fileName ||
-                  "attachment"}
-              </span>
-              ?
-            </h2>
-            <p className="text-gray-600 mb-4 text-center">
-              Data ini akan sulit dipulihkan
-            </p>
-              <div className="flex justify-center gap-3">
-                <button
-                  onClick={() =>
-                    setAttachmentDeleteConfirm({ open: false, item: null })
-                  }
-                  className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg"
-                >
-                  Batal
-                </button>
-                {canEditAttachments && (
-                  <button
-                    onClick={handleAttachmentDelete}
-                    disabled={attachmentDeleting}
-                    className={`px-4 py-2 bg-rose-400 text-white rounded-lg ${
-                      attachmentDeleting && "opacity-50 cursor-not-allowed"
-                    }`}
-                  >
-                    {attachmentDeleting ? "Deleting..." : "Hapus"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+      <DeleteConfirmDialog
+        open={attachmentDeleteConfirm.open}
+        title={
+          <>
+            Hapus{" "}
+            <span className="text-rose-500">
+              {attachmentDeleteConfirm.item?.caption ||
+                attachmentDeleteConfirm.item?.fileName ||
+                "attachment"}
+            </span>
+            ?
+          </>
+        }
+        onClose={() => setAttachmentDeleteConfirm({ open: false, item: null })}
+        onConfirm={handleAttachmentDelete}
+        isLoading={attachmentDeleting}
+        loadingLabel="Deleting..."
+      />
       <DeleteConfirmDialog
         open={fishboneDeleteConfirm.open}
         title={

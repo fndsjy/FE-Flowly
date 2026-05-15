@@ -131,6 +131,7 @@ export type OnboardingScenario = {
   trainingWindowMonths: number;
   startedAt: string;
   deadlineAt: string;
+  assignmentStatus?: string;
   overallStatus: OverallOnboardingStatus;
   statusSummary: string;
   mentorName: string;

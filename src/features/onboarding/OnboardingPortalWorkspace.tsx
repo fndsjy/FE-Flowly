@@ -311,6 +311,9 @@ const isOnboardingDecisionLocked = (scenario: OnboardingScenario) =>
   scenario.overallStatus === "failed_nonactive" ||
   scenario.stages.some((stage) => stage.status === "failed_window");
 
+const isTransferReviewLocked = (scenario: OnboardingScenario) =>
+  scenario.assignmentStatus?.trim().toUpperCase() === "TRANSFER_REVIEW";
+
 const shouldShowAssessmentFeatures = (scenario: OnboardingScenario) =>
   scenario.portalKey !== "CUSTOMER";
 
@@ -362,8 +365,11 @@ const PageShell = ({
     (deadlineTime - nowTime) / (1000 * 60 * 60 * 24)
   );
   const onboardingDecisionLocked = isOnboardingDecisionLocked(scenario);
-  const deadlineHelper = onboardingDecisionLocked
-    ? "Tenggat sudah lewat. Menunggu keputusan HRD."
+  const transferReviewLocked = isTransferReviewLocked(scenario);
+  const deadlineHelper = transferReviewLocked
+    ? "Onboarding sedang dibekukan. Deadline tetap mengikuti jadwal ini."
+    : onboardingDecisionLocked
+      ? "Tenggat sudah lewat. Menunggu keputusan HRD."
     : deadlineTime < nowTime
       ? `${Math.abs(deadlineDelta)} hari lewat deadline.`
       : deadlineDelta > 0
@@ -463,7 +469,9 @@ const PageShell = ({
       {onboardingDecisionLocked ? (
         <section className="rounded-[28px] border border-amber-200 bg-amber-50/90 p-5 shadow-[0_18px_48px_-38px_rgba(245,158,11,0.45)]">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-600">
-            Masa onboarding sudah berakhir
+            {transferReviewLocked
+              ? "Onboarding sedang dibekukan"
+              : "Masa onboarding sudah berakhir"}
           </p>
           <h2 className="mt-2 text-xl font-semibold text-amber-950">
             {showAssessmentFeatures
@@ -471,9 +479,13 @@ const PageShell = ({
               : "Tahapan customer tidak bisa diakses sementara."}
           </h2>
           <p className="mt-3 max-w-4xl text-sm leading-7 text-amber-900/85">
-            {showAssessmentFeatures
-              ? "Onboarding sudah melewati tenggat, sehingga proses belajar dikunci sampai HRD memberikan keputusan berikutnya. Silakan hubungi HRD untuk tindak lanjut. Riwayat ujian dan sertifikat tetap bisa dibuka dari tab di atas."
-              : "Onboarding customer sudah melewati tenggat, sehingga proses belajar dikunci sampai admin memberikan keputusan berikutnya."}
+            {transferReviewLocked
+              ? showAssessmentFeatures
+                ? "Onboarding sedang dibekukan untuk review HRD, sehingga proses belajar dikunci sementara. Deadline tetap mengikuti tanggal yang tertera; ini bukan status melewati tenggat. Silakan hubungi HRD untuk tindak lanjut. Riwayat ujian dan sertifikat tetap bisa dibuka dari tab di atas."
+                : "Onboarding customer sedang dibekukan untuk review admin, sehingga proses belajar dikunci sementara. Deadline tetap mengikuti tanggal yang tertera."
+              : showAssessmentFeatures
+                ? "Onboarding sudah melewati tenggat, sehingga proses belajar dikunci sampai HRD memberikan keputusan berikutnya. Silakan hubungi HRD untuk tindak lanjut. Riwayat ujian dan sertifikat tetap bisa dibuka dari tab di atas."
+                : "Onboarding customer sudah melewati tenggat, sehingga proses belajar dikunci sampai admin memberikan keputusan berikutnya."}
           </p>
         </section>
       ) : null}
@@ -780,16 +792,22 @@ const StageTimelineCard = ({
     : 0;
   const hasNext = index < scenario.stages.length - 1;
   const onboardingDecisionLocked = isOnboardingDecisionLocked(scenario);
+  const transferReviewLocked = isTransferReviewLocked(scenario);
   const displayStatus = onboardingDecisionLocked
     ? "failed_window"
     : flowState === "locked"
       ? "locked"
       : stage.status;
   const displayStatusLabel = onboardingDecisionLocked
-    ? "Melewati tenggat"
+    ? transferReviewLocked
+      ? "Dibekukan"
+      : "Melewati tenggat"
     : flowState === "locked"
       ? "Terkunci"
       : stageLabel[stage.status];
+  const displayStatusClass = transferReviewLocked
+    ? "border-amber-200 bg-amber-50 text-amber-700"
+    : chipClass(displayStatus);
 
   return (
     <div className="relative pl-20">
@@ -834,9 +852,7 @@ const StageTimelineCard = ({
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <span
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${chipClass(
-                    displayStatus
-                  )}`}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${displayStatusClass}`}
                 >
                   {displayStatusLabel}
                 </span>
@@ -855,7 +871,9 @@ const StageTimelineCard = ({
               </div>
               <p className="text-sm text-slate-500">
                 {onboardingDecisionLocked
-                  ? "Akses tahap ditutup karena masa onboarding sudah lewat."
+                  ? transferReviewLocked
+                    ? "Akses tahap ditutup karena onboarding sedang dibekukan untuk review HRD."
+                    : "Akses tahap ditutup karena masa onboarding sudah lewat."
                   : showAssessmentFeatures
                     ? "Klik tahap ini untuk membuka materi dan bagian ujian."
                     : "Klik tahap ini untuk membuka materi customer."}
@@ -866,9 +884,13 @@ const StageTimelineCard = ({
           <div className="mt-6 space-y-5">
             {onboardingDecisionLocked ? (
               <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-900">
-                {showAssessmentFeatures
-                  ? "Masa onboarding sudah melewati tenggat, jadi materi dan ujian pada tahap ini tidak bisa diakses sementara. Silakan hubungi HRD untuk mendapatkan keputusan lanjutan: diluluskan, diperpanjang, atau ditetapkan gagal final."
-                  : "Masa onboarding customer sudah melewati tenggat, jadi materi pada tahap ini tidak bisa diakses sementara. Silakan hubungi admin untuk tindak lanjut."}
+                {transferReviewLocked
+                  ? showAssessmentFeatures
+                    ? "Onboarding sedang dibekukan untuk review HRD, jadi materi dan ujian pada tahap ini tidak bisa diakses sementara. Deadline tetap mengikuti tanggal yang tertera."
+                    : "Onboarding customer sedang dibekukan, jadi materi pada tahap ini tidak bisa diakses sementara. Deadline tetap mengikuti tanggal yang tertera."
+                  : showAssessmentFeatures
+                    ? "Masa onboarding sudah melewati tenggat, jadi materi dan ujian pada tahap ini tidak bisa diakses sementara. Silakan hubungi HRD untuk mendapatkan keputusan lanjutan: diluluskan, diperpanjang, atau ditetapkan gagal final."
+                    : "Masa onboarding customer sudah melewati tenggat, jadi materi pada tahap ini tidak bisa diakses sementara. Silakan hubungi admin untuk tindak lanjut."}
               </div>
             ) : flowState === "locked" ? (
               <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-5 py-4 text-sm leading-7 text-slate-600">

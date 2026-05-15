@@ -305,8 +305,10 @@ export default function AdminParticipantDetailPage({
   const shouldShowDecisionInput =
     canFreezeForTransferReview ||
     canCancelTransferReview;
+  const transferReviewBlockedReason =
+    participant.transferReviewActionBlockedReason?.trim() || null;
   const canShowDecisionActions =
-    shouldShowDecisionInput || isTransferReview;
+    shouldShowDecisionInput || isTransferReview || Boolean(transferReviewBlockedReason);
 
   const submitOnboardingDecision = async (
     decisionType:
@@ -496,9 +498,14 @@ export default function AdminParticipantDetailPage({
               </h3>
               <p className={`mt-3 max-w-3xl text-sm leading-7 ${theme.bodyTextClass}`}>
                 {isTransferReview
-                  ? "Status ini menunggu HRD cek kebutuhan departemen lain dan interview manual. PIC SBU Sub langsung bisa membatalkan beku jika onboarding boleh dilanjutkan."
-                  : "PIC SBU Sub langsung bisa membekukan onboarding bila peserta perlu review kecocokan departemen. Keputusan gagal final dilakukan oleh HRD dari menu karyawan."}
+                  ? "Status ini menunggu HRD cek kebutuhan departemen lain dan interview manual. PIC SBU Sub bisa membatalkan beku jika peserta masih berada atau sudah kembali ke struktur SBU Sub-nya."
+                  : "PIC SBU Sub langsung bisa membekukan onboarding selama peserta masih berada di struktur SBU Sub-nya. Keputusan gagal final dilakukan oleh HRD dari menu karyawan."}
               </p>
+              {transferReviewBlockedReason ? (
+                <p className="mt-3 max-w-3xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                  {transferReviewBlockedReason}
+                </p>
+              ) : null}
             </div>
 
             <span

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo, useLayoutEffe
 import { useParams } from "react-router-dom";
 import { Tree, TreeNode } from "react-organizational-chart";
 import Sidebar from "../components/organisms/Sidebar";
+import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import { useToast } from "../components/organisms/MessageToast";
 import BackButton from "../components/atoms/BackButton";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
@@ -1406,55 +1407,18 @@ const ChartPage = () => {
         </div>
       )}
 
-      {/* Delete Confirm */}
-      {deleteConfirm.open && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md text-center">
-            {/* Icon */}
-            <img
-              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
-              alt="Delete Confirmation"
-              className="w-80 mx-auto"
-            />
-
-            {/* Judul */}
-            <h3 className="font-semibold text-lg">
-              Hapus <span className="text-rose-500">{deleteConfirm.name}</span>?
-            </h3>
-
-            {/* Deskripsi */}
-            <p className="text-gray-600 mt-2 text-sm">
-              Data ini akan sulit dipulihkan.
-            </p>
-
-            {/* Tombol */}
-            <div className="flex justify-center gap-3 mt-6">
-              <button
-                onClick={() => setDeleteConfirm({ open: false, chartId: "", name: "" })}
-                className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg hover:bg-gray-50 transition"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className={`px-4 py-2 bg-rose-400 text-white rounded-lg hover:bg-rose-500 transition ${
-                  isDeleting ? "opacity-60 cursor-not-allowed" : ""
-                }`}
-              >
-                {isDeleting ? (
-                  <>
-                    <i className="fa-solid fa-spinner fa-spin mr-1"></i>
-                    Menghapus...
-                  </>
-                ) : (
-                  "Hapus"
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{deleteConfirm.name}</span>?
+          </>
+        }
+        description="Data ini akan sulit dipulihkan."
+        onClose={() => setDeleteConfirm({ open: false, chartId: "", name: "" })}
+        onConfirm={handleDelete}
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

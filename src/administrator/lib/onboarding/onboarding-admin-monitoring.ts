@@ -104,6 +104,7 @@ export type AdminPortalParticipant = {
   firstReadAt: string | null;
   lastReadAt: string | null;
   canFreezeForTransferReview?: boolean;
+  transferReviewActionBlockedReason?: string | null;
   stages: AdminOnboardingParticipantStage[];
 };
 
