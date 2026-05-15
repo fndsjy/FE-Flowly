@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
+import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
@@ -1132,47 +1133,14 @@ const ProcedureSopPage = () => {
         </div>
       )}
 
-      {deleteConfirm.open && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6">
-            <div className="text-center">
-              <img
-                src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
-                alt="Delete Confirmation"
-                className="w-80 mx-auto"
-              />
-              <h3 className="text-lg font-semibold text-slate-900">
-                Hapus SOP
-              </h3>
-              <p className="text-sm text-slate-500 mt-1">
-                {deleteConfirm.sopName || "SOP ini"} akan dihapus.
-              </p>
-            </div>
-
-            <div className="flex justify-center gap-3 mt-6">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirm({ open: false, sopId: "", sopName: "" })}
-                className="px-4 py-2 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100 transition"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className={`px-4 py-2 rounded-full text-white transition ${
-                  isDeleting
-                    ? "bg-slate-300 cursor-not-allowed"
-                    : "bg-rose-500 hover:bg-rose-600"
-                }`}
-              >
-                {isDeleting ? "Menghapus..." : "Hapus"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title="Hapus SOP"
+        description={`${deleteConfirm.sopName || "SOP ini"} akan dihapus.`}
+        onClose={() => setDeleteConfirm({ open: false, sopId: "", sopName: "" })}
+        onConfirm={handleDelete}
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

@@ -4,6 +4,8 @@ import {
   loadPortalSidebarData,
   type PortalSidebarItem,
 } from "../../lib/portal-sidebar";
+import DomasLogo from "../../components/atoms/DomasLogo";
+import SidebarMenuSkeleton from "../../components/organisms/SidebarMenuSkeleton";
 
 export type AdministratorWorkspaceUserProfile = {
   userId: string;
@@ -100,6 +102,7 @@ const AdministratorSidebar = ({
   onLogout,
 }: AdministratorSidebarProps) => {
   const [menuItems, setMenuItems] = useState<PortalSidebarItem[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [moduleRoutesByParent, setModuleRoutesByParent] = useState<Map<string, string[]>>(
     new Map()
   );
@@ -107,6 +110,7 @@ const AdministratorSidebar = ({
 
   useEffect(() => {
     let isMounted = true;
+    setMenuLoading(true);
 
     loadPortalSidebarData({
       portalKey: "ADMINISTRATOR",
@@ -127,6 +131,11 @@ const AdministratorSidebar = ({
 
         setMenuItems([administratorAuditLogItem]);
         setModuleRoutesByParent(new Map());
+      })
+      .finally(() => {
+        if (isMounted) {
+          setMenuLoading(false);
+        }
       });
 
     return () => {
@@ -207,11 +216,7 @@ const AdministratorSidebar = ({
               onClick={dismissMobileSidebar}
               className="mx-auto transition-transform hover:scale-[1.03]"
             >
-              <img
-                src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
-                alt="Logo Domas"
-                width={80}
-              />
+              <DomasLogo />
             </Link>
           ) : null}
 
@@ -254,7 +259,10 @@ const AdministratorSidebar = ({
             isDesktop ? "pl-2" : "px-2"
           }`}
         >
-          {menuItems.map((item) => {
+          {menuLoading ? (
+            <SidebarMenuSkeleton isOpen={isOpen} count={5} />
+          ) : (
+            menuItems.map((item) => {
             const active = isItemActive(item);
 
             return (
@@ -295,7 +303,8 @@ const AdministratorSidebar = ({
 
               </div>
             );
-          })}
+            })
+          )}
         </nav>
 
         <div className="absolute inset-x-0 bottom-0 border-t border-white/10 bg-gray-950/95 p-3 backdrop-blur">

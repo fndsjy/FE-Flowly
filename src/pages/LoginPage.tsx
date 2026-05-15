@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+// import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/organisms/MessageToast";
 import { RequiredMark } from "../components/atoms/FormMarks";
 import { invalidateAccessSummary } from "../hooks/useAccessSummary";
@@ -152,7 +153,7 @@ const LoginPage = () => {
         </button>
       </form>
 
-      <p className="mt-4 text-center text-sm leading-5 text-slate-500 sm:mt-5 sm:leading-6">
+      {/* <p className="mt-4 text-center text-sm leading-5 text-slate-500 sm:mt-5 sm:leading-6">
         Jika belum punya akun, {" "}
         <Link
           to="/register"
@@ -161,7 +162,7 @@ const LoginPage = () => {
           daftar di sini
         </Link>
         .
-      </p>
+      </p> */}
     </div>
   );
 
@@ -177,7 +178,8 @@ const LoginPage = () => {
 
           <div className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center px-5 pb-[36vh] pt-[7.5vh] text-center sm:px-8 sm:pb-[34vh] sm:pt-[7vh]">
             <img
-              src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+              src={`/images/logo-domas.png`}
+              // src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
               alt="DOMAS Logo"
               className="w-[122px] object-contain sm:w-[148px]"
             />
@@ -200,9 +202,10 @@ const LoginPage = () => {
             )}
           </div>
 
-          <div className="pointer-events-none fixed bottom-[-6px] right-[-12%] z-20 w-[108vw] max-w-[470px] sm:bottom-[-8px] sm:right-[-5%] sm:w-[88vw] sm:max-w-[520px]">
+          <div className="pointer-events-none fixed bottom-[-20px] right-[-12%] z-20 w-[108vw] max-w-[470px] sm:bottom-[-16px] sm:right-[-5%] sm:w-[88vw] sm:max-w-[520px]">
             <img
-              src={`${import.meta.env.BASE_URL}images/login.png`}
+              src={`/images/login.png`}
+              // src={`${import.meta.env.BASE_URL}images/login.png`}
               alt="Login Illustration"
               className="block h-auto w-full animate-float object-contain object-bottom drop-shadow-[0_30px_52px_rgba(30,39,95,0.18)]"
             />
@@ -219,7 +222,8 @@ const LoginPage = () => {
               <div className="relative z-20 flex min-h-[420px] items-center pt-4 lg:min-h-[560px] lg:pt-0">
                 <div className="max-w-[680px] text-left">
                   <img
-                    src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+                    src={`/images/logo-domas.png`}
+                    // src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
                     alt="DOMAS Logo"
                     className="w-[132px] object-contain lg:w-[142px] xl:w-[160px]"
                   />
@@ -257,7 +261,8 @@ const LoginPage = () => {
             <div className="pointer-events-none absolute bottom-0 right-0 z-30 w-[42vw] min-w-[340px] max-w-[620px] translate-x-[4%] translate-y-[2%] lg:w-[39vw] lg:min-w-[400px] lg:max-w-[680px] xl:w-[35vw] xl:max-w-[760px]">
               <div className="absolute inset-x-[18%] bottom-10 h-12 rounded-full bg-[rgba(63,76,168,0.16)] blur-2xl" />
               <img
-                src={`${import.meta.env.BASE_URL}images/login.png`}
+                src={`/images/login.png`}
+                // src={`${import.meta.env.BASE_URL}images/login.png`}
                 alt="Login Illustration"
                 className="relative z-10 block h-auto w-full animate-float object-contain object-bottom drop-shadow-[0_40px_72px_rgba(30,39,95,0.2)]"
               />

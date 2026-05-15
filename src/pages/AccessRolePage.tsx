@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/organisms/Sidebar";
+import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
@@ -1111,44 +1112,18 @@ const AccessRolePage = () => {
         </div>
       </div>
 
-      {deleteConfirm.open && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md">
-            <img
-              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
-              alt="Delete Confirmation"
-              className="w-80 mx-auto"
-            />
-            <h2 className="text-lg text-center font-semibold mt-4 mb-1">
-              Hapus akses{" "}
-              <span className="text-rose-500">{deleteConfirm.label}</span>?
-            </h2>
-            <p className="text-gray-600 mb-4 text-center">
-              Data ini akan sulit dipulihkan.
-            </p>
-
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={() =>
-                  setDeleteConfirm({ open: false, accessId: "", label: "" })
-                }
-                className="px-4 py-2 border border-rose-400 text-rose-400 rounded-lg"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className={`px-4 py-2 bg-rose-400 text-white rounded-lg ${
-                  isDeleting && "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                {isDeleting ? "Menghapus..." : "Hapus"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        title={
+          <>
+            Hapus akses <span className="text-rose-500">{deleteConfirm.label}</span>?
+          </>
+        }
+        description="Data ini akan sulit dipulihkan."
+        onClose={() => setDeleteConfirm({ open: false, accessId: "", label: "" })}
+        onConfirm={handleDelete}
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

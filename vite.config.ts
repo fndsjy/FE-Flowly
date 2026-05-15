@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
   const apiRewrite = (path: string) => path.replace(/^\/api/, "/v1/api");
 
   return {
-    base: `/oms/`,
+    base: `./`,
     plugins: [
       restart({
         restart: ['src/**/*.{ts,tsx}'],

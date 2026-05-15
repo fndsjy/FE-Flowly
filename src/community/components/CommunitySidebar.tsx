@@ -4,6 +4,8 @@ import {
   loadPortalSidebarData,
   type PortalSidebarItem,
 } from "../../lib/portal-sidebar";
+import DomasLogo from "../../components/atoms/DomasLogo";
+import SidebarMenuSkeleton from "../../components/organisms/SidebarMenuSkeleton";
 
 export type CommunityUserProfile = {
   userId: string;
@@ -86,6 +88,7 @@ const CommunitySidebar = ({
   onLogout,
 }: CommunitySidebarProps) => {
   const [menuItems, setMenuItems] = useState<PortalSidebarItem[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [moduleRoutesByParent, setModuleRoutesByParent] = useState<Map<string, string[]>>(
     new Map()
   );
@@ -94,6 +97,7 @@ const CommunitySidebar = ({
 
   useEffect(() => {
     let isMounted = true;
+    setMenuLoading(true);
 
     loadPortalSidebarData({
       portalKey: "COMMUNITY",
@@ -114,6 +118,11 @@ const CommunitySidebar = ({
 
         setMenuItems([]);
         setModuleRoutesByParent(new Map());
+      })
+      .finally(() => {
+        if (isMounted) {
+          setMenuLoading(false);
+        }
       });
 
     return () => {
@@ -201,11 +210,7 @@ const CommunitySidebar = ({
             onClick={dismissMobileSidebar}
             className="mx-auto transition-transform hover:scale-[1.03]"
           >
-            <img
-              src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
-              alt="Logo Domas"
-              width={80}
-            />
+            <DomasLogo />
           </Link>
         ) : null}
 
@@ -248,7 +253,10 @@ const CommunitySidebar = ({
           isDesktop ? "pl-2" : "px-2"
         }`}
       >
-        {visibleMenuItems.map((item) => {
+        {menuLoading ? (
+          <SidebarMenuSkeleton isOpen={isOpen} />
+        ) : (
+          visibleMenuItems.map((item) => {
           const active = isItemActive(item);
 
           return (
@@ -299,7 +307,8 @@ const CommunitySidebar = ({
               ) : null}
             </div>
           );
-        })}
+          })
+        )}
       </nav>
 
       <div className="absolute bottom-0 left-0 w-full border-t border-white/10 py-2">

@@ -122,7 +122,8 @@ const HomePage = () => {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <motion.div variants={revealItem} className="flex items-center gap-4">
                 <img
-                  src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+                  src={`/images/logo-domas.png`}
+                  // src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
                   alt="DOMAS OMS"
                   className="h-12 w-auto object-contain"
                 />
@@ -240,7 +241,8 @@ const HomePage = () => {
                   Welcome Aboard
                 </div>
                 <motion.img
-                  src={`${import.meta.env.BASE_URL}images/welcome.png`}
+                  src={`/images/welcome.png`}
+                  // src={`${import.meta.env.BASE_URL}images/welcome.png`}
                   alt="OMS onboarding guide"
                   className="relative z-10 h-auto max-h-[500px] w-auto object-contain drop-shadow-[0_28px_48px_rgba(15,23,42,0.16)]"
                   animate={{ y: [0, -8, 0] }}

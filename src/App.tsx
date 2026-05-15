@@ -37,10 +37,15 @@ import InfluencerPage from './influencer/pages/InfluencerPage';
 import SupplierPage from './supplier/pages/SupplierPage';
 import CustomerSsoCallbackPage from './pages/CustomerSsoCallbackPage';
 
+const basename =
+  window.location.hostname === "oms.domas.co.id"
+    ? "/"
+    : "/oms";
+
 const App = () => {
   return (
     <ToastProvider>
-      <BrowserRouter basename='/oms/'>
+      <BrowserRouter basename={basename}>
         <Routes>
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/login" element={<LoginPage />} />

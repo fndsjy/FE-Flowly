@@ -27,7 +27,12 @@ const NotFoundPage = () => {
                 •
               </span>
             </span>
-            <img src={`${import.meta.env.BASE_URL}images/404.png`} alt="404" className="w-48 mx-auto"></img>
+            <img
+              src={`/images/404.png`}
+              // src={`${import.meta.env.BASE_URL}images/404.png`}
+              alt="404"
+              className="w-48 mx-auto"
+            ></img>
             {/* <span className="opacity-70 mx-2">0</span> */}
             <span className="relative inline-block ml-[-1rem]">
               4

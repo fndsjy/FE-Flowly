@@ -446,6 +446,7 @@ const buildScenario = (
     heroEyebrow: `OMS ${portal.portalName} Onboarding`,
     startedAt: portal.startedAt,
     deadlineAt: portal.dueAt,
+    assignmentStatus: portal.status,
     trainingWindowMonths: Math.max(1, Math.ceil(portal.durationDay / 30)),
     overallStatus: mapAssignmentStatus(portal.status),
     statusSummary:

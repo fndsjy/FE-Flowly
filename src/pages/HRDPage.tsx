@@ -10,6 +10,7 @@ import {
 import BackButton from "../components/atoms/BackButton";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 import Sidebar from "../components/organisms/Sidebar";
+import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import { useToast } from "../components/organisms/MessageToast";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
@@ -2855,43 +2856,17 @@ const HRDPage = () => {
         </div>
       )}
 
-      {deleteTarget.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <img
-              src={`${import.meta.env.BASE_URL}images/delete-confirm.png`}
-              alt="Delete Confirmation"
-              className="mx-auto w-80"
-            />
-            <h2 className="mt-4 mb-1 text-center text-lg font-semibold text-slate-900">
-              Hapus <span className="text-rose-500">{deleteTarget.label}</span>?
-            </h2>
-            <p className="mb-4 text-center text-gray-600">
-              Data ini akan sulit dipulihkan
-            </p>
-
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={() =>
-                  setDeleteTarget({ open: false, userId: null, label: "" })
-                }
-                className="rounded-lg border border-rose-400 px-4 py-2 text-base font-semibold text-rose-400 transition hover:bg-rose-50"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className={`rounded-lg bg-rose-400 px-4 py-2 text-base font-semibold text-white transition hover:bg-rose-500 ${
-                  isDeleting ? "cursor-not-allowed opacity-60" : ""
-                }`}
-              >
-                {isDeleting ? "Menghapus..." : "Hapus"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        open={deleteTarget.open}
+        title={
+          <>
+            Hapus <span className="text-rose-500">{deleteTarget.label}</span>?
+          </>
+        }
+        onClose={() => setDeleteTarget({ open: false, userId: null, label: "" })}
+        onConfirm={handleDelete}
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

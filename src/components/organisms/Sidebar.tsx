@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSignInAlt, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
+import DomasLogo from "../atoms/DomasLogo";
 import { apiFetch } from "../../lib/api";
 import { hasMenuAccess } from "../../lib/access";
 import { isExternalRoute, normalizeAppRoute } from "../../lib/routes";
@@ -11,6 +12,7 @@ import {
 } from "../../hooks/useAccessSummary";
 import { useProfile } from "../../hooks/useProfile";
 import { useToast } from "./MessageToast";
+import SidebarMenuSkeleton from "./SidebarMenuSkeleton";
 
 const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
 const visibleChildModuleKeysByParent = new Map<string, Set<string>>([
@@ -63,6 +65,7 @@ const Sidebar = ({
   onCloseMobile,
 }: SidebarProps) => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [internalIsDesktop, setInternalIsDesktop] = useState(getIsDesktopViewport);
   const [fallbackMobileOpen, setFallbackMobileOpen] = useState(false);
   const [moduleRoutesByParent, setModuleRoutesByParent] = useState<Map<string, string[]>>(
@@ -99,6 +102,7 @@ const Sidebar = ({
     "FISHBONE",
     "ONBOARDING",
   ]);
+  const isMenuLoading = menuLoading || accessLoading;
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(DESKTOP_BREAKPOINT_QUERY);
@@ -139,6 +143,7 @@ const Sidebar = ({
 
   useEffect(() => {
     let isMounted = true;
+    setMenuLoading(true);
     const menuUrl = `/master-access-role?resourceType=MENU&portalKey=${encodeURIComponent(
       normalizedPortalKey
     )}`;
@@ -155,82 +160,88 @@ const Sidebar = ({
         method: "GET",
         credentials: "include",
       }).then((res) => res.json()),
-    ]).then(([menuResult, moduleResult]) => {
-      if (!isMounted) {
-        return;
-      }
+    ])
+      .then(([menuResult, moduleResult]) => {
+        if (!isMounted) {
+          return;
+        }
 
-      if (menuResult.status === "fulfilled") {
-        const response: MasterAccessRoleItem[] = Array.isArray(menuResult.value?.response)
-          ? menuResult.value.response
-          : [];
-        const items = response
-          .filter(
-            (item) =>
-              item.resourceType === "MENU" &&
-              item.isActive &&
-              !item.isDeleted &&
-              item.route
-          )
-          .map((item) => ({
-            id: item.resourceKey,
-            label: item.displayName,
-            icon: getMenuIcon(item.resourceKey),
-            path: normalizeAppRoute(item.route),
-            resourceType: "MENU" as const,
-            resourceKey: item.resourceKey,
-          }));
-        setMenuItems(items);
-      } else {
-        setMenuItems([]);
-      }
-
-      if (moduleResult.status === "fulfilled") {
-        const response: MasterAccessRoleItem[] = Array.isArray(moduleResult.value?.response)
-          ? moduleResult.value.response
-          : [];
-        const nextRoutes = new Map<string, string[]>();
-        const nextModuleItems = new Map<string, MenuItem[]>();
-
-        response
-          .filter(
-            (item) =>
-              item.resourceType === "MODULE" &&
-              item.isActive &&
-              !item.isDeleted &&
-              item.route &&
-              item.parentKey
-          )
-          .forEach((item) => {
-            const parentKey = item.parentKey?.toUpperCase();
-            if (!parentKey) {
-              return;
-            }
-
-            const routes = nextRoutes.get(parentKey) ?? [];
-            const modulePath = normalizeAppRoute(item.route);
-            routes.push(modulePath);
-            nextRoutes.set(parentKey, routes);
-
-            const children = nextModuleItems.get(parentKey) ?? [];
-            children.push({
+        if (menuResult.status === "fulfilled") {
+          const response: MasterAccessRoleItem[] = Array.isArray(menuResult.value?.response)
+            ? menuResult.value.response
+            : [];
+          const items = response
+            .filter(
+              (item) =>
+                item.resourceType === "MENU" &&
+                item.isActive &&
+                !item.isDeleted &&
+                item.route
+            )
+            .map((item) => ({
               id: item.resourceKey,
               label: item.displayName,
-              icon: getModuleIcon(item.resourceKey),
-              path: modulePath,
-              resourceType: "MODULE",
+              icon: getMenuIcon(item.resourceKey),
+              path: normalizeAppRoute(item.route),
+              resourceType: "MENU" as const,
               resourceKey: item.resourceKey,
-            });
-            nextModuleItems.set(parentKey, children);
-          });
+            }));
+          setMenuItems(items);
+        } else {
+          setMenuItems([]);
+        }
 
-        setModuleRoutesByParent(nextRoutes);
-        setModuleItemsByParent(nextModuleItems);
-      } else {
-        setModuleRoutesByParent(new Map());
-        setModuleItemsByParent(new Map());
-      }
-    });
+        if (moduleResult.status === "fulfilled") {
+          const response: MasterAccessRoleItem[] = Array.isArray(moduleResult.value?.response)
+            ? moduleResult.value.response
+            : [];
+          const nextRoutes = new Map<string, string[]>();
+          const nextModuleItems = new Map<string, MenuItem[]>();
+
+          response
+            .filter(
+              (item) =>
+                item.resourceType === "MODULE" &&
+                item.isActive &&
+                !item.isDeleted &&
+                item.route &&
+                item.parentKey
+            )
+            .forEach((item) => {
+              const parentKey = item.parentKey?.toUpperCase();
+              if (!parentKey) {
+                return;
+              }
+
+              const routes = nextRoutes.get(parentKey) ?? [];
+              const modulePath = normalizeAppRoute(item.route);
+              routes.push(modulePath);
+              nextRoutes.set(parentKey, routes);
+
+              const children = nextModuleItems.get(parentKey) ?? [];
+              children.push({
+                id: item.resourceKey,
+                label: item.displayName,
+                icon: getModuleIcon(item.resourceKey),
+                path: modulePath,
+                resourceType: "MODULE",
+                resourceKey: item.resourceKey,
+              });
+              nextModuleItems.set(parentKey, children);
+            });
+
+          setModuleRoutesByParent(nextRoutes);
+          setModuleItemsByParent(nextModuleItems);
+        } else {
+          setModuleRoutesByParent(new Map());
+          setModuleItemsByParent(new Map());
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setMenuLoading(false);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -407,11 +418,7 @@ const Sidebar = ({
                 onClick={dismissMobileSidebar}
                 className="mx-auto transition-transform hover:scale-105"
               >
-                <img
-                  src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
-                  alt="Logo Domas"
-                  width={80}
-                />
+                <DomasLogo />
               </Link>
             ) : null}
 
@@ -467,7 +474,14 @@ const Sidebar = ({
                 </div>
               ) : null}
 
-              {visibleMenuItems.map((item) => {
+              {isMenuLoading ? (
+                <SidebarMenuSkeleton
+                  isOpen={isSidebarVisible}
+                  count={7}
+                  className="mx-1"
+                />
+              ) : (
+                visibleMenuItems.map((item) => {
               const isNavigationLocked = isPasswordResetRequired;
               const isActive = isMenuActive(item);
               const childItems = getVisibleModuleItems(item.resourceKey);
@@ -564,7 +578,8 @@ const Sidebar = ({
                   ) : null}
                 </div>
               );
-              })}
+                })
+              )}
             </div>
           </nav>
 
