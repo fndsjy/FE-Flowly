@@ -1,13 +1,13 @@
 import type { ImgHTMLAttributes } from "react";
+import AppImage from "./AppImage";
 
 type DomasLogoProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "alt"> & {
   alt?: string;
 };
 
 const DomasLogo = ({ alt = "Logo Domas", width = 80, ...props }: DomasLogoProps) => (
-  <img
-    src="/images/logo-domas.png"
-    // src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+  <AppImage
+    src="images/logo-domas.png"
     alt={alt}
     width={width}
     {...props}

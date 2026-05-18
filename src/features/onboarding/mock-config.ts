@@ -128,9 +128,9 @@ export type OnboardingScenario = {
   heroEyebrow: string;
   heroTitle: string;
   heroDescription: string;
-  trainingWindowMonths: number;
+  trainingWindowMonths: number | null;
   startedAt: string;
-  deadlineAt: string;
+  deadlineAt: string | null;
   assignmentStatus?: string;
   overallStatus: OverallOnboardingStatus;
   statusSummary: string;

@@ -374,6 +374,7 @@ export const getPortalMetrics = (portal: AdminOnboardingPortal) => {
     const currentStatus = normalizeStageStatus(currentStage?.status);
     const overdue =
       !isParticipantCompleted(participant) &&
+      participant.dueAt !== null &&
       new Date(participant.dueAt).getTime() < Date.now();
 
     return (

@@ -20,7 +20,7 @@ type Portal = {
   onboardingPortalTemplateId: string;
   portalKey: string;
   portalName: string;
-  defaultDurationDay: number;
+  defaultDurationDay: number | null;
   isActive: boolean;
   totalStageCount: number;
   stages: Stage[];

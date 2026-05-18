@@ -586,17 +586,23 @@ const buildMetrics = (scenario: OnboardingScenario): DashboardMetrics => {
 
   const now = new Date();
   const startedAt = new Date(scenario.startedAt);
-  const deadlineAt = new Date(scenario.deadlineAt);
-  const totalWindowDays = Math.max(
-    1,
-    Math.ceil((deadlineAt.getTime() - startedAt.getTime()) / 86400000)
-  );
+  const deadlineAt = scenario.deadlineAt ? new Date(scenario.deadlineAt) : null;
+  const totalWindowDays = deadlineAt
+    ? Math.max(
+        1,
+        Math.ceil((deadlineAt.getTime() - startedAt.getTime()) / 86400000)
+      )
+    : 0;
   const daysElapsed = Math.max(
     0,
     Math.ceil((now.getTime() - startedAt.getTime()) / 86400000)
   );
-  const daysRemaining = Math.ceil((deadlineAt.getTime() - now.getTime()) / 86400000);
-  const trainingWindowPercent = clamp((daysElapsed / totalWindowDays) * 100);
+  const daysRemaining = deadlineAt
+    ? Math.ceil((deadlineAt.getTime() - now.getTime()) / 86400000)
+    : 0;
+  const trainingWindowPercent = totalWindowDays
+    ? clamp((daysElapsed / totalWindowDays) * 100)
+    : 0;
 
   const currentStage =
     scenario.stages.find((stage) => stage.status !== "passed") ??
@@ -1062,13 +1068,19 @@ const PortalOnboardingDashboard = ({
               variants={heroItemVariants}
             >
               <span>
-                Hari ke-{Math.min(metrics.daysElapsed, metrics.totalWindowDays)} dari{" "}
-                {metrics.totalWindowDays} hari training window
+                {metrics.totalWindowDays > 0
+                  ? `Hari ke-${Math.min(
+                      metrics.daysElapsed,
+                      metrics.totalWindowDays
+                    )} dari ${metrics.totalWindowDays} hari training window`
+                  : "Training window tanpa batas waktu"}
               </span>
               <span>
-                {metrics.daysRemaining >= 0
-                  ? `${metrics.daysRemaining} hari tersisa`
-                  : `${Math.abs(metrics.daysRemaining)} hari melewati deadline`}
+                {scenario.deadlineAt
+                  ? metrics.daysRemaining >= 0
+                    ? `${metrics.daysRemaining} hari tersisa`
+                    : `${Math.abs(metrics.daysRemaining)} hari melewati deadline`
+                  : "Tidak ada deadline"}
               </span>
             </motion.div>
 

@@ -30,9 +30,6 @@ const formatDate = (value: string) => {
   });
 };
 
-const getBaseUrl = () =>
-  new URL(import.meta.env.BASE_URL ?? "/", window.location.origin).toString();
-
 const toBase64 = (value: string) => {
   try {
     return window.btoa(
@@ -46,7 +43,7 @@ const toBase64 = (value: string) => {
 };
 
 export const buildIkPreviewHtml = (data: IkPreviewData) => {
-  const logoUrl = `${getBaseUrl()}images/masa-depan-dimatamu.png`;
+  const logoUrl = getPublicAssetUrl("images/masa-depan-dimatamu.png");
   const ikTitle = escapeHtml(data.ikName);
   const ikNumber = escapeHtml(data.ikNumber);
   const effectiveDate = escapeHtml(formatDate(data.effectiveDate));
@@ -602,3 +599,4 @@ export const openIkPreviewWindow = (data: IkPreviewData) => {
     throw new Error("Preview failed");
   }
 };
+import { getPublicAssetUrl } from "./assets";

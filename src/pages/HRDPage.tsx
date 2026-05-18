@@ -90,6 +90,7 @@ interface EmployeeOnboardingSummaryData {
   onboardingPlacementSources: string[];
   onboardingPlacementDetails: EmployeeOnboardingPlacementDetailData[];
   onboardingBlockReason: string | null;
+  transferReviewStillInSourceSbuSub: boolean | null;
 }
 
 type FormMode = "add" | "edit";
@@ -777,6 +778,9 @@ const HRDPage = () => {
   });
   const [decisionNote, setDecisionNote] = useState("");
   const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
+  const [cancelTransferConfirmOpen, setCancelTransferConfirmOpen] =
+    useState(false);
+  const [failFinalConfirmOpen, setFailFinalConfirmOpen] = useState(false);
 
   const { showToast } = useToast();
   const { isAdmin, menuAccessMap } = useAccessSummary();
@@ -1493,10 +1497,14 @@ const HRDPage = () => {
       summary,
     });
     setDecisionNote("");
+    setCancelTransferConfirmOpen(false);
+    setFailFinalConfirmOpen(false);
   };
 
   const closeOnboardingDecision = () => {
     if (isSubmittingDecision) return;
+    setCancelTransferConfirmOpen(false);
+    setFailFinalConfirmOpen(false);
     setDecisionTarget({
       open: false,
       employee: null,
@@ -1505,22 +1513,52 @@ const HRDPage = () => {
     setDecisionNote("");
   };
 
-  const submitOnboardingDecision = async (decisionType: OnboardingDecisionType) => {
+  const openFailFinalConfirm = () => {
+    if (!normalizeText(decisionNote)) {
+      showToast(
+        "Catatan/alasan wajib diisi sebelum menggagalkan onboarding final.",
+        "error"
+      );
+      return;
+    }
+
+    setFailFinalConfirmOpen(true);
+  };
+
+  const submitOnboardingDecision = async (
+    decisionType: OnboardingDecisionType,
+    options?: { confirmCurrentPlacement?: boolean }
+  ) => {
     const summary = decisionTarget.summary;
     if (!summary?.onboardingAssignmentId || isSubmittingDecision) return;
 
     setIsSubmittingDecision(true);
     try {
+      const payload: {
+        onboardingAssignmentId: string;
+        decisionType: OnboardingDecisionType;
+        nextDurationDay: number | null;
+        note: string | null;
+        confirmCurrentPlacement?: boolean;
+      } = {
+        onboardingAssignmentId: summary.onboardingAssignmentId,
+        decisionType,
+        nextDurationDay: decisionType === "EXTEND" ? 90 : null,
+        note: normalizeText(decisionNote),
+      };
+
+      if (
+        decisionType === "CANCEL_TRANSFER_REVIEW" &&
+        options?.confirmCurrentPlacement
+      ) {
+        payload.confirmCurrentPlacement = true;
+      }
+
       const res = await apiFetch("/onboarding/decision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          onboardingAssignmentId: summary.onboardingAssignmentId,
-          decisionType,
-          nextDurationDay: decisionType === "EXTEND" ? 90 : null,
-          note: normalizeText(decisionNote),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json().catch(() => ({}));
@@ -1549,6 +1587,8 @@ const HRDPage = () => {
         summary: null,
       });
       setDecisionNote("");
+      setCancelTransferConfirmOpen(false);
+      setFailFinalConfirmOpen(false);
       await fetchPageData();
     } catch (error) {
       console.error("Error submitting onboarding decision:", error);
@@ -1569,6 +1609,28 @@ const HRDPage = () => {
   const isTransferReviewDecision =
     decisionTargetStatus === "TRANSFER_REVIEW";
   const isFailedDecision = decisionTargetStatus === "FAILED";
+  const decisionEmployeeLabel =
+    decisionTarget.employee
+      ? decisionTarget.employee.Name ||
+        getEmployeeCardNumber(decisionTarget.employee)
+      : "Karyawan";
+  const cancelTransferPlacementDetails = getOnboardingPlacementDetails(
+    decisionTarget.summary
+  );
+  const cancelTransferStillInSource =
+    decisionTarget.summary?.transferReviewStillInSourceSbuSub ?? null;
+  const cancelTransferReviewQuestion =
+    cancelTransferStillInSource === true
+      ? `Apakah ${decisionEmployeeLabel} akan tetap di organisasi ini?`
+      : cancelTransferStillInSource === false
+        ? `Apakah ${decisionEmployeeLabel} akan masuk ke struktur organisasi ini dengan posisi berikut?`
+        : `Apakah ${decisionEmployeeLabel} sudah dipastikan akan lanjut di struktur organisasi yang sekarang terbaca?`;
+  // const cancelTransferReviewStateLabel =
+  //   cancelTransferStillInSource === true
+  //     ? "Belum pindah dari SBU Sub asal"
+  //     : cancelTransferStillInSource === false
+  //       ? "Sudah tidak berada di SBU Sub asal"
+  //       : "Status perpindahan belum bisa dipastikan otomatis";
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50">
@@ -2794,11 +2856,13 @@ const HRDPage = () => {
                 </button>
               ) : null}
               <button
-                onClick={() =>
-                  submitOnboardingDecision(
-                    isTransferReviewDecision ? "CANCEL_TRANSFER_REVIEW" : "EXTEND"
-                  )
-                }
+                onClick={() => {
+                  if (isTransferReviewDecision) {
+                    setCancelTransferConfirmOpen(true);
+                    return;
+                  }
+                  submitOnboardingDecision("EXTEND");
+                }}
                 disabled={isSubmittingDecision}
                 className={`rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-left transition hover:bg-sky-100 ${
                   isSubmittingDecision ? "cursor-not-allowed opacity-60" : ""
@@ -2814,7 +2878,7 @@ const HRDPage = () => {
                 </span>
               </button>
               <button
-                onClick={() => submitOnboardingDecision("FAIL_FINAL")}
+                onClick={openFailFinalConfirm}
                 disabled={isSubmittingDecision}
                 className={`rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-left transition hover:bg-rose-100 ${
                   isSubmittingDecision ? "cursor-not-allowed opacity-60" : ""
@@ -2855,6 +2919,117 @@ const HRDPage = () => {
           </div>
         </div>
       )}
+
+      {cancelTransferConfirmOpen &&
+        decisionTarget.summary &&
+        decisionTarget.employee && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-sky-500">
+                Konfirmasi struktur
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+                Batalkan beku onboarding?
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                {cancelTransferReviewQuestion} Tombol ini tidak memindahkan
+                organisasi atau posisi; perubahan struktur harus sudah benar di
+                Struktur Organisasi sebelum onboarding dibuka lagi.
+              </p>
+
+              {/* <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-500">
+                  Status cek sistem
+                </div>
+                <div className="mt-1 font-semibold">
+                  {cancelTransferReviewStateLabel}
+                </div>
+              </div> */}
+
+              {cancelTransferPlacementDetails.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {cancelTransferPlacementDetails.map((detail, index) => {
+                    const rows = getPlacementDetailRows(detail).filter(
+                      ([, value]) => value && value.trim().length > 0
+                    );
+
+                    return (
+                      <div
+                        key={`${detail.source}-${index}-${detail.label}`}
+                        className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-800"
+                      >
+                        <div className="font-semibold">
+                          Sebagai: {getPlacementDetailTitle(detail)}
+                        </div>
+                        <div className="mt-1 space-y-0.5 text-xs">
+                          {rows.map(([label, value]) => (
+                            <div key={`${label}-${value}`}>
+                              <span className="font-semibold">{label}:</span>{" "}
+                              {value}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                  Sistem belum membaca struktur organisasi atau role PIC untuk
+                  karyawan ini. Lengkapi struktur dulu sebelum membatalkan status
+                  beku.
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setCancelTransferConfirmOpen(false)}
+                  disabled={isSubmittingDecision}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cek lagi
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    submitOnboardingDecision("CANCEL_TRANSFER_REVIEW", {
+                      confirmCurrentPlacement: true,
+                    })
+                  }
+                  disabled={
+                    isSubmittingDecision ||
+                    cancelTransferPlacementDetails.length === 0
+                  }
+                  className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSubmittingDecision
+                    ? "Menyimpan..."
+                    : "Ya, mulai onboarding"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      <DeleteConfirmDialog
+        open={failFinalConfirmOpen}
+        title={
+          <>
+            Gagalkan karyawan{" "}
+            <span className="text-rose-500">{decisionEmployeeLabel}</span>?
+          </>
+        }
+        description="Pastikan karyawan sudah dikeluarkan dari seluruh struktur organisasi. Onboarding akan ditutup gagal final dan akun karyawan dinonaktifkan."
+        onClose={() => {
+          if (!isSubmittingDecision) setFailFinalConfirmOpen(false);
+        }}
+        onConfirm={() => submitOnboardingDecision("FAIL_FINAL")}
+        isLoading={isSubmittingDecision}
+        loadingLabel="Menggagalkan..."
+        confirmLabel="Gagalkan"
+        cancelLabel="Cek lagi"
+      />
 
       <DeleteConfirmDialog
         open={deleteTarget.open}

@@ -105,8 +105,8 @@ type WorkspacePortal = {
   portalName: string;
   status: string;
   startedAt: string;
-  durationDay: number;
-  dueAt: string;
+  durationDay: number | null;
+  dueAt: string | null;
   currentStageOrder: number | null;
   note: string | null;
   certificates: WorkspaceCertificate[];
@@ -447,11 +447,15 @@ const buildScenario = (
     startedAt: portal.startedAt,
     deadlineAt: portal.dueAt,
     assignmentStatus: portal.status,
-    trainingWindowMonths: Math.max(1, Math.ceil(portal.durationDay / 30)),
+    trainingWindowMonths: portal.durationDay
+      ? Math.max(1, Math.ceil(portal.durationDay / 30))
+      : null,
     overallStatus: mapAssignmentStatus(portal.status),
     statusSummary:
       portal.note ??
-      `Onboarding ${portal.portalName} aktif sampai ${formatDate(portal.dueAt)}.`,
+      portal.dueAt
+        ? `Onboarding ${portal.portalName} aktif sampai ${formatDate(portal.dueAt)}.`
+        : `Onboarding ${portal.portalName} aktif tanpa batas waktu.`,
     lmsStatus: portal.status.trim().toUpperCase() === "PASSED_TO_LMS" ? "Aktif" : "Belum aktif",
     stages,
     certificates,
