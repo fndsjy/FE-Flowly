@@ -359,22 +359,27 @@ const PageShell = ({
   const passedStages = scenario.stages.filter(
     (item) => item.status === "passed"
   ).length;
-  const deadlineTime = new Date(scenario.deadlineAt).getTime();
+  const deadlineTime = scenario.deadlineAt
+    ? new Date(scenario.deadlineAt).getTime()
+    : null;
   const nowTime = Date.now();
-  const deadlineDelta = Math.ceil(
-    (deadlineTime - nowTime) / (1000 * 60 * 60 * 24)
-  );
+  const deadlineDelta =
+    deadlineTime === null
+      ? null
+      : Math.ceil((deadlineTime - nowTime) / (1000 * 60 * 60 * 24));
   const onboardingDecisionLocked = isOnboardingDecisionLocked(scenario);
   const transferReviewLocked = isTransferReviewLocked(scenario);
   const deadlineHelper = transferReviewLocked
     ? "Onboarding sedang dibekukan. Deadline tetap mengikuti jadwal ini."
     : onboardingDecisionLocked
       ? "Tenggat sudah lewat. Menunggu keputusan HRD."
-    : deadlineTime < nowTime
-      ? `${Math.abs(deadlineDelta)} hari lewat deadline.`
-      : deadlineDelta > 0
-        ? `${deadlineDelta} hari tersisa.`
-        : "Tenggat berakhir hari ini.";
+    : deadlineTime === null || deadlineDelta === null
+      ? "Tidak ada batas waktu."
+      : deadlineTime < nowTime
+        ? `${Math.abs(deadlineDelta)} hari lewat deadline.`
+        : deadlineDelta > 0
+          ? `${deadlineDelta} hari tersisa.`
+          : "Tenggat berakhir hari ini.";
   const workspaceTabs = [
     { label: "Tahapan", to: scenario.basePath },
     ...(showAssessmentFeatures
@@ -406,7 +411,9 @@ const PageShell = ({
                 {overallLabel[scenario.overallStatus]}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-                Window {scenario.trainingWindowMonths} bulan
+                {scenario.trainingWindowMonths
+                  ? `Window ${scenario.trainingWindowMonths} bulan`
+                  : "Tanpa batas waktu"}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
                 LMS {scenario.lmsStatus}

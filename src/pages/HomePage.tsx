@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Navigate, useNavigate } from "react-router-dom";
+import AppImage from "../components/atoms/AppImage";
 import { invalidateAccessSummary } from "../hooks/useAccessSummary";
 import { useOmsProgramAccess } from "../hooks/useOmsProgramAccess";
 import { useOmsPortalPrograms } from "../hooks/useOmsPortalPrograms";
@@ -43,6 +44,8 @@ const cardReveal = {
     },
   }),
 };
+
+const MotionAppImage = motion(AppImage);
 
 const summarize = (value: string, max = 108) => {
   if (value.length <= max) {
@@ -121,9 +124,8 @@ const HomePage = () => {
           <div className="relative border-b border-slate-100/80 px-4 py-4 sm:px-6 md:px-8 lg:px-10">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <motion.div variants={revealItem} className="flex items-center gap-4">
-                <img
-                  src={`/images/logo-domas.png`}
-                  // src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+                <AppImage
+                  src="images/logo-domas.png"
                   alt="DOMAS OMS"
                   className="h-12 w-auto object-contain"
                 />
@@ -240,9 +242,8 @@ const HomePage = () => {
                 <div className="absolute right-6 top-10 rounded-full border border-[#d8e0ff] bg-white/88 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 shadow-sm backdrop-blur">
                   Welcome Aboard
                 </div>
-                <motion.img
-                  src={`/images/welcome.png`}
-                  // src={`${import.meta.env.BASE_URL}images/welcome.png`}
+                <MotionAppImage
+                  src="images/welcome.png"
                   alt="OMS onboarding guide"
                   className="relative z-10 h-auto max-h-[500px] w-auto object-contain drop-shadow-[0_28px_48px_rgba(15,23,42,0.16)]"
                   animate={{ y: [0, -8, 0] }}

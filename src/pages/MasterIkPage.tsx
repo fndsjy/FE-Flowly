@@ -5,6 +5,7 @@ import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
+import { getPublicAssetUrl } from "../lib/assets";
 import { openIkPreviewWindow } from "../lib/ik-preview";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -533,11 +534,7 @@ const MasterIkPage = () => {
       return;
     }
 
-    const baseUrl = new URL(
-      import.meta.env.BASE_URL ?? "/",
-      window.location.origin
-    ).toString();
-    const logoUrl = `${baseUrl}images/masa-depan-dimatamu.png`;
+    const logoUrl = getPublicAssetUrl("images/masa-depan-dimatamu.png");
     const ikTitle = escapeHtml(item.ikName);
     const ikNumber = escapeHtml(item.ikNumber);
     const dibuatOlehLabel = escapeHtml(formatApprovalName(item.dibuatOleh));

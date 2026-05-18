@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import AppImage from "../../components/atoms/AppImage";
 import { invalidateAccessSummary } from "../../hooks/useAccessSummary";
 import { apiFetch, buildApiUrl, getApiErrorMessage } from "../../lib/api";
 import ProtectedRoute from "../../ProtectedRoute";
@@ -908,9 +909,8 @@ const CustomerOnboardingHome = ({
             aria-label="Kembali ke OMS"
             className="flex h-10 w-[96px] shrink-0 items-center justify-center rounded-xl border border-white/80 bg-white/80 px-2 shadow-[0_14px_30px_-24px_rgba(30,64,175,0.45)] transition hover:-translate-y-0.5 sm:h-12 sm:w-[118px] sm:rounded-2xl sm:px-3"
           >
-            <img
-              src={`/images/logo-domas.png`}
-              // src={`${import.meta.env.BASE_URL}images/logo-domas.png`}
+            <AppImage
+              src="images/logo-domas.png"
               alt="Domas"
               className="h-auto w-full object-contain"
             />
@@ -997,9 +997,8 @@ const CustomerOnboardingHome = ({
           >
             <div className="absolute bottom-[-82px] left-1/2 z-20 -translate-x-1/2">
               <div className="customer-float-soft">
-                <img
-                    src={`/images/tunjuk-bawah.png`}
-                    // src={`${import.meta.env.BASE_URL}images/tunjuk-bawah.png`}
+                <AppImage
+                  src="images/tunjuk-bawah.png"
                   alt="Domas onboarding guide pointing to learning menu"
                   className="h-[380px] w-auto max-w-none object-contain drop-shadow-[0_34px_36px_rgba(30,64,175,0.24)] sm:h-[470px] lg:h-[560px]"
                 />
