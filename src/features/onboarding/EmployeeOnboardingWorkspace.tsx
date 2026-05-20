@@ -127,6 +127,19 @@ const panel =
   "rounded-[32px] border border-white/70 bg-white/92 p-6 shadow-[0_28px_72px_-48px_rgba(15,23,42,0.28)] md:p-8";
 const DEFAULT_STAGE_PASS_SCORE = 60;
 const ONBOARDING_WORKSPACE_REFRESH_EVENT = "flowly:onboarding-workspace-refresh";
+const ONBOARDING_DOCUMENT_BASE_URL = String(
+  import.meta.env.VITE_ONBOARDING_DOCUMENT_BASE_URL ??
+    "https://lms.domas.co.id/uploads/materi/dokumen/"
+).trim();
+const OFFICE_VIEWER_BASE_URL =
+  "https://view.officeapps.live.com/op/view.aspx?src=";
+const OFFICE_FILE_EXTENSIONS = ["doc", "docx", "ppt", "pptx", "xls", "xlsx"];
+const PDF_VIEWER_HASH_PARAMS: Record<string, string> = {
+  toolbar: "0",
+  navpanes: "0",
+  scrollbar: "0",
+  view: "FitH",
+};
 
 const safePortalKey = (value?: string | null): OnboardingPortalKey => {
   const normalized = value?.trim().toUpperCase() ?? "";
@@ -253,6 +266,79 @@ const mapResourceType = (
   return "ebook";
 };
 
+const getFileExtension = (fileNameOrUrl: string | null | undefined) => {
+  const name = (fileNameOrUrl || "").split("?")[0] ?? "";
+  const match = name.match(/\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase() ?? "";
+};
+
+const isHttpUrl = (value: string | null | undefined) =>
+  /^https?:\/\//i.test(value ?? "");
+
+const toAbsoluteUrl = (value: string) => {
+  if (isHttpUrl(value)) {
+    return value;
+  }
+
+  try {
+    return new URL(value, window.location.origin).toString();
+  } catch {
+    return value;
+  }
+};
+
+const buildConfiguredDocumentUrl = (fileName: string) => {
+  if (!ONBOARDING_DOCUMENT_BASE_URL) {
+    return null;
+  }
+
+  return `${ONBOARDING_DOCUMENT_BASE_URL.replace(/\/+$/, "")}/${encodeURIComponent(
+    fileName
+  )}`;
+};
+
+const getDirectOfficeSourceUrl = (file: WorkspaceFile, fallbackUrl: string) => {
+  const sourceUrl = file.url?.trim();
+  if (sourceUrl && isHttpUrl(sourceUrl)) {
+    return sourceUrl;
+  }
+
+  return buildConfiguredDocumentUrl(file.fileName) ?? toAbsoluteUrl(fallbackUrl);
+};
+
+const getOfficeViewerUrl = (file: WorkspaceFile, fallbackUrl: string) =>
+  `${OFFICE_VIEWER_BASE_URL}${encodeURIComponent(
+    getDirectOfficeSourceUrl(file, fallbackUrl)
+  )}`;
+
+const getPreviewKind = (file: WorkspaceFile) => {
+  const extension = getFileExtension(file.fileName || file.url);
+  if (
+    ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "avif", "jfif"].includes(
+      extension
+    )
+  ) {
+    return "image";
+  }
+
+  if (
+    Number(file.fileType) === 1 ||
+    ["mp4", "mov", "avi", "webm"].includes(extension)
+  ) {
+    return "video";
+  }
+
+  if (extension === "pdf") {
+    return "pdf";
+  }
+
+  if (OFFICE_FILE_EXTENSIONS.includes(extension)) {
+    return "office";
+  }
+
+  return "download";
+};
+
 const buildFileUrl = (params: {
   fileName: string;
   fileType: number | null;
@@ -270,6 +356,7 @@ const buildFileUrl = (params: {
     onboardingStageProgressId: params.onboardingStageProgressId,
     onboardingStageMaterialId: params.onboardingStageMaterialId,
     sourceFileId: String(params.sourceFileId),
+    disposition: "inline",
   });
 
   if (params.fileType !== null && !Number.isNaN(params.fileType)) {
@@ -280,7 +367,38 @@ const buildFileUrl = (params: {
     query.set("fileTitle", params.fileTitle);
   }
 
-  return `${baseUrl}?${query.toString()}`;
+  const url = `${baseUrl}?${query.toString()}`;
+  const extension = getFileExtension(params.fileName);
+  return extension === "pdf"
+    ? `${url}#${new URLSearchParams(PDF_VIEWER_HASH_PARAMS).toString()}`
+    : url;
+};
+
+const buildPreviewUrl = (
+  file: WorkspaceFile,
+  fallbackUrl: string
+) => {
+  const previewKind = getPreviewKind(file);
+  const sourceUrl = file.url?.trim();
+
+  if (previewKind === "image" && sourceUrl && isHttpUrl(sourceUrl)) {
+    return sourceUrl;
+  }
+
+  if (previewKind === "office") {
+    return getOfficeViewerUrl(file, fallbackUrl);
+  }
+
+  return fallbackUrl;
+};
+
+const shouldTrackOpenManually = (file: WorkspaceFile) => {
+  const previewKind = getPreviewKind(file);
+  const sourceUrl = file.url?.trim();
+  return (
+    previewKind === "office" ||
+    (previewKind === "image" && Boolean(sourceUrl && isHttpUrl(sourceUrl)))
+  );
 };
 
 const buildScenario = (
@@ -336,31 +454,45 @@ const buildScenario = (
           ];
         }
 
-        return material.files.map((file) => ({
-          id: `${stage.onboardingStageProgressId}-${material.assignmentId}-${file.id}`,
-          title: file.title ?? material.materialTitle,
-          estimatedMinutes: 10,
-          status: mapMaterialStatus(stageStatus, file.readAt, file.completedAt),
-          readAt: file.readAt,
-          lastReadAt: file.lastReadAt,
-          completedAt: file.completedAt,
-          openCount: file.openCount,
-          note:
-            material.note ??
-            material.materialDescription ??
-            `File dari ${material.materialTitle}`,
-          resourceType: mapResourceType(file.fileName, file.fileType),
-          resourceUrl: buildFileUrl({
-            fileName: file.fileName,
-            fileType: file.fileType,
-            fileTitle: file.title ?? material.materialTitle,
-            onboardingAssignmentId: portal.onboardingAssignmentId,
-            onboardingStageProgressId: stage.onboardingStageProgressId,
-            onboardingStageMaterialId: material.assignmentId,
-            sourceFileId: file.id,
-          }),
-        }));
-      })
+          return material.files.map((file) => {
+            const fallbackUrl = buildFileUrl({
+              fileName: file.fileName,
+              fileType: file.fileType,
+              fileTitle: file.title ?? material.materialTitle,
+              onboardingAssignmentId: portal.onboardingAssignmentId,
+              onboardingStageProgressId: stage.onboardingStageProgressId,
+              onboardingStageMaterialId: material.assignmentId,
+              sourceFileId: file.id,
+            });
+            const resourceUrl = buildPreviewUrl(file, fallbackUrl);
+
+            return {
+              id: `${stage.onboardingStageProgressId}-${material.assignmentId}-${file.id}`,
+              title: file.title ?? material.materialTitle,
+              estimatedMinutes: 10,
+              status: mapMaterialStatus(stageStatus, file.readAt, file.completedAt),
+              readAt: file.readAt,
+              lastReadAt: file.lastReadAt,
+              completedAt: file.completedAt,
+              openCount: file.openCount,
+              note:
+                material.note ??
+                material.materialDescription ??
+                `File dari ${material.materialTitle}`,
+              resourceType: mapResourceType(file.fileName, file.fileType),
+              resourceUrl,
+              runtimeOpenRequest: {
+                onboardingAssignmentId: portal.onboardingAssignmentId,
+                onboardingStageProgressId: stage.onboardingStageProgressId,
+                onboardingStageMaterialId: material.assignmentId,
+                sourceFileId: file.id,
+                fileName: file.fileName,
+                fileTitle: file.title ?? material.materialTitle,
+              },
+              trackOpenManually: shouldTrackOpenManually(file),
+            };
+          });
+        })
       .sort((left, right) => left.title.localeCompare(right.title));
 
     const assessmentStatus = mapAssessmentStatus(stage.status);

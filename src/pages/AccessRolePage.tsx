@@ -8,6 +8,7 @@ import { apiFetch } from "../lib/api";
 const domasColor = "#272e79";
 
 type ResourceType = "MENU" | "MODULE" | "PILAR" | "SBU" | "SBU_SUB";
+type OrgResourceType = Extract<ResourceType, "PILAR" | "SBU" | "SBU_SUB">;
 type AccessChoice = "NONE" | "READ" | "CRUD";
 type SubjectTypeOption = "ROLE" | "ADMIN" | "USER";
 
@@ -104,6 +105,26 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   SBU_SUB: "SBU Sub",
 };
 
+const orgResourceTypes: OrgResourceType[] = ["PILAR", "SBU", "SBU_SUB"];
+
+const orgResourceDescriptions: Record<OrgResourceType, string> = {
+  PILAR: "Akses level pilar organisasi.",
+  SBU: "Akses unit SBU di bawah pilar.",
+  SBU_SUB: "Akses detail SBU Sub.",
+};
+
+const createOrgSectionState = (): Record<OrgResourceType, boolean> => ({
+  PILAR: false,
+  SBU: false,
+  SBU_SUB: false,
+});
+
+const subjectTypeLabels: Record<SubjectTypeOption, string> = {
+  ROLE: "Role",
+  ADMIN: "User OMS",
+  USER: "Employee",
+};
+
 const hiddenAccessKeys = new Set([
   "EMPLOYEE_DASHBOARD",
   "EMPLOYEE_LEARNING",
@@ -174,6 +195,8 @@ const AccessRolePage = () => {
     id: string;
   } | null>(null);
   const [accessSelections, setAccessSelections] = useState<Record<string, AccessChoice>>({});
+  const [visibleOrgSections, setVisibleOrgSections] =
+    useState<Record<OrgResourceType, boolean>>(createOrgSectionState);
   const [existingAccessMap, setExistingAccessMap] = useState<Record<string, ExistingAccessEntry>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -259,52 +282,40 @@ const AccessRolePage = () => {
     });
   }, [subjectItems, subjectSearch]);
 
-  const hideOrgResources = subjectType === "USER";
+  const useOrgAccessBuilder = subjectType === "ROLE" || subjectType === "ADMIN";
 
   const resourceItems = useMemo<ResourceItem[]>(() => {
     const list: ResourceItem[] = [];
     const shouldHide = (value?: string | null) => hiddenAccessKeys.has(normalizeKey(value));
 
-    const menuList = [...menus]
-      .filter((item) => !item.isDeleted)
-      .filter((item) => !shouldHide(item.resourceKey))
-      .filter((item) => !hideOrgResources || normalizeKey(item.resourceKey) !== "ORGANISASI")
-      .sort(compareMasterAccessItems);
-    for (const menu of menuList) {
-      list.push({
-        resourceType: "MENU",
-        resourceKey: menu.resourceKey,
-        label: menu.displayName,
-        meta: menu.resourceKey,
-      });
-    }
+    if (!useOrgAccessBuilder) {
+      const menuList = [...menus]
+        .filter((item) => !item.isDeleted)
+        .filter((item) => !shouldHide(item.resourceKey))
+        .sort(compareMasterAccessItems);
+      for (const menu of menuList) {
+        list.push({
+          resourceType: "MENU",
+          resourceKey: menu.resourceKey,
+          label: menu.displayName,
+          meta: menu.resourceKey,
+        });
+      }
 
-    const moduleList = [...modules]
-      .filter((item) => !item.isDeleted)
-      .filter((item) => !shouldHide(item.resourceKey) && !shouldHide(item.parentKey))
-      .filter((item) => {
-        if (!hideOrgResources) return true;
-        const key = normalizeKey(item.resourceKey);
-        return key !== "PILAR"
-          && key !== "SBU"
-          && key !== "SBU_SUB"
-          && key !== "CHART"
-          && key !== "CHART_MEMBER";
-      })
-      .sort(compareMasterAccessItems);
-    for (const moduleItem of moduleList) {
-      list.push({
-        resourceType: "MODULE",
-        resourceKey: moduleItem.resourceKey,
-        label: moduleItem.displayName,
-        meta: moduleItem.parentKey
-          ? `${moduleItem.resourceKey} | ${moduleItem.parentKey}`
-          : moduleItem.resourceKey,
-      });
-    }
-
-    if (hideOrgResources) {
-      return list;
+      const moduleList = [...modules]
+        .filter((item) => !item.isDeleted)
+        .filter((item) => !shouldHide(item.resourceKey) && !shouldHide(item.parentKey))
+        .sort(compareMasterAccessItems);
+      for (const moduleItem of moduleList) {
+        list.push({
+          resourceType: "MODULE",
+          resourceKey: moduleItem.resourceKey,
+          label: moduleItem.displayName,
+          meta: moduleItem.parentKey
+            ? `${moduleItem.resourceKey} | ${moduleItem.parentKey}`
+            : moduleItem.resourceKey,
+        });
+      }
     }
 
     const pilarList = [...pilars].sort((a, b) =>
@@ -351,7 +362,7 @@ const AccessRolePage = () => {
     }
 
     return list;
-  }, [menus, modules, pilars, sbus, sbuSubs, pilarMap, sbuMap, hideOrgResources]);
+  }, [menus, modules, pilars, sbus, sbuSubs, pilarMap, sbuMap, useOrgAccessBuilder]);
 
   const filteredResources = useMemo(() => {
     const term = resourceSearch.trim().toLowerCase();
@@ -651,9 +662,15 @@ const AccessRolePage = () => {
 
   useEffect(() => {
     if (!selectedSubject) return;
+    setVisibleOrgSections(createOrgSectionState());
 
     const subjectTypeKey = selectedSubject.type === "ROLE" ? "ROLE" : "USER";
     const nextExisting: Record<string, ExistingAccessEntry> = {};
+    const manageableResourceKeys = new Set(
+      resourceItems.map((item) =>
+        buildAccessKey(item.resourceType, item.resourceKey)
+      )
+    );
 
     for (const access of accessRoles) {
       if (access.subjectType?.toUpperCase() !== subjectTypeKey) {
@@ -670,6 +687,9 @@ const AccessRolePage = () => {
 
       const level = access.accessLevel === "CRUD" ? "CRUD" : "READ";
       const key = buildAccessKey(resolved.resourceType, resolved.resourceKey);
+      if (!manageableResourceKeys.has(key)) {
+        continue;
+      }
       nextExisting[key] = {
         accessId: access.accessId,
         accessLevel: level,
@@ -692,6 +712,40 @@ const AccessRolePage = () => {
 
   const handleSelectionChange = (key: string, value: AccessChoice) => {
     setAccessSelections((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const getResourceKeysByType = (resourceType: ResourceType) =>
+    resourceItems
+      .filter((item) => item.resourceType === resourceType)
+      .map((item) => buildAccessKey(item.resourceType, item.resourceKey));
+
+  const toggleOrgSection = (resourceType: OrgResourceType, checked: boolean) => {
+    setVisibleOrgSections((prev) => ({ ...prev, [resourceType]: checked }));
+    if (checked) return;
+
+    const keys = getResourceKeysByType(resourceType);
+    setAccessSelections((prev) => {
+      const next = { ...prev };
+      for (const key of keys) {
+        next[key] = "NONE";
+      }
+      return next;
+    });
+  };
+
+  const applyOrgSectionLevel = (
+    resourceType: OrgResourceType,
+    accessLevel: AccessChoice
+  ) => {
+    setVisibleOrgSections((prev) => ({ ...prev, [resourceType]: true }));
+    const keys = getResourceKeysByType(resourceType);
+    setAccessSelections((prev) => {
+      const next = { ...prev };
+      for (const key of keys) {
+        next[key] = accessLevel;
+      }
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -870,8 +924,9 @@ const AccessRolePage = () => {
     const isAdminMenu = resourceType === "MENU" && adminKey.startsWith("ADMIN");
     const isAdminModule = resourceType === "MODULE" && adminKey.startsWith("ADMIN_");
     const isAdminResource = isAdminMenu || isAdminModule;
-    const disableAll = moduleSelection === "NONE";
-    const disableCrud = moduleSelection === "READ";
+    const isOrgResource = orgResourceTypes.includes(resourceType as OrgResourceType);
+    const disableAll = isOrgResource && !useOrgAccessBuilder && moduleSelection === "NONE";
+    const disableCrud = isOrgResource && !useOrgAccessBuilder && moduleSelection === "READ";
     const isUserSubject = selectedSubject?.type === "USER";
     const moduleLabel = resourceTypeLabels[resourceType];
     const options: Array<{ value: AccessChoice; label: string }> =
@@ -890,7 +945,7 @@ const AccessRolePage = () => {
       <div className="flex flex-wrap items-center gap-3">
         {options.map((option) => {
           const isCrudOption = option.value === "CRUD";
-          const disableCrudBySubject = isCrudOption && isUserSubject;
+          const disableCrudBySubject = isCrudOption && isUserSubject && !isOrgResource;
           const isDisabled =
             isAdminResource || disableAll || (isCrudOption && (disableCrud || disableCrudBySubject));
           const reason = isAdminResource
@@ -926,8 +981,111 @@ const AccessRolePage = () => {
     );
   };
 
-  const orderedResourceTypes: ResourceType[] = hideOrgResources
-    ? ["MENU", "MODULE"]
+  const orgSelectionCounts = useMemo(() => {
+    const counts: Record<OrgResourceType, number> = {
+      PILAR: 0,
+      SBU: 0,
+      SBU_SUB: 0,
+    };
+
+    for (const item of resourceItems) {
+      if (!orgResourceTypes.includes(item.resourceType as OrgResourceType)) {
+        continue;
+      }
+
+      const resourceType = item.resourceType as OrgResourceType;
+      const key = buildAccessKey(item.resourceType, item.resourceKey);
+      if ((accessSelections[key] ?? "NONE") !== "NONE") {
+        counts[resourceType] += 1;
+      }
+    }
+
+    return counts;
+  }, [accessSelections, resourceItems]);
+
+  const orgTotalCounts = useMemo(() => {
+    const counts: Record<OrgResourceType, number> = {
+      PILAR: 0,
+      SBU: 0,
+      SBU_SUB: 0,
+    };
+
+    for (const item of resourceItems) {
+      if (orgResourceTypes.includes(item.resourceType as OrgResourceType)) {
+        counts[item.resourceType as OrgResourceType] += 1;
+      }
+    }
+
+    return counts;
+  }, [resourceItems]);
+
+  const renderOrgAccessRow = (item: ResourceItem) => {
+    const key = buildAccessKey(item.resourceType, item.resourceKey);
+    const existing = existingAccessMap[key];
+    const value = accessSelections[key] ?? "NONE";
+    const checked = value !== "NONE";
+
+    return (
+      <div
+        key={key}
+        className="flex flex-col gap-3 rounded-xl border border-gray-200 px-4 py-3 md:flex-row md:items-center md:justify-between"
+      >
+        <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(event) =>
+              handleSelectionChange(key, event.target.checked ? "READ" : "NONE")
+            }
+            className="mt-1 h-4 w-4 accent-[#272e79]"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-gray-700">
+              {item.label}
+            </span>
+            {item.meta ? (
+              <span className="block text-xs text-gray-400">{item.meta}</span>
+            ) : null}
+          </span>
+        </label>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {(["READ", "CRUD"] as const).map((level) => (
+            <button
+              key={level}
+              type="button"
+              onClick={() => handleSelectionChange(key, level)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                value === level
+                  ? "border-[#272e79] bg-[#272e79] text-white"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-[#272e79]"
+              }`}
+            >
+              {level}
+            </button>
+          ))}
+          {existing ? (
+            <button
+              type="button"
+              onClick={() =>
+                setDeleteConfirm({
+                  open: true,
+                  accessId: existing.accessId,
+                  label: `${resourceTypeLabels[item.resourceType]} - ${item.label}`,
+                })
+              }
+              className="text-sm text-rose-500 hover:text-rose-600"
+            >
+              <i className="fa-solid fa-trash" /> Hapus
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const orderedResourceTypes: ResourceType[] = useOrgAccessBuilder
+    ? orgResourceTypes
     : ["MENU", "MODULE", "PILAR", "SBU", "SBU_SUB"];
 
   return (
@@ -947,8 +1105,8 @@ const AccessRolePage = () => {
                 Manajemen Hak Akses
               </h1>
               <p className="text-sm text-gray-500">
-                {hideOrgResources
-                  ? "Pilih subject, lalu atur akses menu dan module."
+                {useOrgAccessBuilder
+                  ? "Pilih role atau user OMS, lalu atur akses organisasi saja."
                   : "Pilih subject, lalu atur akses menu, module, dan organisasi."}
               </p>
             </div>
@@ -970,7 +1128,6 @@ const AccessRolePage = () => {
         <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
           <div className="bg-white rounded-2xl p-4 shadow-lg shadow-gray-300/40">
             <div className="flex gap-2 mb-4">
-              {/* {(["ROLE", "ADMIN", "USER"] as SubjectTypeOption[]).map((type) => ( */}
               {(["ROLE", "ADMIN"] as SubjectTypeOption[]).map((type) => (
                 <button
                   key={type}
@@ -981,7 +1138,7 @@ const AccessRolePage = () => {
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  {type}
+                  {subjectTypeLabels[type]}
                 </button>
               ))}
             </div>
@@ -1033,7 +1190,9 @@ const AccessRolePage = () => {
                       Akses untuk {selectedSubjectLabel}
                     </h2>
                     <p className="text-sm text-gray-500">
-                      Pilih READ atau CRUD (menu hanya READ).
+                      {useOrgAccessBuilder
+                        ? "Centang kategori organisasi, lalu pilih item dan level READ/CRUD."
+                        : "Pilih READ atau CRUD (menu hanya READ)."}
                     </p>
                   </div>
                   <input
@@ -1045,67 +1204,170 @@ const AccessRolePage = () => {
                   />
                 </div>
 
-                {orderedResourceTypes.map((type) => {
-                  const items = resourceGroups[type];
-                  if (!items || items.length === 0) return null;
-                  return (
-                    <div key={type} className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-semibold text-gray-700">
-                          {resourceTypeLabels[type]}
-                        </h3>
-                        <span className="text-xs text-gray-400">
-                          {items.length} item
-                        </span>
-                      </div>
-
-                      <div className="space-y-3">
-                        {items.map((item) => {
-                          const key = buildAccessKey(item.resourceType, item.resourceKey);
-                          const existing = existingAccessMap[key];
-                          const adminKey = item.resourceKey.trim().toUpperCase();
-                          const isAdminResource =
-                            (item.resourceType === "MENU" && adminKey.startsWith("ADMIN")) ||
-                            (item.resourceType === "MODULE" && adminKey.startsWith("ADMIN_"));
-                          return (
-                            <div
-                              key={key}
-                              className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3"
-                            >
-                              <div className="flex-1">
-                                <p className="text-sm font-semibold text-gray-700">
-                                  {item.label}
-                                </p>
-                                {item.meta && (
-                                  <p className="text-xs text-gray-400">{item.meta}</p>
-                                )}
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-4">
-                                {renderOptions(item.resourceType, key, item.resourceKey)}
-                                {existing && !isAdminResource && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setDeleteConfirm({
-                                        open: true,
-                                        accessId: existing.accessId,
-                                        label: `${resourceTypeLabels[item.resourceType]} - ${item.label}`,
-                                      })
-                                    }
-                                    className="text-rose-500 hover:text-rose-600 text-sm"
-                                  >
-                                    <i className="fa-solid fa-trash" /> Hapus
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                {useOrgAccessBuilder ? (
+                  <div className="space-y-5">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {orgResourceTypes.map((type) => {
+                        const selectedCount = orgSelectionCounts[type];
+                        const checked =
+                          visibleOrgSections[type] || selectedCount > 0;
+                        return (
+                          <label
+                            key={type}
+                            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-4 transition ${
+                              checked
+                                ? "border-[#272e79] bg-[#eef1ff]"
+                                : "border-gray-200 bg-white hover:border-gray-300"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                toggleOrgSection(type, event.target.checked)
+                              }
+                              className="mt-1 h-4 w-4 accent-[#272e79]"
+                            />
+                            <span>
+                              <span className="block text-sm font-semibold text-gray-800">
+                                {resourceTypeLabels[type]}
+                              </span>
+                              <span className="mt-1 block text-xs leading-5 text-gray-500">
+                                {selectedCount}/{orgTotalCounts[type]} dipilih
+                              </span>
+                              <span className="mt-1 block text-xs leading-5 text-gray-400">
+                                {orgResourceDescriptions[type]}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+
+                    {orgResourceTypes.map((type) => {
+                      const items = resourceGroups[type] ?? [];
+                      const selectedCount = orgSelectionCounts[type];
+                      const shouldShow =
+                        visibleOrgSections[type] ||
+                        selectedCount > 0 ||
+                        resourceSearch.trim().length > 0;
+                      if (!shouldShow) return null;
+
+                      return (
+                        <div
+                          key={type}
+                          className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4"
+                        >
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-700">
+                                {resourceTypeLabels[type]}
+                              </h3>
+                              <p className="text-xs text-gray-500">
+                                {selectedCount} dipilih dari {orgTotalCounts[type]} item.
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => applyOrgSectionLevel(type, "READ")}
+                                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-[#272e79]"
+                              >
+                                Semua READ
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyOrgSectionLevel(type, "CRUD")}
+                                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-[#272e79]"
+                              >
+                                Semua CRUD
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleOrgSection(type, false)}
+                                className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-500 transition hover:bg-rose-50"
+                              >
+                                Kosongkan
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            {items.length === 0 ? (
+                              <p className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-5 text-sm text-gray-400">
+                                Tidak ada item yang cocok dengan pencarian.
+                              </p>
+                            ) : (
+                              items.map(renderOrgAccessRow)
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  orderedResourceTypes.map((type) => {
+                    const items = resourceGroups[type];
+                    if (!items || items.length === 0) return null;
+                    return (
+                      <div key={type} className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-semibold text-gray-700">
+                            {resourceTypeLabels[type]}
+                          </h3>
+                          <span className="text-xs text-gray-400">
+                            {items.length} item
+                          </span>
+                        </div>
+
+                        <div className="space-y-3">
+                          {items.map((item) => {
+                            const key = buildAccessKey(item.resourceType, item.resourceKey);
+                            const existing = existingAccessMap[key];
+                            const adminKey = item.resourceKey.trim().toUpperCase();
+                            const isAdminResource =
+                              (item.resourceType === "MENU" && adminKey.startsWith("ADMIN")) ||
+                              (item.resourceType === "MODULE" && adminKey.startsWith("ADMIN_"));
+                            return (
+                              <div
+                                key={key}
+                                className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3"
+                              >
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-gray-700">
+                                    {item.label}
+                                  </p>
+                                  {item.meta && (
+                                    <p className="text-xs text-gray-400">{item.meta}</p>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-4">
+                                  {renderOptions(item.resourceType, key, item.resourceKey)}
+                                  {existing && !isAdminResource && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setDeleteConfirm({
+                                          open: true,
+                                          accessId: existing.accessId,
+                                          label: `${resourceTypeLabels[item.resourceType]} - ${item.label}`,
+                                        })
+                                      }
+                                      className="text-rose-500 hover:text-rose-600 text-sm"
+                                    >
+                                      <i className="fa-solid fa-trash" /> Hapus
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </>
             )}
           </div>

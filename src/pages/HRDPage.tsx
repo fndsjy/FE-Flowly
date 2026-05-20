@@ -102,6 +102,8 @@ type OnboardingDecisionType =
   | "CANCEL_TRANSFER_REVIEW";
 
 const HRD_ONBOARDING_PORTAL_KEY = "EMPLOYEE";
+const DEFAULT_EXTENSION_DAYS = 90;
+const MAX_EXTENSION_DAYS = 3650;
 const EMPLOYEE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 type FormState = {
@@ -777,6 +779,9 @@ const HRDPage = () => {
     summary: null,
   });
   const [decisionNote, setDecisionNote] = useState("");
+  const [extensionDays, setExtensionDays] = useState(
+    String(DEFAULT_EXTENSION_DAYS)
+  );
   const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
   const [cancelTransferConfirmOpen, setCancelTransferConfirmOpen] =
     useState(false);
@@ -1497,6 +1502,7 @@ const HRDPage = () => {
       summary,
     });
     setDecisionNote("");
+    setExtensionDays(String(DEFAULT_EXTENSION_DAYS));
     setCancelTransferConfirmOpen(false);
     setFailFinalConfirmOpen(false);
   };
@@ -1511,6 +1517,7 @@ const HRDPage = () => {
       summary: null,
     });
     setDecisionNote("");
+    setExtensionDays(String(DEFAULT_EXTENSION_DAYS));
   };
 
   const openFailFinalConfirm = () => {
@@ -1532,6 +1539,22 @@ const HRDPage = () => {
     const summary = decisionTarget.summary;
     if (!summary?.onboardingAssignmentId || isSubmittingDecision) return;
 
+    const extensionDayCount = Number(extensionDays);
+    const validExtensionDayCount =
+      Number.isInteger(extensionDayCount) &&
+      extensionDayCount >= 1 &&
+      extensionDayCount <= MAX_EXTENSION_DAYS
+        ? extensionDayCount
+        : null;
+
+    if (decisionType === "EXTEND" && !validExtensionDayCount) {
+      showToast(
+        `Isi tambahan tenggat 1-${MAX_EXTENSION_DAYS} hari.`,
+        "error"
+      );
+      return;
+    }
+
     setIsSubmittingDecision(true);
     try {
       const payload: {
@@ -1543,7 +1566,10 @@ const HRDPage = () => {
       } = {
         onboardingAssignmentId: summary.onboardingAssignmentId,
         decisionType,
-        nextDurationDay: decisionType === "EXTEND" ? 90 : null,
+        nextDurationDay:
+          decisionType === "EXTEND" && validExtensionDayCount
+            ? validExtensionDayCount
+            : null,
         note: normalizeText(decisionNote),
       };
 
@@ -1574,12 +1600,12 @@ const HRDPage = () => {
         decisionType === "PASS_OVERRIDE"
           ? "Onboarding diluluskan."
           : decisionType === "EXTEND"
-            ? "Masa onboarding ditambah 90 hari."
+            ? `Masa onboarding ditambah ${validExtensionDayCount} hari.`
             : decisionType === "FREEZE_TRANSFER_REVIEW"
               ? "Onboarding dibekukan untuk review HRD."
               : decisionType === "CANCEL_TRANSFER_REVIEW"
                 ? "Status beku onboarding dibatalkan."
-              : "Onboarding ditetapkan gagal final.";
+                : "Onboarding ditetapkan gagal final.";
       showToast(label, "success");
       setDecisionTarget({
         open: false,
@@ -1587,6 +1613,7 @@ const HRDPage = () => {
         summary: null,
       });
       setDecisionNote("");
+      setExtensionDays(String(DEFAULT_EXTENSION_DAYS));
       setCancelTransferConfirmOpen(false);
       setFailFinalConfirmOpen(false);
       await fetchPageData();
@@ -1609,6 +1636,15 @@ const HRDPage = () => {
   const isTransferReviewDecision =
     decisionTargetStatus === "TRANSFER_REVIEW";
   const isFailedDecision = decisionTargetStatus === "FAILED";
+  const extensionDayPreview = Number(extensionDays);
+  const validExtensionDayPreview =
+    Number.isInteger(extensionDayPreview) &&
+    extensionDayPreview >= 1 &&
+    extensionDayPreview <= MAX_EXTENSION_DAYS
+      ? extensionDayPreview
+      : null;
+  const extensionDurationDayPreview =
+    validExtensionDayPreview ?? DEFAULT_EXTENSION_DAYS;
   const decisionEmployeeLabel =
     decisionTarget.employee
       ? decisionTarget.employee.Name ||
@@ -2838,6 +2874,33 @@ const HRDPage = () => {
               </p>
             </div>
 
+            {!isTransferReviewDecision ? (
+              <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-4">
+                <label className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">
+                  Tambahan tenggat jika diperpanjang
+                </label>
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_EXTENSION_DAYS}
+                    step={1}
+                    value={extensionDays}
+                    onChange={(event) => setExtensionDays(event.target.value)}
+                    className="h-11 w-full rounded-xl border-2 border-sky-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-sky-400 focus:ring-1 focus:ring-sky-300 sm:w-32"
+                  />
+                  <span className="text-sm leading-6 text-sky-800">
+                    hari dari tenggat lama.
+                  </span>
+                </div>
+                {!validExtensionDayPreview ? (
+                  <p className="mt-2 text-xs font-semibold text-rose-600">
+                    Isi angka bulat 1-{MAX_EXTENSION_DAYS} hari.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               {isFailedDecision ? (
                 <button
@@ -2863,18 +2926,24 @@ const HRDPage = () => {
                   }
                   submitOnboardingDecision("EXTEND");
                 }}
-                disabled={isSubmittingDecision}
+                disabled={
+                  isSubmittingDecision ||
+                  (!isTransferReviewDecision && !validExtensionDayPreview)
+                }
                 className={`rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-left transition hover:bg-sky-100 ${
-                  isSubmittingDecision ? "cursor-not-allowed opacity-60" : ""
+                  isSubmittingDecision ||
+                  (!isTransferReviewDecision && !validExtensionDayPreview)
+                    ? "cursor-not-allowed opacity-60"
+                    : ""
                 }`}
               >
                 <span className="block text-sm font-semibold text-sky-700">
-                  {isTransferReviewDecision ? "Batalkan beku" : "Lanjut 3 bulan"}
+                  {isTransferReviewDecision ? "Batalkan beku" : "Tambah tenggat"}
                 </span>
                 <span className="mt-2 block text-xs leading-5 text-sky-700/80">
                   {isTransferReviewDecision
                     ? "Onboarding dibuka lagi setelah HRD selesai review departemen."
-                    : "Tenggat baru dihitung 90 hari dari hari keputusan."}
+                    : `Tenggat baru dihitung ${extensionDurationDayPreview} hari dari tenggat lama.`}
                 </span>
               </button>
               <button

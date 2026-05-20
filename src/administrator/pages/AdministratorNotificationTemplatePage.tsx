@@ -35,6 +35,13 @@ type TestNotificationResponse = {
   failed?: number;
   skipped?: number;
 };
+type NotificationFlowStep = {
+  eventKey: string;
+  step: number;
+  phase: string;
+  title: string;
+  description: string;
+};
 
 const pagePanelClass =
   "rounded-[28px] border border-[#e6ebf1] bg-white shadow-[0_20px_50px_-40px_rgba(15,23,42,0.18)]";
@@ -55,24 +62,115 @@ const TOKENS = [
   "{temporaryPassword}",
   "{deadlineDays}",
   "{dueDate}",
+  "{previousDueDate}",
+  "{extensionDays}",
+  "{decisionNote}",
+  "{decisionAt}",
+  "{decisionLabel}",
+  "{decisionType}",
+  "{decisionActorName}",
+  "{decisionActorBadge}",
+  "{decisionUrl}",
+  "{status}",
+  "{nextDurationDay}",
   "{loginUrl}",
   "{supportName}",
   "{supportPhone}",
   "{employeeName}",
+  "{participantName}",
   "{startedDate}",
+  "{failedAt}",
   "{sbuSubName}",
   "{sbuName}",
   "{pilarName}",
   "{positionName}",
   "{jabatanName}",
   "{hrdUrl}",
+  "{stageName}",
+  "{examsId}",
+  "{occurredAt}",
+  "{eventLabel}",
+  "{examAction}",
 ];
+const NOTIFICATION_FLOW_STEPS: NotificationFlowStep[] = [
+  {
+    eventKey: "OMS_FIRST_LOGIN",
+    step: 1,
+    phase: "Awal",
+    title: "Welcome / first login",
+    description: "Akun OMS, username, dan password awal peserta.",
+  },
+  {
+    eventKey: "ONBOARDING_STARTED",
+    step: 2,
+    phase: "Mulai",
+    title: "Onboarding dimulai",
+    description: "Peserta dan PIC menerima info onboarding sudah aktif.",
+  },
+  {
+    eventKey: "ONBOARDING_EXAM_STARTED",
+    step: 3,
+    phase: "Ujian",
+    title: "Ujian dimulai",
+    description: "Monitor menerima info saat peserta mulai ujian.",
+  },
+  {
+    eventKey: "ONBOARDING_EXAM_FINISHED",
+    step: 4,
+    phase: "Ujian",
+    title: "Ujian selesai",
+    description: "Monitor menerima info saat peserta selesai ujian.",
+  },
+  {
+    eventKey: "ONBOARDING_OVERDUE_FAILED",
+    step: 5,
+    phase: "Deadline",
+    title: "Melewati tenggat",
+    description: "HRD dan PIC menerima info saat onboarding gagal otomatis.",
+  },
+  {
+    eventKey: "ONBOARDING_PIC_DECISION",
+    step: 6,
+    phase: "Keputusan PIC",
+    title: "Keputusan PIC",
+    description: "HRD menerima monitoring keputusan dari PIC SBU Sub.",
+  },
+  {
+    eventKey: "ONBOARDING_TRANSFER_REVIEW_CANCELLED",
+    step: 7,
+    phase: "Review HRD",
+    title: "Review HRD selesai",
+    description: "Peserta dan PIC menerima info onboarding dilanjutkan.",
+  },
+  {
+    eventKey: "ONBOARDING_EXTENDED",
+    step: 8,
+    phase: "Keputusan HRD",
+    title: "Tenggat diperpanjang",
+    description: "Peserta menerima deadline baru dari HRD.",
+  },
+  {
+    eventKey: "ONBOARDING_PASSED",
+    step: 9,
+    phase: "Selesai",
+    title: "Onboarding lulus",
+    description: "Peserta menerima info lulus onboarding.",
+  },
+  {
+    eventKey: "ONBOARDING_FAIL_FINAL",
+    step: 10,
+    phase: "Selesai",
+    title: "Gagal final",
+    description: "Peserta menerima info onboarding gagal final.",
+  },
+];
+const NOTIFICATION_FLOW_STEP_MAP = new Map(
+  NOTIFICATION_FLOW_STEPS.map((item) => [item.eventKey, item])
+);
 const DEFAULT_EVENT_KEY = "OMS_FIRST_LOGIN";
-const DEFAULT_EVENT_KEY_OPTIONS = [
-  "OMS_FIRST_LOGIN",
-  "ONBOARDING_STARTED",
-  "ONBOARDING_OVERDUE_FAILED",
-];
+const DEFAULT_EVENT_KEY_OPTIONS = NOTIFICATION_FLOW_STEPS.map(
+  (item) => item.eventKey
+);
 const DEFAULT_RECIPIENT_ROLE = "PARTICIPANT";
 const DEFAULT_CHANNEL: NotificationChannel = "EMAIL";
 const EMPLOYEE_PORTAL_KEY = "EMPLOYEE";
@@ -85,16 +183,25 @@ const DEFAULT_RECIPIENT_ROLE_OPTIONS = [
   "PARTICIPANT",
   "SBU_SUB_PIC",
   "HRD",
+  "EXAM_MONITOR",
 ];
 const EVENT_KEY_LABELS: Record<string, string> = {
   ONBOARDING_STARTED: "Onboarding dimulai",
   OMS_FIRST_LOGIN: "Welcome OMS / first login",
   ONBOARDING_OVERDUE_FAILED: "Onboarding melewati deadline",
+  ONBOARDING_PIC_DECISION: "Keputusan PIC onboarding",
+  ONBOARDING_TRANSFER_REVIEW_CANCELLED: "Onboarding dilanjutkan setelah review",
+  ONBOARDING_PASSED: "Onboarding lulus",
+  ONBOARDING_EXTENDED: "Tenggat onboarding diperpanjang",
+  ONBOARDING_FAIL_FINAL: "Onboarding gagal final",
+  ONBOARDING_EXAM_STARTED: "Ujian onboarding dimulai",
+  ONBOARDING_EXAM_FINISHED: "Ujian onboarding selesai",
 };
 const RECIPIENT_ROLE_LABELS: Record<string, string> = {
   PARTICIPANT: "Peserta onboarding",
   SBU_SUB_PIC: "PIC SBU Sub",
   HRD: "HRD",
+  EXAM_MONITOR: "Monitor ujian",
 };
 const DEFAULT_MESSAGE =
   "Halo {recipientName},\n\nWelcome OMS. Onboarding Anda untuk portal {portalName} sudah dimulai dengan deadline {deadlineDays} hari sampai {dueDate}.\nCard number / username Anda: {cardNumber}\nPassword sementara Anda: {temporaryPassword}\n\nSilakan login melalui {loginUrl} dan segera ubah password Anda setelah berhasil masuk.\n\nJika ada kendala, hubungi {supportName} di {supportPhone}.";
@@ -151,6 +258,37 @@ const getRecipientRoleLabel = (value?: string | null) => {
   return sanitized
     ? RECIPIENT_ROLE_LABELS[sanitized] ?? sanitized.replaceAll("_", " ")
     : "-";
+};
+
+const getFlowStep = (eventKey?: string | null) =>
+  NOTIFICATION_FLOW_STEP_MAP.get(sanitizeEventKey(eventKey ?? ""));
+
+const getEventFlowOrder = (eventKey?: string | null) =>
+  getFlowStep(eventKey)?.step ?? 999;
+
+const getRecipientRoleOrder = (recipientRole?: string | null) => {
+  const normalized = sanitizeRecipientRole(recipientRole ?? "");
+  const index = DEFAULT_RECIPIENT_ROLE_OPTIONS.indexOf(normalized);
+  return index >= 0 ? index : DEFAULT_RECIPIENT_ROLE_OPTIONS.length;
+};
+
+const compareTemplatesByFlow = (
+  left: NotificationTemplateItem,
+  right: NotificationTemplateItem
+) => {
+  const flowDiff =
+    getEventFlowOrder(left.eventKey) - getEventFlowOrder(right.eventKey);
+  if (flowDiff !== 0) return flowDiff;
+
+  const roleDiff =
+    getRecipientRoleOrder(left.recipientRole) -
+    getRecipientRoleOrder(right.recipientRole);
+  if (roleDiff !== 0) return roleDiff;
+
+  const channelDiff = left.channel.localeCompare(right.channel);
+  if (channelDiff !== 0) return channelDiff;
+
+  return left.templateName.localeCompare(right.templateName);
 };
 
 const isNotificationChannel = (value?: string | null): value is NotificationChannel =>
@@ -210,6 +348,7 @@ const AdministratorNotificationTemplatePage = () => {
   const [mode, setMode] = useState<"add" | "edit">("add");
   const [searchInput, setSearchInput] = useState("");
   const [portalFilter, setPortalFilter] = useState("ALL");
+  const [flowFilter, setFlowFilter] = useState("ALL");
   const [form, setForm] = useState<FormState>(createDefaultForm());
   const [channelManuallyChanged, setChannelManuallyChanged] = useState(false);
   const [isCustomEventKey, setIsCustomEventKey] = useState(false);
@@ -237,9 +376,8 @@ const AdministratorNotificationTemplatePage = () => {
 
     return Array.from(values)
       .sort((left, right) => {
-        if (left === DEFAULT_EVENT_KEY) return -1;
-        if (right === DEFAULT_EVENT_KEY) return 1;
-        return left.localeCompare(right);
+        const flowDiff = getEventFlowOrder(left) - getEventFlowOrder(right);
+        return flowDiff !== 0 ? flowDiff : left.localeCompare(right);
       })
       .map((value) => ({
         value,
@@ -258,9 +396,9 @@ const AdministratorNotificationTemplatePage = () => {
 
     return Array.from(values)
       .sort((left, right) => {
-        if (left === DEFAULT_RECIPIENT_ROLE) return -1;
-        if (right === DEFAULT_RECIPIENT_ROLE) return 1;
-        return left.localeCompare(right);
+        const roleDiff =
+          getRecipientRoleOrder(left) - getRecipientRoleOrder(right);
+        return roleDiff !== 0 ? roleDiff : left.localeCompare(right);
       })
       .map((value) => ({
         value,
@@ -519,19 +657,97 @@ const AdministratorNotificationTemplatePage = () => {
 
   const filteredTemplates = useMemo(() => {
     const term = deferredSearch.trim().toLowerCase();
-    return templates.filter((item) => {
+    return templates
+      .filter((item) => {
+        const eventKey = sanitizeEventKey(item.eventKey);
+        if (flowFilter !== "ALL" && eventKey !== flowFilter) return false;
+
+        const flowStep = getFlowStep(eventKey);
+        const portalText = item.appliesToAllPortals
+          ? "semua portal all portals"
+          : item.portalKeys
+              .map((portalKey) => portalLabelMap.get(portalKey) ?? portalKey)
+              .join(" ");
+        const searchableText = [
+          item.templateName,
+          item.messageTemplate,
+          item.eventKey,
+          getEventKeyLabel(item.eventKey),
+          flowStep?.title,
+          flowStep?.phase,
+          flowStep?.description,
+          item.recipientRole,
+          getRecipientRoleLabel(item.recipientRole),
+          item.channel,
+          portalText,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
         const matchesSearch =
-          term.length === 0 ||
-          item.templateName.toLowerCase().includes(term) ||
-          item.messageTemplate.toLowerCase().includes(term) ||
-          item.eventKey.toLowerCase().includes(term) ||
-          item.recipientRole.toLowerCase().includes(term);
+          term.length === 0 || searchableText.includes(term);
       if (!matchesSearch) return false;
       if (portalFilter === "ALL") return true;
       if (portalFilter === "__ALL_PORTALS__") return item.appliesToAllPortals;
       return item.portalKeys.includes(portalFilter);
+      })
+      .sort(compareTemplatesByFlow);
+  }, [deferredSearch, flowFilter, portalFilter, portalLabelMap, templates]);
+
+  const flowStepSummary = useMemo(
+    () =>
+      NOTIFICATION_FLOW_STEPS.map((step) => ({
+        ...step,
+        count: templates.filter(
+          (item) => sanitizeEventKey(item.eventKey) === step.eventKey
+        ).length,
+      })),
+    [templates]
+  );
+
+  const groupedFilteredTemplates = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        eventKey: string;
+        step: NotificationFlowStep | null;
+        phase: string;
+        title: string;
+        description: string;
+        order: number;
+        templates: NotificationTemplateItem[];
+      }
+    >();
+
+    for (const item of filteredTemplates) {
+      const eventKey = sanitizeEventKey(item.eventKey) || "UNKNOWN";
+      const flowStep = getFlowStep(eventKey) ?? null;
+      const existing = groups.get(eventKey);
+
+      if (existing) {
+        existing.templates.push(item);
+        continue;
+      }
+
+      groups.set(eventKey, {
+        eventKey,
+        step: flowStep,
+        phase: flowStep?.phase ?? "Custom",
+        title: flowStep?.title ?? getEventKeyLabel(eventKey),
+        description:
+          flowStep?.description ??
+          "Event custom atau belum dimasukkan ke alur onboarding utama.",
+        order: flowStep?.step ?? 999,
+        templates: [item],
+      });
+    }
+
+    return Array.from(groups.values()).sort((left, right) => {
+      const orderDiff = left.order - right.order;
+      return orderDiff !== 0 ? orderDiff : left.title.localeCompare(right.title);
     });
-  }, [deferredSearch, portalFilter, templates]);
+  }, [filteredTemplates]);
 
   return (
     <div className="space-y-6">
@@ -590,9 +806,26 @@ const AdministratorNotificationTemplatePage = () => {
                   type="text"
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Cari nama template, event, atau isi pesan"
+                  placeholder="Cari nama, alur, event, channel, penerima, portal, atau isi pesan"
                   className="mt-2 w-full rounded-[18px] border border-[#dde5ee] bg-[#f8fafc] px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white"
                 />
+              </div>
+              <div className="min-w-[15rem]">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Filter alur
+                </label>
+                <select
+                  value={flowFilter}
+                  onChange={(event) => setFlowFilter(event.target.value)}
+                  className="mt-2 w-full rounded-[18px] border border-[#dde5ee] bg-[#f8fafc] px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white"
+                >
+                  <option value="ALL">Semua alur</option>
+                  {NOTIFICATION_FLOW_STEPS.map((step) => (
+                    <option key={step.eventKey} value={step.eventKey}>
+                      {String(step.step).padStart(2, "0")}. {step.title}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="min-w-[13rem]">
                 <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -614,6 +847,77 @@ const AdministratorNotificationTemplatePage = () => {
               </div>
             </div>
 
+            <div className="rounded-[24px] border border-[#e8edf4] bg-[#fbfcfe] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    Alur notifikasi employee onboarding
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Urutan dari welcome akun sampai onboarding selesai.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFlowFilter("ALL")}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                    flowFilter === "ALL"
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  Semua ({templates.length})
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {flowStepSummary.map((step) => (
+                  <button
+                    key={step.eventKey}
+                    type="button"
+                    onClick={() => setFlowFilter(step.eventKey)}
+                    className={`flex min-h-[74px] items-start gap-3 rounded-[18px] border px-3 py-3 text-left transition ${
+                      flowFilter === step.eventKey
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-[#dde5ee] bg-white text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                        flowFilter === step.eventKey
+                          ? "bg-white text-slate-900"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {String(step.step).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">
+                        {step.title}
+                      </span>
+                      <span
+                        className={`mt-1 block text-xs leading-5 ${
+                          flowFilter === step.eventKey
+                            ? "text-slate-200"
+                            : "text-slate-500"
+                        }`}
+                      >
+                        {step.description}
+                      </span>
+                    </span>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        flowFilter === step.eventKey
+                          ? "bg-white/10 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {step.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-3">
               {loading ? (
                 <div className="rounded-[22px] border border-dashed border-[#d7dfeb] bg-[#f8fafc] px-4 py-8 text-sm text-slate-500">
@@ -624,8 +928,36 @@ const AdministratorNotificationTemplatePage = () => {
                   Belum ada template yang cocok dengan filter saat ini.
                 </div>
               ) : (
-                filteredTemplates.map((item) => (
-                  <article
+                groupedFilteredTemplates.map((group) => (
+                  <section key={group.eventKey} className="space-y-3">
+                    <div className="rounded-[20px] border border-[#e8edf4] bg-white px-4 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-bold text-white">
+                              {group.step
+                                ? `Langkah ${String(group.step.step).padStart(2, "0")}`
+                                : "Custom"}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                              {group.phase}
+                            </span>
+                          </div>
+                          <h3 className="mt-2 text-base font-semibold text-slate-900">
+                            {group.title}
+                          </h3>
+                          <p className="mt-1 text-sm leading-6 text-slate-500">
+                            {group.description}
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                          {group.templates.length} template
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {group.templates.map((item) => (
+                        <article
                     key={item.notificationTemplateId}
                     className="rounded-[24px] border border-[#e8edf4] bg-[linear-gradient(180deg,#ffffff_0%,#fbfcfe_100%)] p-4 shadow-[0_18px_42px_-36px_rgba(15,23,42,0.25)]"
                   >
@@ -707,7 +1039,10 @@ const AdministratorNotificationTemplatePage = () => {
                     <div className="mt-3 text-xs text-slate-500">
                       Update: {formatDateTime(item.updatedAt)}
                     </div>
-                  </article>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
                 ))
               )}
             </div>
