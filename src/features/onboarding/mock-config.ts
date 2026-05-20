@@ -40,6 +40,15 @@ export type ExtensionStatus =
   | "rejected_failed";
 export type CertificateStatus = "pending" | "issued" | "blocked";
 
+export type RuntimeMaterialOpenRequest = {
+  onboardingAssignmentId: string;
+  onboardingStageProgressId: string;
+  onboardingStageMaterialId: string;
+  sourceFileId: number;
+  fileName?: string | null;
+  fileTitle?: string | null;
+};
+
 export type OnboardingMaterial = {
   id: string;
   title: string;
@@ -52,6 +61,8 @@ export type OnboardingMaterial = {
   note: string;
   resourceType: OnboardingMaterialType;
   resourceUrl: string;
+  runtimeOpenRequest?: RuntimeMaterialOpenRequest | null;
+  trackOpenManually?: boolean;
 };
 
 export type OnboardingAssessment = {

@@ -708,6 +708,7 @@ const CustomerOnboardingHome = ({
   const [learningError, setLearningError] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [introReady, setIntroReady] = useState(false);
+  const [learningRefreshTick, setLearningRefreshTick] = useState(0);
   const [learningMode, setLearningMode] =
     useState<CustomerLearningMode>("onboarding");
   const customer = getCustomerRecord(user);
@@ -826,7 +827,7 @@ const CustomerOnboardingHome = ({
     return () => {
       mounted = false;
     };
-  }, [learningMode]);
+  }, [learningMode, learningRefreshTick]);
 
   useEffect(() => {
     if (
@@ -853,6 +854,32 @@ const CustomerOnboardingHome = ({
     }, 0);
   };
 
+  const recordPreviewOpen = async (
+    material: CustomerLearningMaterial,
+    file: CustomerLearningMaterialFile
+  ) => {
+    const res = await apiFetch("/onboarding-stage/customer-learning/file-open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        onboardingAssignmentId: material.onboardingAssignmentId,
+        onboardingStageProgressId: material.onboardingStageProgressId,
+        onboardingStageMaterialId: material.onboardingStageMaterialId,
+        programType: getCustomerLearningProgramType(learningMode),
+        sourceFileId: file.id,
+        fileName: file.fileName,
+        fileTitle: file.title ?? material.materialTitle,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        getApiErrorMessage(json, "Gagal mencatat pembukaan materi")
+      );
+    }
+  };
+
   const handlePreviewFile = (
     material: CustomerLearningMaterial,
     file: CustomerLearningMaterialFile
@@ -875,6 +902,9 @@ const CustomerOnboardingHome = ({
     }
 
     const sourceImageUrl = file.url?.trim();
+    const shouldTrackManually =
+      previewKind === "office" ||
+      (previewKind === "image" && Boolean(sourceImageUrl && isHttpUrl(sourceImageUrl)));
     const resolvedPreviewUrl =
       previewKind === "image" && sourceImageUrl && isHttpUrl(sourceImageUrl)
         ? sourceImageUrl
@@ -883,6 +913,20 @@ const CustomerOnboardingHome = ({
           : getEmbeddedPreviewUrl(previewUrl, file);
 
     openPreviewInNewTab(resolvedPreviewUrl);
+
+    if (shouldTrackManually) {
+      void recordPreviewOpen(material, file)
+        .catch((err) => {
+          console.warn(
+            err instanceof Error
+              ? err.message
+              : "Gagal mencatat pembukaan materi"
+          );
+        })
+        .finally(() => {
+          setLearningRefreshTick((current) => current + 1);
+        });
+    }
   };
 
   const introBaseClass =

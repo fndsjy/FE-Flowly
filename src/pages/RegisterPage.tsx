@@ -1,17 +1,47 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AppImage from "../components/atoms/AppImage";
 import { useToast } from "../components/organisms/MessageToast";
 import { RequiredMark } from "../components/atoms/FormMarks";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 
+type RegisterForm = {
+  username: string;
+  name: string;
+  password: string;
+  roleId: string;
+};
+
+type RoleData = {
+  roleId: string;
+  roleName: string;
+};
+
+type ApiPayload<T> = {
+  response?: T;
+  message?: unknown;
+  error?: unknown;
+  errors?: unknown;
+  issues?: unknown;
+};
+
+const parseApiJson = async <T,>(res: Response): Promise<ApiPayload<T>> => {
+  try {
+    return (await res.json()) as ApiPayload<T>;
+  } catch {
+    return {};
+  }
+};
+
 const RegisterPage = () => {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<RegisterForm>({
     username: "",
     name: "",
     password: "",
-    cardNumber: "",
+    roleId: "",
   });
+  const [roles, setRoles] = useState<RoleData[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
@@ -20,14 +50,52 @@ const RegisterPage = () => {
 
   useEffect(() => {
     formRef.current?.querySelector("input")?.focus();
+
+    const fetchRoles = async () => {
+      setRolesLoading(true);
+      try {
+        const res = await apiFetch("/roles", {
+          method: "GET",
+          credentials: "include",
+        });
+        const json = await parseApiJson<RoleData[]>(res);
+
+        if (res.status === 401) {
+          showToast("Silahkan login terlebih dahulu", "error");
+          navigate("/login");
+          return;
+        }
+
+        if (!res.ok) {
+          showToast(getApiErrorMessage(json, "Gagal memuat role"), "error");
+          return;
+        }
+
+        const nextRoles = json.response || [];
+        setRoles(nextRoles);
+      } catch (err) {
+        console.error("Error fetch roles:", err);
+        showToast("Gagal terhubung ke server.", "error");
+      } finally {
+        setRolesLoading(false);
+      }
+    };
+
+    fetchRoles();
   }, []);
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof RegisterForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!form.roleId) {
+      showToast("Role wajib dipilih", "error");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -35,16 +103,21 @@ const RegisterPage = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          username: form.username,
+          name: form.name,
+          password: form.password,
+          roleId: form.roleId,
+        }),
       });
 
-      const data = await res.json();
+      const data = await parseApiJson<unknown>(res);
 
       if (res.status === 401) {
         showToast("Silahkan login terlebih dahulu", "error");
         navigate("/login");
         return;
-        }
+      }
 
       if (!res.ok) {
         showToast(getApiErrorMessage(data, "Gagal register"), "error");
@@ -52,107 +125,109 @@ const RegisterPage = () => {
         return;
       }
 
-      showToast("Berhasil membuat akun! 🎉", "success");
-      navigate("/login");
+      showToast("Berhasil membuat akun", "success");
+      navigate("/administrator/users");
     } catch (err) {
+      console.error("Error register user:", err);
       showToast("Gagal terhubung ke server.", "error");
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="overflow-hidden h-screen bg-gray-900 flex items-center justify-center px-6">
-      <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-10 items-center relative">
+    <div className="flex h-screen items-center justify-center overflow-hidden bg-gray-900 px-6">
+      <div className="relative grid w-full max-w-6xl grid-cols-1 items-center gap-10 md:grid-cols-3">
+        <div className="pointer-events-none absolute left-24 top-10 h-[700px] w-[700px] rounded-full bg-white opacity-20 blur-[150px]"></div>
+        <div className="pointer-events-none absolute bottom-0 right-0 h-[600px] w-[600px] rounded-full bg-blue-400 opacity-10 blur-[180px]"></div>
 
-        {/* SOFT GLOW */}
-        <div className="absolute top-10 left-24 w-[700px] h-[700px] bg-white opacity-20 blur-[150px] rounded-full pointer-events-none"></div>
-        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-blue-400 opacity-10 blur-[180px] rounded-full pointer-events-none"></div>
-
-        {/* LEFT TEXT */}
-        <div className="text-white space-y-3">
+        <div className="space-y-3 text-white">
           <h1 className="text-4xl font-bold leading-tight">
-            Create Your <br />
-            <span className="text-rose-400">Recharge Direct</span> Account
+            Registrasi <br />
+            <span className="text-rose-400">Admin OMS</span>
           </h1>
-          <p className="text-gray-400 text-sm">
-            Already have an account?{" "}
+          <p className="text-sm text-gray-400">
+            Kembali ke{" "}
             <Link
-              to="/login"
-              className="text-rose-400 hover:text-rose-300 underline"
+              to="/administrator/users"
+              className="text-rose-400 underline hover:text-rose-300"
             >
-              Login here!
+              Manajemen User
             </Link>
           </p>
         </div>
 
-        {/* MIDDLE IMAGE */}
         <div className="flex justify-center">
           <AppImage
             src="images/register.png"
             alt="Register Illustration"
-            className="w-80 drop-shadow-2xl animate-float"
+            className="w-80 animate-float drop-shadow-2xl"
           />
         </div>
 
-        {/* RIGHT FORM */}
-        <div className="bg-gray-800/50 border border-gray-700 backdrop-blur-xl rounded-2xl p-8 shadow-xl">
-          <h2 className="text-xl font-semibold text-white text-center mb-6">
-            Create Account
+        <div className="rounded-2xl border border-gray-700 bg-gray-800/50 p-8 shadow-xl backdrop-blur-xl">
+          <h2 className="mb-6 text-center text-xl font-semibold text-white">
+            Tambah Admin
           </h2>
 
           <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
-
-            {/* Username */}
             <div>
-              <label className="block text-gray-300 mb-1">
+              <label className="mb-1 block text-gray-300">
                 Username
                 <RequiredMark />
               </label>
               <input
                 type="text"
                 value={form.username}
-                onChange={(e) => handleChange("username", e.target.value)}
+                onChange={(event) => handleChange("username", event.target.value)}
                 required
                 placeholder="Enter username"
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-rose-500 outline-none"
+                className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-white outline-none focus:ring-2 focus:ring-rose-500"
               />
             </div>
 
-            {/* Name */}
             <div>
-              <label className="block text-gray-300 mb-1">
+              <label className="mb-1 block text-gray-300">
                 Full Name
                 <RequiredMark />
               </label>
               <input
                 type="text"
                 value={form.name}
-                onChange={(e) => handleChange("name", e.target.value)}
+                onChange={(event) => handleChange("name", event.target.value)}
                 required
                 placeholder="Enter full name"
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-rose-500 outline-none"
+                className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-white outline-none focus:ring-2 focus:ring-rose-500"
               />
             </div>
 
-            {/* Card Number */}
             <div>
-              <label className="block text-gray-300 mb-1">
-                Card Number
+              <label className="mb-1 block text-gray-300">
+                Role
                 <RequiredMark />
               </label>
-              <input
-                type="text"
-                value={form.cardNumber}
-                onChange={(e) => handleChange("cardNumber", e.target.value)}
+              <select
+                value={form.roleId}
+                onChange={(event) => handleChange("roleId", event.target.value)}
                 required
-                placeholder="e.g. 03454"
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+                disabled={rolesLoading || roles.length === 0}
+                className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-white outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Pilih role</option>
+                {rolesLoading && <option value="">Memuat role...</option>}
+                {!rolesLoading && roles.length === 0 && (
+                  <option value="">Role tidak tersedia</option>
+                )}
+                {!rolesLoading &&
+                  roles.map((role) => (
+                    <option key={role.roleId} value={role.roleId}>
+                      {role.roleName}
+                    </option>
+                  ))}
+              </select>
             </div>
 
-            {/* Password */}
             <div>
-              <label className="text-gray-300 mb-1 block">
+              <label className="mb-1 block text-gray-300">
                 Password
                 <RequiredMark />
               </label>
@@ -160,38 +235,37 @@ const RegisterPage = () => {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={form.password}
-                  onChange={(e) => handleChange("password", e.target.value)}
+                  onChange={(event) => handleChange("password", event.target.value)}
                   required
-                  placeholder="••••••••"
-                  className="w-full px-4 py-3 pr-12 bg-gray-900 border border-gray-700 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="Masukkan password"
+                  className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 pr-14 text-white outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-3 text-gray-400 hover:text-gray-200"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute inset-y-0 right-3 flex items-center text-gray-400 transition hover:text-gray-200"
+                  aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
                 >
-                  {showPassword ? "🙈" : "👁️"}
+                  <i className={`fa-regular ${showPassword ? "fa-eye-slash" : "fa-eye"} text-base`} />
                 </button>
               </div>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
-              disabled={isLoading}
-              className={`w-full py-3 rounded-xl text-white font-medium shadow-lg transition-all ${
-                isLoading
-                  ? "bg-gray-700 cursor-not-allowed"
-                  : "bg-rose-400/90 hover:bg-rose-700 hover:scale-105"
+              disabled={isLoading || rolesLoading || roles.length === 0}
+              className={`w-full rounded-xl py-3 font-medium text-white shadow-lg transition-all ${
+                isLoading || rolesLoading || roles.length === 0
+                  ? "cursor-not-allowed bg-gray-700"
+                  : "bg-rose-400/90 hover:bg-rose-700"
               }`}
             >
-              {isLoading ? "Processing…" : "Register"}
+              {isLoading ? "Processing..." : "Register"}
             </button>
           </form>
         </div>
       </div>
 
-      {/* FLOAT ANIMATION */}
       <style>
         {`
           .animate-float {

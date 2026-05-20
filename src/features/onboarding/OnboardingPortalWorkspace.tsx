@@ -523,6 +523,23 @@ const PageShell = ({
   );
 };
 
+const recordRuntimeMaterialOpen = async (item: OnboardingMaterial) => {
+  if (!item.runtimeOpenRequest) {
+    return;
+  }
+
+  const res = await apiFetch("/onboarding-material/file-open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(item.runtimeOpenRequest),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(getApiErrorMessage(json, "Gagal mencatat pembukaan materi"));
+  }
+};
+
 const MaterialCard = ({
   item,
   scenario,
@@ -559,9 +576,26 @@ const MaterialCard = ({
           target="_blank"
           rel="noreferrer"
           onClick={() => {
-            if (scenario.isRuntime) {
-              onRuntimeRefresh?.();
+            if (!scenario.isRuntime) {
+              return;
             }
+
+            if (item.trackOpenManually) {
+              void recordRuntimeMaterialOpen(item)
+                .catch((err) => {
+                  console.warn(
+                    err instanceof Error
+                      ? err.message
+                      : "Gagal mencatat pembukaan materi"
+                  );
+                })
+                .finally(() => {
+                  onRuntimeRefresh?.();
+                });
+              return;
+            }
+
+            onRuntimeRefresh?.();
           }}
           className={`inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
         >
