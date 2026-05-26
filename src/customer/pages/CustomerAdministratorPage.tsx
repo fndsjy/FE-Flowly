@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../../components/atoms/BackButton";
 import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
+import { getCardNavigationHandlers } from "../../lib/card-navigation";
 import type { CustomerUserProfile } from "../components/CustomerSidebar";
 
 type CustomerAdminRecord = {
@@ -177,7 +178,7 @@ export const CustomerAdministratorPage = ({
       title: "Customer List",
       description: "Modul daftar customer dan hubungan account owner.",
       iconClass: "fa-solid fa-address-book",
-      onClick: () => navigate("/customer/administrator/customers"),
+      route: "/customer/administrator/customers",
     },
   ];
 
@@ -218,7 +219,10 @@ export const CustomerAdministratorPage = ({
             <button
               key={module.id}
               type="button"
-              onClick={module.onClick}
+              {...getCardNavigationHandlers({
+                route: module.route,
+                navigate,
+              })}
               className={`min-h-[152px] w-full max-w-[320px] px-5 py-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_24px_40px_-28px_rgba(15,23,42,0.26)] ${adminCardClass}`}
             >
               <div className="flex items-center gap-3 text-[#23408e]">

@@ -888,9 +888,6 @@ const ChangePasswordPage = () => {
                             <h2 className="text-[30px] font-semibold leading-tight tracking-[-0.03em]">
                               {profile?.name ?? "-"}
                             </h2>
-                            <p className="mt-2 text-sm leading-6 text-white/70">
-                              {profile?.roleName ?? "-"}
-                            </p>
                           </div>
                         </div>
 

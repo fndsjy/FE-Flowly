@@ -23,8 +23,6 @@ import {
 type PortalOnboardingDashboardProps = {
   portalKey: OnboardingPortalKey;
   userName?: string | null;
-  userRole?: string | null;
-  workspaceLabel?: string | null;
 };
 
 type PortalVisual = {
@@ -877,8 +875,6 @@ const ActionAnchor = ({
 const PortalOnboardingDashboard = ({
   portalKey,
   userName,
-  userRole,
-  workspaceLabel,
 }: PortalOnboardingDashboardProps) => {
   const scenario = getOnboardingScenario(portalKey);
   const visual = portalVisuals[portalKey];
@@ -996,11 +992,6 @@ const PortalOnboardingDashboard = ({
               >
                 {overallStatusLabel[scenario.overallStatus]}
               </span>
-              {workspaceLabel ? (
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/84">
-                  {workspaceLabel}
-                </span>
-              ) : null}
             </motion.div>
 
             <motion.h1
@@ -1023,14 +1014,6 @@ const PortalOnboardingDashboard = ({
                 </div>
                 <div className="mt-2 text-sm font-semibold text-white">
                   {userName ?? "Belum tersedia"}
-                </div>
-              </div>
-              <div className="rounded-[22px] border border-white/10 bg-white/[0.05] px-4 py-3 backdrop-blur">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/58">
-                  Peran
-                </div>
-                <div className="mt-2 text-sm font-semibold text-white">
-                  {userRole ?? scenario.portalLabel}
                 </div>
               </div>
               <div className="rounded-[22px] border border-white/10 bg-white/[0.05] px-4 py-3 backdrop-blur">

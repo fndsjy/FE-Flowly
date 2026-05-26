@@ -21,6 +21,7 @@ export type UserProfile = {
 
 type UseProfileOptions = {
   enabled?: boolean;
+  suppressUnauthorizedRedirect?: boolean;
 };
 
 type ProfileStore = {
@@ -91,7 +92,9 @@ const subscribeProfile = (listener: () => void) => {
   };
 };
 
-const fetchProfile = async () => {
+const fetchProfile = async ({
+  suppressUnauthorizedRedirect = false,
+}: Pick<UseProfileOptions, "suppressUnauthorizedRedirect"> = {}) => {
   if (profileStore.request) {
     return profileStore.request;
   }
@@ -111,6 +114,7 @@ const fetchProfile = async () => {
   profileStore.request = apiFetch("/profile", {
     method: "GET",
     credentials: "include",
+    suppressUnauthorizedRedirect,
   })
     .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
     .then(({ ok, data }) => {
@@ -171,7 +175,10 @@ export const refreshProfile = () => {
   return fetchProfile();
 };
 
-export const useProfile = ({ enabled = true }: UseProfileOptions = {}) => {
+export const useProfile = ({
+  enabled = true,
+  suppressUnauthorizedRedirect = false,
+}: UseProfileOptions = {}) => {
   const [, setRevision] = useState(0);
 
   useEffect(() => {
@@ -183,9 +190,9 @@ export const useProfile = ({ enabled = true }: UseProfileOptions = {}) => {
       setRevision((value) => value + 1);
     });
 
-    void fetchProfile();
+    void fetchProfile({ suppressUnauthorizedRedirect });
     return unsubscribe;
-  }, [enabled]);
+  }, [enabled, suppressUnauthorizedRedirect]);
 
   return {
     profile: enabled ? profileStore.profile : null,

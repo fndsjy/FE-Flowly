@@ -8,13 +8,13 @@ import { hasMenuAccess } from "./lib/access";
 interface Props {
   children: React.ReactNode;
   menuKey?: string;
+  portalKey?: string;
   adminOnly?: boolean;
   customerAllowed?: boolean;
 }
 
 const PUBLIC_MENU_KEYS = new Set([
   "EMPLOYEE_DASHBOARD",
-  "EMPLOYEE_LEARNING",
   "PROSEDUR",
   "FISHBONE",
   "ONBOARDING",
@@ -23,27 +23,34 @@ const PUBLIC_MENU_KEYS = new Set([
 const ProtectedRoute = ({
   children,
   menuKey,
+  portalKey,
   adminOnly = false,
   customerAllowed = false,
 }: Props) => {
   const location = useLocation();
   const normalizedMenuKey = (menuKey ?? "").trim().toUpperCase();
-  const requiresAccessSummary =
-    !adminOnly &&
-    normalizedMenuKey.length > 0 &&
-    !PUBLIC_MENU_KEYS.has(normalizedMenuKey);
-  const { profile, loading: authLoading } = useProfile();
+  const normalizedPortalKey = (portalKey ?? "").trim().toUpperCase();
+  const { profile, loading: authLoading } = useProfile({
+    suppressUnauthorizedRedirect: customerAllowed,
+  });
+  const isLoggedIn = Boolean(profile);
+  const isRoleOneUser = profile?.roleLevel === 1;
+  const requiresAccessSummary = !adminOnly && normalizedMenuKey.length > 0;
+  const requiresPortalAccess =
+    normalizedPortalKey.length > 0 && isLoggedIn && !isRoleOneUser;
   const {
     loading: accessLoading,
     isAdmin,
     menuAccessMap,
+    menuAccessConfiguredKeySet,
     moduleAccessMap,
+    portalAccessMap,
+    portalAccessConfigured,
     orgScope,
   } = useAccessSummary({
-    enabled: requiresAccessSummary,
+    enabled: isLoggedIn && (requiresAccessSummary || requiresPortalAccess),
   });
 
-  const isLoggedIn = Boolean(profile);
   const {
     profile: customerProfile,
     loading: customerLoading,
@@ -51,11 +58,15 @@ const ProtectedRoute = ({
     enabled: customerAllowed && !isLoggedIn,
   });
   const hasCustomerSession = customerAllowed && Boolean(customerProfile);
-  const isAdminUser = isAdmin || profile?.roleLevel === 1;
+  const isAdminUser = isAdmin || isRoleOneUser;
   const isLoading =
     authLoading ||
     (customerAllowed && !isLoggedIn && customerLoading) ||
-    (isLoggedIn && requiresAccessSummary && accessLoading);
+    (isLoggedIn && (requiresAccessSummary || requiresPortalAccess) && accessLoading);
+  const hasAllowedPortal =
+    !requiresPortalAccess ||
+    !portalAccessConfigured ||
+    portalAccessMap.has(normalizedPortalKey);
 
   if (isLoading) {
     return <p className="text-gray-500 p-5">Memeriksa akses...</p>;
@@ -86,18 +97,47 @@ const ProtectedRoute = ({
     if (!isAdminUser) {
       return <Navigate to="/login" replace />;
     }
+    if (!hasAllowedPortal) {
+      return <Navigate to="/" replace />;
+    }
     return <>{children}</>;
   }
 
-  if (normalizedMenuKey === "EMPLOYEE_LEARNING" && !profile?.onboardingPassed) {
+  const hasCompletedEmployeeOnboarding = Boolean(
+    profile?.onboardingPassed || profile?.statusLMS
+  );
+
+  if (
+    !isAdminUser &&
+    normalizedMenuKey === "EMPLOYEE_LEARNING" &&
+    profile?.employeeUserId !== null &&
+    profile?.employeeUserId !== undefined &&
+    !hasCompletedEmployeeOnboarding
+  ) {
     return <Navigate to="/onboarding" replace />;
   }
 
-  if (normalizedMenuKey) {
+  const isUnconfiguredPortalMenu =
+    normalizedPortalKey.length > 0 &&
+    normalizedMenuKey.length > 0 &&
+    !menuAccessConfiguredKeySet.has(normalizedMenuKey);
+  const isCompletedEmployeeLearningAccess =
+    !isAdminUser &&
+    normalizedMenuKey === "EMPLOYEE_LEARNING" &&
+    profile?.employeeUserId !== null &&
+    profile?.employeeUserId !== undefined &&
+    hasCompletedEmployeeOnboarding;
+
+  if (
+    normalizedMenuKey &&
+    !isUnconfiguredPortalMenu &&
+    !isCompletedEmployeeLearningAccess
+  ) {
     const hasAccess = hasMenuAccess({
       menuKey: normalizedMenuKey,
       isAdmin: isAdminUser,
       menuAccessMap,
+      menuAccessConfiguredKeySet,
       moduleAccessMap,
       orgScope,
       publicMenuKeys: PUBLIC_MENU_KEYS,
@@ -105,6 +145,10 @@ const ProtectedRoute = ({
     if (!hasAccess) {
       return <Navigate to="/login" replace />;
     }
+  }
+
+  if (!hasAllowedPortal) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

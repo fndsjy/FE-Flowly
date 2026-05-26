@@ -6,6 +6,7 @@ import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
+import { getCardNavigationHandlers } from "../lib/card-navigation";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -57,6 +58,7 @@ const SBUPage = () => {
   const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
   const sbuModuleLevel = moduleAccessMap.get("SBU");
   const sbuSubModuleLevel = moduleAccessMap.get("SBU_SUB");
+  const sbuCreateLevel = moduleAccessMap.get("SBU_CREATE");
   const { pilarId } = useParams<{ pilarId: string }>();
   const hasSbuModuleRead = isAdmin
     || sbuModuleLevel === "READ"
@@ -70,15 +72,15 @@ const SBUPage = () => {
     || orgAccess.sbuRead.size > 0
     || orgAccess.sbuCrud.size > 0;
   const canRead = hasSbuModuleRead && hasSbuOrgRead;
-  const canCreate = hasSbuModuleCrud;
+  const canCreate = isAdmin
+    || sbuCreateLevel === "READ"
+    || sbuCreateLevel === "CRUD";
   const canCrudItem = (id: number) => {
-    if (!hasSbuModuleCrud) return false;
     if (isAdmin) return true;
     const hasExplicitAccess = orgAccess.sbuRead.size > 0 || orgAccess.sbuCrud.size > 0;
-    if (!hasExplicitAccess) return true;
     if (orgAccess.sbuCrud.has(id)) return true;
     if (orgAccess.sbuRead.has(id)) return false;
-    return true;
+    return hasSbuModuleCrud && !hasExplicitAccess;
   };
   const canReadSbuSub = hasSbuSubModuleRead
     && (isAdmin || orgScope.sbuSubRead || orgAccess.sbuSubRead.size > 0);
@@ -402,13 +404,14 @@ const SBUPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.id}
-                onClick={() => {
-                  if (!canReadSbuSub) {
-                    showToast("Tidak ada akses ke SBU Sub.", "error");
-                    return;
-                  }
-                  navigate(`/pilar/sbu/sbu_sub/${item.id}`);
-                }}
+                role="button"
+                tabIndex={0}
+                {...getCardNavigationHandlers({
+                  route: `/pilar/sbu/sbu_sub/${item.id}`,
+                  navigate,
+                  disabled: !canReadSbuSub,
+                  onBlocked: () => showToast("Tidak ada akses ke SBU Sub.", "error"),
+                })}
                 className="bg-white rounded-2xl p-5 shadow-lg hover:shadow-xl 
                 hover:border-rose-300 transition cursor-pointer flex flex-col"
               >

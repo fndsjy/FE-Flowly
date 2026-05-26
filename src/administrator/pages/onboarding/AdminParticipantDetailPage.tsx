@@ -8,7 +8,8 @@ import {
   getAdminOnboardingTheme,
   getCurrentStage,
   getInitials,
-  getParticipantLatestExamScore,
+  getParticipantAverageExamScore,
+  getParticipantCompletionDuration,
   getParticipantLastActivityAt,
   getParticipantNextAction,
   getParticipantProgress,
@@ -286,7 +287,8 @@ export default function AdminParticipantDetailPage({
   const currentStageStatus = normalizeStageStatus(currentStage?.status);
   const progress = getParticipantProgress(participant);
   const lastActivityAt = getParticipantLastActivityAt(participant);
-  const latestExamScore = getParticipantLatestExamScore(participant);
+  const averageExamScore = getParticipantAverageExamScore(participant);
+  const completionDuration = getParticipantCompletionDuration(participant);
   const normalizedAssignmentStatus = participant.status.trim().toUpperCase();
   const isDecisionTerminal =
     normalizedAssignmentStatus === "COMPLETED" ||
@@ -439,7 +441,7 @@ export default function AdminParticipantDetailPage({
 
             <div className={`rounded-[24px] border px-5 py-5 ${theme.mutedPanelClass}`}>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <InfoRow label="Mulai onboarding" value={formatDate(participant.startedAt)} visualMode={visualMode} />
+                <InfoRow label="Durasi onboarding" value={completionDuration} visualMode={visualMode} />
                 <InfoRow label="Deadline" value={formatDate(participant.dueAt)} visualMode={visualMode} />
                 <InfoRow label="Baca pertama" value={formatDateTime(participant.firstReadAt)} visualMode={visualMode} />
                 <InfoRow label="Aktivitas terakhir" value={formatDateTime(lastActivityAt)} visualMode={visualMode} />
@@ -461,9 +463,9 @@ export default function AdminParticipantDetailPage({
               visualMode={visualMode}
             />
             <MetricCard
-              label="Nilai ujian"
-              value={formatExamScore(latestExamScore)}
-              helper="Nilai ujian terakhir yang sudah masuk untuk peserta ini."
+              label="Nilai rata-rata"
+              value={formatExamScore(averageExamScore)}
+              helper="Rata-rata nilai dari semua tahap yang sudah punya score."
               visualMode={visualMode}
             />
             <MetricCard

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { apiFetch } from "../lib/api";
+import { getCardNavigationHandlers } from "../lib/card-navigation";
 
 const domasColor = "#272e79";
 
@@ -117,7 +118,12 @@ const AdministratorPage = () => {
           {filteredItems.map((item) => (
             <div
               key={item.id}
-              onClick={() => navigate(item.route)}
+              role="button"
+              tabIndex={0}
+              {...getCardNavigationHandlers({
+                route: item.route,
+                navigate,
+              })}
               className="cursor-pointer bg-white rounded-2xl p-5 shadow-lg shadow-gray-400 
               hover:shadow-xl hover:border-rose-300 transition duration-300"
             >

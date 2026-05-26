@@ -169,8 +169,6 @@ const AffiliatePage = () => {
                 <PortalOnboardingDashboard
                   portalKey="AFFILIATE"
                   userName={user?.name ?? null}
-                  userRole={user?.roleName ?? null}
-                  workspaceLabel="Affiliate Workspace"
                 />
               }
             />
@@ -182,7 +180,7 @@ const AffiliatePage = () => {
             <Route
               path="administrator"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="AFFILIATE" menuKey="AFFILIATE_ADMIN">
                   <AffiliateAdministratorPage user={user} />
                 </ProtectedRoute>
               }
@@ -190,7 +188,7 @@ const AffiliatePage = () => {
             <Route
               path="administrator/affiliates"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="AFFILIATE" menuKey="AFFILIATE_ADMIN">
                   <AffiliateAdministratorAffiliatesPage user={user} />
                 </ProtectedRoute>
               }
@@ -272,9 +270,6 @@ const AffiliateProfile = ({ user }: { user: AffiliateUserProfile | null }) => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">{user?.name || "OMS Team"}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/52">
-                PIC portal
-              </p>
             </div>
           </div>
         </div>

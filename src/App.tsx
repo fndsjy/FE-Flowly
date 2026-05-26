@@ -10,18 +10,18 @@ import NotFoundPage from './pages/NotFoundPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ChartPage from './pages/ChartPage';
+import UserListPage from './pages/UserListPage';
+import JabatanListPage from './pages/JabatanListPage';
 
 // 🔹 Import ToastProvider
 import { ToastProvider } from './components/organisms/MessageToast';
 import AdministratorPage from './pages/AdministratorPage';
 import ProtectedRoute from './ProtectedRoute';
 import AuditLogPage from './pages/AuditLogPage';
-import UserListPage from './pages/UserListPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import PilarPage from './pages/PilarPage';
 import SBUPage from './pages/SBUPage';
 import SBUSUBPage from './pages/SBUSUBPage';
-import JabatanListPage from './pages/JabatanListPage';
 import AccessRolePage from './pages/AccessRolePage';
 import FishbonePage from './pages/FishbonePage';
 import NotificationTemplatePage from './pages/NotificationTemplatePage';
@@ -36,11 +36,9 @@ import CustomerPage from './customer/pages/CustomerPage';
 import InfluencerPage from './influencer/pages/InfluencerPage';
 import SupplierPage from './supplier/pages/SupplierPage';
 import CustomerSsoCallbackPage from './pages/CustomerSsoCallbackPage';
+import { getRouterBasename } from './lib/routes';
 
-const basename =
-  window.location.hostname === "oms.domas.co.id"
-    ? "/"
-    : "/oms";
+const basename = getRouterBasename();
 
 const App = () => {
   return (
@@ -64,19 +62,19 @@ const App = () => {
           <Route path="/hrd" element={<ProtectedRoute menuKey="HRD"><HRDHomePage /></ProtectedRoute>} />
           <Route path="/karyawan" element={<ProtectedRoute menuKey="HRD"><HRDPage /></ProtectedRoute>} />
           <Route path="/hrd/employee" element={<ProtectedRoute menuKey="HRD"><HRDPage /></ProtectedRoute>} />
-          <Route path="/supplier/*" element={<ProtectedRoute><SupplierPage /></ProtectedRoute>} />
-          <Route path="/customer/*" element={<ProtectedRoute customerAllowed><CustomerPage /></ProtectedRoute>} />
-          <Route path="/affiliate/*" element={<ProtectedRoute><AffiliatePage /></ProtectedRoute>} />
-          <Route path="/influencer/*" element={<ProtectedRoute><InfluencerPage /></ProtectedRoute>} />
-          <Route path="/community/*" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>} />
-          <Route path="/portal-administrator/*" element={<ProtectedRoute adminOnly><AdministratorWorkspacePage /></ProtectedRoute>} />
+          <Route path="/supplier/*" element={<ProtectedRoute portalKey="SUPPLIER"><SupplierPage /></ProtectedRoute>} />
+          <Route path="/customer/*" element={<ProtectedRoute customerAllowed portalKey="CUSTOMER"><CustomerPage /></ProtectedRoute>} />
+          <Route path="/affiliate/*" element={<ProtectedRoute portalKey="AFFILIATE"><AffiliatePage /></ProtectedRoute>} />
+          <Route path="/influencer/*" element={<ProtectedRoute portalKey="INFLUENCER"><InfluencerPage /></ProtectedRoute>} />
+          <Route path="/community/*" element={<ProtectedRoute portalKey="COMMUNITY"><CommunityPage /></ProtectedRoute>} />
+          <Route path="/portal-administrator/*" element={<ProtectedRoute adminOnly portalKey="ADMINISTRATOR"><AdministratorWorkspacePage /></ProtectedRoute>} />
           <Route path="/me" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
-          <Route path="/administrator" element={<ProtectedRoute adminOnly><AdministratorPage /></ProtectedRoute>} />
-          <Route path="/administrator/users" element={<ProtectedRoute adminOnly><UserListPage /></ProtectedRoute>} />
-          <Route path="/administrator/jabatan" element={<ProtectedRoute adminOnly><JabatanListPage /></ProtectedRoute>} />
-          <Route path="/administrator/access-role" element={<ProtectedRoute adminOnly><AccessRolePage /></ProtectedRoute>} />
-          <Route path="/administrator/audit-log" element={<ProtectedRoute adminOnly><AuditLogPage /></ProtectedRoute>} />
-          <Route path="/administrator/notification-template" element={<ProtectedRoute adminOnly><NotificationTemplatePage /></ProtectedRoute>} />
+          <Route path="/administrator" element={<ProtectedRoute portalKey="EMPLOYEE" menuKey="ADMIN"><AdministratorPage /></ProtectedRoute>} />
+          <Route path="/administrator/users" element={<ProtectedRoute portalKey="EMPLOYEE" menuKey="ADMIN"><UserListPage /></ProtectedRoute>} />
+          <Route path="/administrator/jabatan" element={<ProtectedRoute portalKey="EMPLOYEE" menuKey="ADMIN"><JabatanListPage /></ProtectedRoute>} />
+          <Route path="/administrator/access-role" element={<ProtectedRoute portalKey="EMPLOYEE" menuKey="ADMIN"><AccessRolePage /></ProtectedRoute>} />
+          <Route path="/administrator/audit-log" element={<ProtectedRoute portalKey="EMPLOYEE" menuKey="ADMIN"><AuditLogPage /></ProtectedRoute>} />
+          <Route path="/administrator/notification-template" element={<ProtectedRoute portalKey="EMPLOYEE" menuKey="ADMIN"><NotificationTemplatePage /></ProtectedRoute>} />
           <Route path="/fishbone" element={<ProtectedRoute menuKey="FISHBONE"><FishbonePage /></ProtectedRoute>} />
           <Route path="/:portalSlug/*" element={<ProtectedRoute><OmsPortalPage /></ProtectedRoute>} />
           <Route path="/*" element={<NotFoundPage />} />

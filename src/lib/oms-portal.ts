@@ -289,8 +289,10 @@ export const isEmployeeOmsProgram = (programKey?: string | null) =>
   normalizeProgramKey(programKey) === EMPLOYEE_PROGRAM_KEY;
 
 export const canChooseOmsProgram = (
-  profile?: Pick<OmsUserProfile, "roleName"> | null
-) => OMS_CHOOSER_ROLE_NAMES.has(normalizeRoleName(profile?.roleName));
+  profile?: Pick<OmsUserProfile, "roleName" | "roleLevel"> | null
+) =>
+  profile?.roleLevel === 1 ||
+  OMS_CHOOSER_ROLE_NAMES.has(normalizeRoleName(profile?.roleName));
 
 export const resolveDefaultOmsProgram = (
   profile?: OmsUserProfile | null

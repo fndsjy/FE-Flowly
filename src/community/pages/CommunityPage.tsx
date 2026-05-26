@@ -155,8 +155,6 @@ const CommunityPage = () => {
                 <PortalOnboardingDashboard
                   portalKey="COMMUNITY"
                   userName={user?.name ?? null}
-                  userRole={user?.roleName ?? null}
-                  workspaceLabel="Community Workspace"
                 />
               }
             />
@@ -168,7 +166,7 @@ const CommunityPage = () => {
             <Route
               path="administrator"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="COMMUNITY" menuKey="COMMUNITY_ADMIN">
                   <CommunityAdministratorPage user={user} />
                 </ProtectedRoute>
               }
@@ -176,7 +174,7 @@ const CommunityPage = () => {
             <Route
               path="administrator/communities"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="COMMUNITY" menuKey="COMMUNITY_ADMIN">
                   <CommunityAdministratorCommunitiesPage user={user} />
                 </ProtectedRoute>
               }
@@ -258,9 +256,6 @@ const CommunityProfile = ({ user }: { user: CommunityUserProfile | null }) => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">{user?.name || "OMS Team"}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/52">
-                PIC portal
-              </p>
             </div>
           </div>
         </div>

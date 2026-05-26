@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../../components/atoms/BackButton";
 import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
+import { getCardNavigationHandlers } from "../../lib/card-navigation";
 import type { AffiliateUserProfile } from "../components/AffiliateSidebar";
 
 type AffiliateAdminRecord = {
@@ -179,7 +180,7 @@ export const AffiliateAdministratorPage = ({
       title: "Affiliate List",
       description: "Daftar affiliate marketer, channel penjualan, dan readiness dukungan.",
       iconClass: "fa-solid fa-shop",
-      onClick: () => navigate("/affiliate/administrator/affiliates"),
+      route: "/affiliate/administrator/affiliates",
     },
   ];
 
@@ -219,7 +220,10 @@ export const AffiliateAdministratorPage = ({
             <button
               key={module.id}
               type="button"
-              onClick={module.onClick}
+              {...getCardNavigationHandlers({
+                route: module.route,
+                navigate,
+              })}
               className={`min-h-[152px] w-full max-w-[320px] px-5 py-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_24px_40px_-28px_rgba(15,23,42,0.26)] ${adminCardClass}`}
             >
               <div className="flex items-center gap-3 text-[#0f766e]">

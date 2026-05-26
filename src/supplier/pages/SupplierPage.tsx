@@ -213,8 +213,6 @@ const SupplierPage = () => {
                 <PortalOnboardingDashboard
                   portalKey="SUPPLIER"
                   userName={user?.name ?? null}
-                  userRole={user?.roleName ?? null}
-                  workspaceLabel="Supplier Workspace"
                 />
               }
             />
@@ -309,7 +307,7 @@ const SupplierPage = () => {
             <Route
               path="administrator"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="SUPPLIER" menuKey="SUPPLIER_ADMIN">
                   <SupplierAdministratorPage user={user} />
                 </ProtectedRoute>
               }
@@ -317,7 +315,7 @@ const SupplierPage = () => {
             <Route
               path="administrator/suppliers"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="SUPPLIER" menuKey="SUPPLIER_ADMIN">
                   <SupplierAdministratorSuppliersPage user={user} />
                 </ProtectedRoute>
               }
@@ -717,9 +715,6 @@ const SupplierProfile = ({ user }: { user: SupplierUserProfile | null }) => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">{user?.name || "OMS Team"}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/52">
-                Workspace owner
-              </p>
             </div>
           </div>
         </div>

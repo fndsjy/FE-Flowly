@@ -24,6 +24,41 @@ export type PortalSidebarItem = {
   badge?: string;
 };
 
+const normalizeResourceKey = (value: string) => value.trim().toUpperCase();
+
+export const shouldFilterPortalMenuAccess = ({
+  isAdminUser,
+  portalAccessConfigured,
+  menuAccessConfiguredKeySet,
+  menuItems,
+}: {
+  isAdminUser: boolean;
+  portalAccessConfigured: boolean;
+  menuAccessConfiguredKeySet: ReadonlySet<string>;
+  menuItems: PortalSidebarItem[];
+}) => {
+  if (isAdminUser || !portalAccessConfigured) {
+    return false;
+  }
+
+  return menuItems.some((item) =>
+    menuAccessConfiguredKeySet.has(normalizeResourceKey(item.resourceKey))
+  );
+};
+
+export const hasPortalSidebarMenuAccess = (
+  item: PortalSidebarItem,
+  menuAccessMap: ReadonlyMap<string, unknown>,
+  menuAccessConfiguredKeySet: ReadonlySet<string>
+) => {
+  const resourceKey = normalizeResourceKey(item.resourceKey);
+  if (!menuAccessConfiguredKeySet.has(resourceKey)) {
+    return true;
+  }
+
+  return menuAccessMap.has(resourceKey);
+};
+
 export const loadPortalSidebarData = async ({
   portalKey,
   resolveIcon,

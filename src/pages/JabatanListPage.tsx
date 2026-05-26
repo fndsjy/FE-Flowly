@@ -37,7 +37,15 @@ const emptyForm: FormState = {
   jabatanIsActive: true,
 };
 
-const JabatanListPage = () => {
+type JabatanListPageProps = {
+  embedded?: boolean;
+  backTo?: string;
+};
+
+const JabatanListPage = ({
+  embedded = false,
+  backTo,
+}: JabatanListPageProps = {}) => {
   const [isOpen, setIsOpen] = useState(true);
   const toggleSidebar = () => setIsOpen(!isOpen);
 
@@ -275,18 +283,26 @@ const JabatanListPage = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <Sidebar isOpen={isOpen} onToggle={toggleSidebar} />
+    <div
+      className={
+        embedded ? "" : "flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50"
+      }
+    >
+      {!embedded ? <Sidebar isOpen={isOpen} onToggle={toggleSidebar} /> : null}
 
       <div
-        className={`transition-all duration-300 ${
-          isOpen ? "ml-64" : "ml-16"
-        } flex-1 p-8`}
+        className={
+          embedded
+            ? ""
+            : `transition-all duration-300 ${
+                isOpen ? "ml-64" : "ml-16"
+              } flex-1 p-8`
+        }
       >
         {/* HEADER */}
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div className="flex items-center gap-4">
-            <BackButton />
+            <BackButton to={backTo} />
             <div>
               <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
                 Manajemen Jabatan

@@ -38,6 +38,7 @@ export const useCustomerSsoProfile = ({
     apiFetch("/customer-sso/profile", {
       method: "GET",
       credentials: "include",
+      suppressUnauthorizedRedirect: true,
     })
       .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
       .then(({ ok, data }) => {

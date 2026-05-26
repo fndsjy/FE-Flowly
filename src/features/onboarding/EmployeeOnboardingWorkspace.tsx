@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/organisms/MessageToast";
-import { refreshProfile } from "../../hooks/useProfile";
+import { refreshProfile, useProfile } from "../../hooks/useProfile";
 import { apiFetch, buildApiUrl, getApiErrorMessage } from "../../lib/api";
 import OnboardingPortalWorkspace from "./OnboardingPortalWorkspace";
 import {
@@ -72,6 +72,10 @@ type WorkspaceCertificate = {
   issuedAt: string | null;
   generatedBy: string | null;
   scheduleId: number | null;
+  scheduleName: string | null;
+  stageCode: string | null;
+  stageName: string | null;
+  stageOrder: number | null;
 };
 
 type WorkspaceStage = {
@@ -140,6 +144,7 @@ const PDF_VIEWER_HASH_PARAMS: Record<string, string> = {
   scrollbar: "0",
   view: "FitH",
 };
+const completedProfileRefreshKeys = new Set<string>();
 
 const safePortalKey = (value?: string | null): OnboardingPortalKey => {
   const normalized = value?.trim().toUpperCase() ?? "";
@@ -401,6 +406,63 @@ const shouldTrackOpenManually = (file: WorkspaceFile) => {
   );
 };
 
+const isFileLikeCertificateName = (value?: string | null) => {
+  const normalized = value?.trim() ?? "";
+  return (
+    /\.(jpe?g|png|webp|pdf)$/i.test(normalized) ||
+    /^sertifikat[_\s-].*\d{6,}/i.test(normalized)
+  );
+};
+
+const formatOnboardingScheduleName = (value?: string | null) => {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parts = normalized.split("|").map((part) => part.trim()).filter(Boolean);
+  const lastPart = parts.at(-1);
+  return (lastPart || normalized).replace(/[_-]+/g, " ");
+};
+
+const buildCertificateStageLabel = (certificate: WorkspaceCertificate) => {
+  const stageName = certificate.stageName?.trim();
+  const stageCode = certificate.stageCode?.trim();
+  if (stageName) {
+    return stageCode ? `${stageCode} - ${stageName}` : stageName;
+  }
+
+  if (stageCode) {
+    return stageCode;
+  }
+
+  const scheduleName = formatOnboardingScheduleName(certificate.scheduleName);
+  if (scheduleName) {
+    return scheduleName;
+  }
+
+  return certificate.scheduleId ? `Schedule ${certificate.scheduleId}` : null;
+};
+
+const buildCertificateTitle = (certificate: WorkspaceCertificate) => {
+  const stageName = certificate.stageName?.trim();
+  if (stageName) {
+    return `Sertifikat ${stageName}`;
+  }
+
+  const certificateName = certificate.certificateName?.trim();
+  if (certificateName && !isFileLikeCertificateName(certificateName)) {
+    return certificateName;
+  }
+
+  const scheduleName = formatOnboardingScheduleName(certificate.scheduleName);
+  if (scheduleName) {
+    return `Sertifikat ${scheduleName}`;
+  }
+
+  return "Sertifikat Onboarding";
+};
+
 const buildScenario = (
   portal: WorkspacePortal,
   requestedPortalKey: OnboardingPortalKey
@@ -408,21 +470,32 @@ const buildScenario = (
   const runtimePortalKey = safePortalKey(portal.portalKey);
   const baseScenario = getOnboardingScenario(requestedPortalKey);
 
-  const certificates = (portal.certificates ?? []).map((certificate) => ({
-    id: certificate.certNumber,
-    title: certificate.certificateName ?? "Sertifikat Onboarding",
-    owner: certificate.generatedBy ?? "LMS DOMAS",
-    status:
-      certificate.status?.trim().toUpperCase() === "A"
-        ? ("issued" as const)
-        : ("pending" as const),
-    issuedAt: certificate.issuedAt,
-    note: certificate.certNumber,
-    certificateNumber: certificate.certNumber,
-    fileName: certificate.fileName,
-    imageUrl: certificate.imageUrl,
-    pdfUrl: certificate.pdfUrl,
-  }));
+  const certificates = (portal.certificates ?? []).map((certificate) => {
+    const stageLabel = buildCertificateStageLabel(certificate);
+
+    return {
+      id: certificate.certNumber,
+      title: buildCertificateTitle(certificate),
+      owner: certificate.generatedBy ?? "LMS DOMAS",
+      status:
+        certificate.status?.trim().toUpperCase() === "A"
+          ? ("issued" as const)
+          : ("pending" as const),
+      issuedAt: certificate.issuedAt,
+      note: [certificate.certNumber, stageLabel ? `Dari ${stageLabel}` : null]
+        .filter(Boolean)
+        .join(" - "),
+      certificateNumber: certificate.certNumber,
+      fileName: certificate.fileName,
+      imageUrl: certificate.imageUrl,
+      pdfUrl: certificate.pdfUrl,
+      scheduleName: certificate.scheduleName,
+      scheduleLabel: stageLabel,
+      stageCode: certificate.stageCode,
+      stageName: certificate.stageName,
+      stageOrder: certificate.stageOrder,
+    };
+  });
 
   const stages = portal.stages.map((stage) => {
     const stageStatus = mapStageStatus(stage.status);
@@ -530,6 +603,7 @@ const buildScenario = (
       id: stage.onboardingStageProgressId,
       stageProgressId: stage.onboardingStageProgressId,
       stageTemplateId: stage.onboardingStageTemplateId,
+      examAttemptStatus: stage.examAttemptStatus,
       phase: `Tahap ${stage.stageOrder}`,
       title: stage.stageName,
       targetWindow: stage.stageCode || `Stage ${stage.stageOrder}`,
@@ -613,10 +687,24 @@ const EmptyState = ({ loading }: { loading: boolean }) => (
 
 export default function EmployeeOnboardingWorkspace() {
   const { showToast } = useToast();
+  const { profile } = useProfile();
   const [portals, setPortals] = useState<WorkspacePortal[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const profileRefreshRequestedRef = useRef(false);
+  const hasCompletedProfileOnboardingRef = useRef(false);
+  const profileRefreshKeyRef = useRef("current");
+
+  useEffect(() => {
+    const hasCompletedProfileOnboarding = Boolean(
+      profile?.onboardingPassed || profile?.statusLMS
+    );
+    const profileRefreshKey =
+      profile?.userId ?? String(profile?.employeeUserId ?? "current");
+
+    hasCompletedProfileOnboardingRef.current = hasCompletedProfileOnboarding;
+    profileRefreshKeyRef.current = profileRefreshKey;
+  }, [profile?.employeeUserId, profile?.onboardingPassed, profile?.statusLMS, profile?.userId]);
 
   const loadWorkspace = async (isMounted?: () => boolean) => {
     if (!isMounted || isMounted()) {
@@ -638,11 +726,15 @@ export default function EmployeeOnboardingWorkspace() {
           : [];
         setPortals(nextPortals);
 
+        const profileRefreshKey = profileRefreshKeyRef.current;
         if (
           !profileRefreshRequestedRef.current &&
+          !hasCompletedProfileOnboardingRef.current &&
+          !completedProfileRefreshKeys.has(profileRefreshKey) &&
           nextPortals.some(hasPassedAllStages)
         ) {
           profileRefreshRequestedRef.current = true;
+          completedProfileRefreshKeys.add(profileRefreshKey);
           void refreshProfile().catch(() => undefined);
         }
       }

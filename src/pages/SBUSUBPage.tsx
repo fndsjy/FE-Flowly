@@ -5,6 +5,7 @@ import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import BackButton from "../components/atoms/BackButton";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
+import { getCardNavigationHandlers } from "../lib/card-navigation";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -56,6 +57,7 @@ const SBUSUBPage = () => {
 
   const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
   const sbuSubModuleLevel = moduleAccessMap.get("SBU_SUB");
+  const sbuSubCreateLevel = moduleAccessMap.get("SBU_SUB_CREATE");
   const { sbuId } = useParams<{ sbuId: string }>();
   const hasSbuSubModuleRead = isAdmin
     || sbuSubModuleLevel === "READ"
@@ -66,15 +68,15 @@ const SBUSUBPage = () => {
     || orgAccess.sbuSubRead.size > 0
     || orgAccess.sbuSubCrud.size > 0;
   const canRead = hasSbuSubModuleRead && hasSbuSubOrgRead;
-  const canCreate = hasSbuSubModuleCrud;
+  const canCreate = isAdmin
+    || sbuSubCreateLevel === "READ"
+    || sbuSubCreateLevel === "CRUD";
   const canCrudItem = (id: number) => {
-    if (!hasSbuSubModuleCrud) return false;
     if (isAdmin) return true;
     const hasExplicitAccess = orgAccess.sbuSubRead.size > 0 || orgAccess.sbuSubCrud.size > 0;
-    if (!hasExplicitAccess) return true;
     if (orgAccess.sbuSubCrud.has(id)) return true;
     if (orgAccess.sbuSubRead.has(id)) return false;
-    return true;
+    return hasSbuSubModuleCrud && !hasExplicitAccess;
   };
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -398,7 +400,12 @@ const SBUSUBPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.id}
-                onClick={() => navigate(`/pilar/sbu/sbu_sub/organisasi/${item.id}`)}
+                role="button"
+                tabIndex={0}
+                {...getCardNavigationHandlers({
+                  route: `/pilar/sbu/sbu_sub/organisasi/${item.id}`,
+                  navigate,
+                })}
                 className="bg-white rounded-2xl p-5 shadow-lg hover:shadow-xl 
               hover:border-rose-300 transition cursor-pointer flex flex-col"
               >

@@ -4,7 +4,10 @@ import OnboardingAdministratorExamsPage from "./onboarding/OnboardingAdministrat
 import OnboardingAdministratorMaterialsPage from "./onboarding/OnboardingAdministratorMaterialsPage";
 import OnboardingAdministratorStagesPage from "./onboarding/OnboardingAdministratorStagesPage";
 import AdministratorNotificationTemplatePage from "./AdministratorNotificationTemplatePage";
+import AdministratorPortalAccessPage from "./AdministratorPortalAccessPage";
 import AuditLogPage from "../../pages/AuditLogPage";
+import JabatanListPage from "../../pages/JabatanListPage";
+import UserListPage from "../../pages/UserListPage";
 import OnboardingPortalWorkspace from "../../features/onboarding/OnboardingPortalWorkspace";
 import isOnboardingExamPath from "../../features/onboarding/isOnboardingExamPath";
 import { invalidateAccessSummary } from "../../hooks/useAccessSummary";
@@ -121,6 +124,18 @@ const AdministratorWorkspacePage = () => {
             <Route
               path="notification-template"
               element={<AdministratorNotificationTemplatePage />}
+            />
+            <Route
+              path="users"
+              element={<UserListPage embedded backTo="/portal-administrator" />}
+            />
+            <Route
+              path="jabatan"
+              element={<JabatanListPage embedded backTo="/portal-administrator" />}
+            />
+            <Route
+              path="portal-access"
+              element={<AdministratorPortalAccessPage />}
             />
             <Route
               path="audit-log"

@@ -85,6 +85,7 @@ export type OnboardingStage = {
   id: string;
   stageProgressId?: string | null;
   stageTemplateId?: string | null;
+  examAttemptStatus?: string | null;
   phase: string;
   title: string;
   targetWindow: string;
@@ -110,6 +111,11 @@ export type OnboardingCertificate = {
   fileName?: string;
   imageUrl?: string;
   pdfUrl?: string;
+  scheduleName?: string | null;
+  scheduleLabel?: string | null;
+  stageCode?: string | null;
+  stageName?: string | null;
+  stageOrder?: number | null;
 };
 
 export type OnboardingExtensionRequest = {

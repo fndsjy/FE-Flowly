@@ -95,19 +95,6 @@ const PDF_VIEWER_HASH_PARAMS: Record<string, string> = {
 const getCustomerRecord = (user: CustomerUserProfile | null) =>
   user?.customer ?? user?.customerData?.[0] ?? null;
 
-const getUserRoleLabel = (user: CustomerUserProfile | null) => {
-  if (user?.roleLevel === 1) {
-    return "Admin";
-  }
-
-  const roleName = user?.roleName?.trim();
-  if (roleName) {
-    return roleName;
-  }
-
-  return "Customer";
-};
-
 const isCustomerPortalUser = (
   user: CustomerUserProfile | null,
   customer: Record<string, unknown> | null
@@ -314,12 +301,14 @@ const CustomerPage = () => {
         apiFetch("/profile", {
           method: "GET",
           credentials: "include",
+          suppressUnauthorizedRedirect: true,
         })
           .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
           .catch(() => ({ ok: false, data: null })),
         apiFetch("/customer-sso/profile", {
           method: "GET",
           credentials: "include",
+          suppressUnauthorizedRedirect: true,
         })
           .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
           .catch(() => ({ ok: false, data: null })),
@@ -332,7 +321,7 @@ const CustomerPage = () => {
       const internalUser = internalProfile.data?.response as
         | CustomerUserProfile
         | undefined;
-      if (internalProfile.ok && internalUser?.roleLevel === 1) {
+      if (internalProfile.ok && internalUser) {
         setUser(internalUser);
         return;
       }
@@ -395,7 +384,7 @@ const CustomerPage = () => {
             <Route
               path="administrator"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute customerAllowed portalKey="CUSTOMER" menuKey="CUSTOMER_ADMIN">
                   <CustomerAdministratorPage user={user} />
                 </ProtectedRoute>
               }
@@ -403,7 +392,7 @@ const CustomerPage = () => {
             <Route
               path="administrator/customers"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute customerAllowed portalKey="CUSTOMER" menuKey="CUSTOMER_ADMIN">
                   <CustomerAdministratorCustomersPage user={user} />
                 </ProtectedRoute>
               }
@@ -717,11 +706,6 @@ const CustomerOnboardingHome = ({
     ["custname", "namapenerima", "attn"],
     user?.name ?? "Customer Domas"
   );
-  const customerCode = readCustomerValue(
-    customer,
-    ["custid"],
-    getUserRoleLabel(user)
-  );
   const isAdminView = user?.roleLevel === 1;
   const logoHomeTarget = isCustomerPortalUser(user, customer) ? "/customer" : "/";
   const learningCopy = getCustomerLearningModeCopy(learningMode);
@@ -969,7 +953,6 @@ const CustomerOnboardingHome = ({
             <p className="max-w-[220px] truncate text-sm font-extrabold leading-5 text-[#1d2b44]">
               {customerName}
             </p>
-            <p className="mt-0.5 text-sm font-medium text-[#60739a]">{customerCode}</p>
           </div>
           <div className="hidden h-9 w-px bg-[#d8e4ff] sm:block" />
           <button
@@ -1468,9 +1451,6 @@ const CustomerProfile = ({ user }: { user: CustomerUserProfile | null }) => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">{customerName}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/52">
-                {readCustomerValue(customer, ["custid"], getUserRoleLabel(user))}
-              </p>
             </div>
           </div>
         </div>
