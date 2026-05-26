@@ -16,6 +16,7 @@ export const hasMenuAccess = ({
   menuKey,
   isAdmin,
   menuAccessMap,
+  menuAccessConfiguredKeySet = new Set<string>(),
   moduleAccessMap,
   orgScope,
   publicMenuKeys = new Set<string>(),
@@ -23,6 +24,7 @@ export const hasMenuAccess = ({
   menuKey?: string;
   isAdmin: boolean;
   menuAccessMap: Map<string, AccessLevel>;
+  menuAccessConfiguredKeySet?: Set<string>;
   moduleAccessMap: Map<string, AccessLevel>;
   orgScope?: OrgScopeSummary;
   publicMenuKeys?: Set<string>;
@@ -32,7 +34,15 @@ export const hasMenuAccess = ({
     return true;
   }
 
-  if (isAdmin || publicMenuKeys.has(normalizedMenuKey)) {
+  if (isAdmin) {
+    return true;
+  }
+
+  if (menuAccessConfiguredKeySet.has(normalizedMenuKey)) {
+    return menuAccessMap.has(normalizedMenuKey);
+  }
+
+  if (publicMenuKeys.has(normalizedMenuKey)) {
     return true;
   }
 

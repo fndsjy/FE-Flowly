@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import {
   buildOmsProgramsFromAccessRoles,
@@ -6,6 +6,7 @@ import {
   type OmsProgramDefinition,
   type OmsPortalSource,
 } from "../lib/oms-portal";
+import { useAccessSummary } from "./useAccessSummary";
 
 type UseOmsPortalProgramsOptions = {
   enabled?: boolean;
@@ -156,10 +157,27 @@ const fetchOmsPortalPrograms = async () => {
   return portalProgramsStore.request;
 };
 
+export const invalidateOmsPortalPrograms = () => {
+  portalProgramsStore.version += 1;
+  portalProgramsStore.programs = DEFAULT_OMS_PROGRAMS;
+  portalProgramsStore.loading = false;
+  portalProgramsStore.initialized = false;
+  portalProgramsStore.request = null;
+  portalProgramsStore.fetchedAt = null;
+  writeProgramsSnapshot([]);
+  emitPortalProgramsChange();
+};
+
 export const useOmsPortalPrograms = ({
   enabled = true,
 }: UseOmsPortalProgramsOptions = {}) => {
   const [, setRevision] = useState(0);
+  const {
+    loading: accessLoading,
+    isAdmin,
+    portalAccessConfigured,
+    portalAccessMap,
+  } = useAccessSummary({ enabled });
 
   useEffect(() => {
     if (!enabled) {
@@ -174,10 +192,24 @@ export const useOmsPortalPrograms = ({
     return unsubscribe;
   }, [enabled]);
 
+  const programs = useMemo(() => {
+    const sourcePrograms = enabled
+      ? portalProgramsStore.programs
+      : DEFAULT_OMS_PROGRAMS;
+
+    if (!enabled || isAdmin || !portalAccessConfigured) {
+      return sourcePrograms;
+    }
+
+    return sourcePrograms.filter((program) =>
+      portalAccessMap.has(program.key.trim().toUpperCase())
+    );
+  }, [enabled, isAdmin, portalAccessConfigured, portalAccessMap, portalProgramsStore.programs]);
+
   return {
-    programs: enabled ? portalProgramsStore.programs : DEFAULT_OMS_PROGRAMS,
+    programs,
     loading: enabled
-      ? portalProgramsStore.loading || !portalProgramsStore.initialized
+      ? accessLoading || portalProgramsStore.loading || !portalProgramsStore.initialized
       : false,
   };
 };

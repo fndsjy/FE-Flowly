@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Link,
   NavLink,
   Navigate,
   Route,
@@ -13,6 +12,7 @@ import {
   type AssessmentStatus,
   type CertificateStatus,
   type MaterialStatus,
+  type OnboardingCertificate,
   type OnboardingMaterial,
   type OnboardingMaterialType,
   type OnboardingPortalKey,
@@ -29,6 +29,7 @@ import { useToast } from "../../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../../lib/api";
 
 const ONBOARDING_WORKSPACE_REFRESH_EVENT = "flowly:onboarding-workspace-refresh";
+const ONBOARDING_EXAM_LOCK_STATE = "flowly:onboarding-exam-lock";
 
 const formatDate = (value?: string | null) =>
   value
@@ -250,6 +251,44 @@ type RuntimeExamResponse = {
   }>;
 };
 
+const runtimeExamStartRequests = new Map<
+  string,
+  Promise<RuntimeExamResponse | null>
+>();
+
+const startRuntimeExamOnce = (stageProgressId: string) => {
+  const existing = runtimeExamStartRequests.get(stageProgressId);
+  if (existing) {
+    return existing;
+  }
+
+  const request = (async () => {
+    const res = await apiFetch("/onboarding/exam/start", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        onboardingStageProgressId: stageProgressId,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(getApiErrorMessage(json, "Gagal memulai ujian"));
+    }
+
+    return (json.response ?? null) as RuntimeExamResponse | null;
+  })().finally(() => {
+    if (runtimeExamStartRequests.get(stageProgressId) === request) {
+      runtimeExamStartRequests.delete(stageProgressId);
+    }
+  });
+
+  runtimeExamStartRequests.set(stageProgressId, request);
+  return request;
+};
+
 const runtimeQuestionTypeLabel: Record<RuntimeExamQuestion["type"], string> = {
   mcq: "Pilihan ganda",
   essay: "Essay",
@@ -317,6 +356,55 @@ const isTransferReviewLocked = (scenario: OnboardingScenario) =>
 const shouldShowAssessmentFeatures = (scenario: OnboardingScenario) =>
   scenario.portalKey !== "CUSTOMER";
 
+const isOnboardingCompleted = (scenario: OnboardingScenario) =>
+  scenario.overallStatus === "passed_to_lms";
+
+const isStageExamInProgress = (stage: OnboardingStage) =>
+  stage.examAttemptStatus?.trim().toUpperCase() === "IN_PROGRESS";
+
+const isLocalExamLockActive = () => {
+  try {
+    const raw = window.localStorage.getItem(ONBOARDING_EXAM_LOCK_STATE);
+    if (!raw) {
+      return false;
+    }
+
+    const parsed = JSON.parse(raw) as { expiresAt?: string | null };
+    const expiresAt = parsed.expiresAt ? new Date(parsed.expiresAt).getTime() : 0;
+    if (!expiresAt || Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+      window.localStorage.removeItem(ONBOARDING_EXAM_LOCK_STATE);
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const writeLocalExamLock = (stageId: string, expiresAt?: string | null) => {
+  try {
+    window.localStorage.setItem(
+      ONBOARDING_EXAM_LOCK_STATE,
+      JSON.stringify({
+        stageId,
+        expiresAt: expiresAt ?? null,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  } catch {
+    // Cross-tab lock is best-effort; backend still enforces active exam access.
+  }
+};
+
+const clearLocalExamLock = () => {
+  try {
+    window.localStorage.removeItem(ONBOARDING_EXAM_LOCK_STATE);
+  } catch {
+    // Cross-tab lock is best-effort.
+  }
+};
+
 const buildExamQuestions = (stage: OnboardingStage): ExamQuestion[] => [
   {
     id: `${stage.id}-mcq`,
@@ -354,6 +442,8 @@ const PageShell = ({
   children: ReactNode;
 }) => {
   const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
+  const completedOnboarding = isOnboardingCompleted(scenario);
+  const completedReadOnlyMode = showAssessmentFeatures && completedOnboarding;
   const materials = scenario.stages.flatMap((stage) => stage.materials);
   const readMaterials = countReadMaterials(materials);
   const passedStages = scenario.stages.filter(
@@ -381,7 +471,9 @@ const PageShell = ({
           ? `${deadlineDelta} hari tersisa.`
           : "Tenggat berakhir hari ini.";
   const workspaceTabs = [
-    { label: "Tahapan", to: scenario.basePath },
+    ...(completedReadOnlyMode
+      ? []
+      : [{ label: "Tahapan", to: scenario.basePath }]),
     ...(showAssessmentFeatures
       ? [
           { label: "Riwayat ujian", to: `${scenario.basePath}/assessments` },
@@ -399,11 +491,15 @@ const PageShell = ({
               {scenario.portalLabel} onboarding
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-900 md:text-[44px]">
-              Tahapan belajar dibuat jelas dari atas ke bawah
+              {completedReadOnlyMode
+                ? "Onboarding selesai"
+                : "Tahapan belajar dibuat jelas dari atas ke bawah"}
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
-              {showAssessmentFeatures
-                ? "User cukup melihat alur tahap dari atas ke bawah, membuka materi, lalu masuk ke ujian di tab baru setelah semua file pernah dibuka."
+              {completedReadOnlyMode
+                ? "Akses tahap belajar sudah ditutup. Riwayat ujian dan sertifikat tetap bisa dibuka dari halaman ini."
+                : showAssessmentFeatures
+                ? "User cukup melihat alur tahap dari atas ke bawah, membuka materi, lalu masuk ke ujian di halaman yang sama setelah semua file pernah dibuka."
                 : "Customer cukup melihat alur tahap dari atas ke bawah, lalu membuka materi dan informasi yang tersedia."}
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
@@ -426,16 +522,26 @@ const PageShell = ({
               Cara pakai
             </p>
             <div className="mt-4 space-y-3 text-sm leading-7 text-slate-700">
-              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">1. Lihat alur tahapan dari atas ke bawah.</div>
-              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">2. Klik tahap aktif untuk membuka daftar materi di dalamnya.</div>
-              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">3. Tekan Mulai baca untuk membuka file di tab baru.</div>
-              <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">
-                {scenario.isRuntime
-                  ? "4. Materi di halaman ini sudah diambil dari setting onboarding aktual per tahap."
-                  : showAssessmentFeatures
-                    ? "4. Untuk demo UI, tombol mulai ujian tetap bisa dibuka agar alurnya bisa dicoba."
-                    : "4. Halaman ini hanya menampilkan materi customer yang perlu dibaca."}
-              </div>
+              {completedReadOnlyMode ? (
+                <>
+                  <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">1. Buka Riwayat ujian untuk melihat hasil tahap yang sudah selesai.</div>
+                  <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">2. Buka Sertifikat untuk melihat sertifikat onboarding.</div>
+                  <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">3. Materi dan ujian tidak bisa dibuka lagi setelah onboarding lulus.</div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">1. Lihat alur tahapan dari atas ke bawah.</div>
+                  <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">2. Klik tahap aktif untuk membuka daftar materi di dalamnya.</div>
+                  <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">3. Tekan Mulai baca untuk membuka file di tab baru.</div>
+                  <div className="rounded-[18px] border border-white/75 bg-white/80 px-4 py-3">
+                    {scenario.isRuntime
+                      ? "4. Materi di halaman ini sudah diambil dari setting onboarding aktual per tahap."
+                      : showAssessmentFeatures
+                        ? "4. Untuk demo UI, tombol mulai ujian tetap bisa dibuka agar alurnya bisa dicoba."
+                        : "4. Halaman ini hanya menampilkan materi customer yang perlu dibaca."}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -545,70 +651,82 @@ const MaterialCard = ({
   scenario,
   order,
   onRuntimeRefresh,
+  locked,
 }: {
   item: OnboardingMaterial;
   scenario: OnboardingScenario;
   order: number;
   onRuntimeRefresh?: () => void;
-}) => (
-  <article
-    className={`rounded-[22px] border p-5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.16)] ${scenario.theme.softPanelClass}`}
-  >
-    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-lg font-semibold text-slate-900 shadow-[0_12px_24px_-18px_rgba(15,23,42,0.35)]">
-          {order}
+  locked?: boolean;
+}) => {
+  const disabledLabel = locked ? "Dikunci saat ujian" : "File belum tersedia";
+
+  return (
+    <article
+      className={`rounded-[22px] border p-5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.16)] ${scenario.theme.softPanelClass}`}
+    >
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-lg font-semibold text-slate-900 shadow-[0_12px_24px_-18px_rgba(15,23,42,0.35)]">
+            {order}
+          </div>
+          <div className="min-w-0">
+            <p className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)]">
+              {materialTypeLabel[item.resourceType]}
+            </p>
+            <h3 className="mt-3 text-lg font-semibold leading-7 text-slate-900">
+              {item.title}
+            </h3>
+            <p className="mt-2 text-sm leading-7 text-slate-600">{item.note}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)]">
-            {materialTypeLabel[item.resourceType]}
-          </p>
-          <h3 className="mt-3 text-lg font-semibold leading-7 text-slate-900">
-            {item.title}
-          </h3>
-          <p className="mt-2 text-sm leading-7 text-slate-600">{item.note}</p>
-        </div>
+
+        {item.resourceUrl && !locked ? (
+          <a
+            href={item.resourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => {
+              if (!scenario.isRuntime) {
+                return;
+              }
+
+              if (isLocalExamLockActive()) {
+                event.preventDefault();
+                onRuntimeRefresh?.();
+                return;
+              }
+
+              if (item.trackOpenManually) {
+                void recordRuntimeMaterialOpen(item)
+                  .catch((err) => {
+                    console.warn(
+                      err instanceof Error
+                        ? err.message
+                        : "Gagal mencatat pembukaan materi"
+                    );
+                  })
+                  .finally(() => {
+                    onRuntimeRefresh?.();
+                  });
+                return;
+              }
+
+              onRuntimeRefresh?.();
+            }}
+            className={`inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
+          >
+            Mulai baca
+          </a>
+        ) : (
+          <span className="inline-flex shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
+            {disabledLabel}
+          </span>
+        )}
       </div>
-
-      {item.resourceUrl ? (
-        <a
-          href={item.resourceUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={() => {
-            if (!scenario.isRuntime) {
-              return;
-            }
-
-            if (item.trackOpenManually) {
-              void recordRuntimeMaterialOpen(item)
-                .catch((err) => {
-                  console.warn(
-                    err instanceof Error
-                      ? err.message
-                      : "Gagal mencatat pembukaan materi"
-                  );
-                })
-                .finally(() => {
-                  onRuntimeRefresh?.();
-                });
-              return;
-            }
-
-            onRuntimeRefresh?.();
-          }}
-          className={`inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
-        >
-          Mulai baca
-        </a>
-      ) : (
-        <span className="inline-flex shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500">
-          File belum tersedia
-        </span>
-      )}
-    </div>
-  </article>
-);
+    </article>
+  );
+};
 
 const ExamPanel = ({
   scenario,
@@ -621,6 +739,7 @@ const ExamPanel = ({
   flowState: FlowState;
   dependency: string | null;
 }) => {
+  const navigate = useNavigate();
   const [showExamAgreement, setShowExamAgreement] = useState(false);
   const doneMaterials = countReadMaterials(stage.materials);
   const ready =
@@ -629,14 +748,18 @@ const ExamPanel = ({
   const hasQuestions = assessment.questionBankCount > 0;
   const examActionClosed =
     assessment.status === "submitted" || assessment.status === "passed";
+  const examInProgress = isStageExamInProgress(stage);
   const canPreviewExam =
     flowState !== "locked" &&
     ready &&
     hasQuestions &&
     !examActionClosed &&
     assessment.status !== "failed_window";
-  const startLabel =
-    assessment.status === "remedial" ? "Mulai remedial" : "Mulai ujian";
+  const startLabel = examInProgress
+    ? "Lanjutkan ujian"
+    : assessment.status === "remedial"
+      ? "Mulai remedial"
+      : "Mulai ujian";
   const displayAssessmentStatus: AssessmentStatus =
     flowState === "locked"
       ? "locked"
@@ -705,6 +828,8 @@ const ExamPanel = ({
                 ? "Ujian belum memiliki soal"
               : !ready
                 ? "Buka semua materi dulu"
+                : examInProgress
+                  ? "Ujian sedang berjalan"
                 : assessment.status === "submitted"
                   ? "Ujian sudah dikirim"
                   : assessment.status === "passed"
@@ -722,6 +847,8 @@ const ExamPanel = ({
                 ? "Admin belum memasang soal untuk tahap ini."
               : !ready
                 ? "Tekan Mulai baca pada semua file tahap ini sebelum lanjut ke ujian."
+                : examInProgress
+                  ? "Sesi ujian aktif sedang berjalan. Materi dikunci sampai ujian dikirim atau waktu ujian habis."
                 : assessment.status === "submitted"
                   ? "Status aslinya sedang menunggu nilai dipublish."
                   : assessment.status === "passed"
@@ -730,7 +857,7 @@ const ExamPanel = ({
                       ? "Nilai sebelumnya belum lulus. Tombol remedial muncul agar user bisa mengulang."
                       : assessment.status === "failed_window"
                         ? "Jendela training sudah habis. Menunggu apakah diperpanjang atau dihentikan."
-                        : "Klik tombol di bawah untuk membuka halaman ujian baru di tab terpisah."}
+                        : "Klik tombol di bawah untuk membuka halaman ujian di tab ini."}
           </p>
         </div>
 
@@ -794,15 +921,16 @@ const ExamPanel = ({
               >
                 Batal
               </button>
-              <Link
-                to={examUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => setShowExamAgreement(false)}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExamAgreement(false);
+                  navigate(examUrl);
+                }}
                 className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
               >
                 Saya setuju dan mulai ujian
-              </Link>
+              </button>
             </div>
           </section>
         </div>
@@ -834,6 +962,8 @@ const StageTimelineCard = ({
   const hasNext = index < scenario.stages.length - 1;
   const onboardingDecisionLocked = isOnboardingDecisionLocked(scenario);
   const transferReviewLocked = isTransferReviewLocked(scenario);
+  const activeExamStage = scenario.stages.find(isStageExamInProgress) ?? null;
+  const materialAccessLocked = Boolean(scenario.isRuntime && activeExamStage);
   const displayStatus = onboardingDecisionLocked
     ? "failed_window"
     : flowState === "locked"
@@ -988,6 +1118,15 @@ const StageTimelineCard = ({
                   </div>
 
                   <div className="mt-5 space-y-3">
+                    {materialAccessLocked ? (
+                      <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-7 text-amber-900">
+                        Materi dikunci sementara karena ujian{" "}
+                        <span className="font-semibold">
+                          {activeExamStage?.title ?? "aktif"}
+                        </span>{" "}
+                        sedang berjalan.
+                      </div>
+                    ) : null}
                     {stage.materials.map((item, materialIndex) => (
                       <MaterialCard
                         key={item.id}
@@ -995,6 +1134,7 @@ const StageTimelineCard = ({
                         scenario={scenario}
                         order={materialIndex + 1}
                         onRuntimeRefresh={onRuntimeRefresh}
+                        locked={materialAccessLocked}
                       />
                     ))}
                   </div>
@@ -1483,6 +1623,7 @@ const ExamPage = ({
         }
 
         setSubmitted(true);
+        clearLocalExamLock();
         clearAllAnswerSaveTimers();
         onRuntimeRefresh?.();
         try {
@@ -1555,26 +1696,14 @@ const ExamPage = ({
     const startExam = async () => {
       setLoading(true);
       try {
-        const res = await apiFetch("/onboarding/exam/start", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            onboardingStageProgressId: stage.stageProgressId ?? stage.id,
-          }),
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(getApiErrorMessage(json, "Gagal memulai ujian"));
-        }
+        const response = await startRuntimeExamOnce(
+          stage.stageProgressId ?? stage.id
+        );
 
         if (!mounted) {
           return;
         }
 
-        const response = (json.response ?? null) as RuntimeExamResponse | null;
         const restoredAnswers = (response?.answers ?? []).reduce<
           Record<number, string>
         >((current, answer) => {
@@ -1588,6 +1717,22 @@ const ExamPage = ({
         setAnswers(restoredAnswers);
         setSavedAnswerIds(new Set(Object.keys(restoredAnswers).map(Number)));
         setSubmitted(Boolean(response?.session?.isFinished));
+        if (!response?.session?.isFinished) {
+          writeLocalExamLock(
+            stage.stageProgressId ?? stage.id,
+            response?.session?.tokenExpiresAt
+          );
+        } else {
+          clearLocalExamLock();
+        }
+        try {
+          window.localStorage.setItem(
+            ONBOARDING_WORKSPACE_REFRESH_EVENT,
+            String(Date.now())
+          );
+        } catch {
+          // Cross-tab refresh is best-effort.
+        }
       } catch (error) {
         if (!mounted) {
           return;
@@ -2205,14 +2350,78 @@ const openCertificateFile = (url?: string | null) => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
 
+const normalizeCertificateMatchText = (value?: string | null) =>
+  (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_|:-]+/g, " ")
+    .replace(/\s+/g, " ");
+
+const resolveCertificateStageIndex = (
+  certificate: OnboardingCertificate,
+  stages: OnboardingStage[]
+) => {
+  if (certificate.stageOrder != null) {
+    const directIndex = stages.findIndex((stage) => {
+      const match = stage.phase.match(/\d+/);
+      return match ? Number(match[0]) === certificate.stageOrder : false;
+    });
+
+    if (directIndex >= 0) {
+      return directIndex;
+    }
+  }
+
+  const candidates = [
+    certificate.stageName,
+    certificate.stageCode,
+    certificate.scheduleLabel,
+    certificate.scheduleName,
+    certificate.title,
+  ]
+    .map(normalizeCertificateMatchText)
+    .filter(Boolean);
+
+  const matchedIndex = stages.findIndex((stage) => {
+    const stageCandidates = [
+      stage.title,
+      stage.targetWindow,
+      stage.assessment.title,
+    ]
+      .map(normalizeCertificateMatchText)
+      .filter(Boolean);
+
+    return candidates.some((candidate) =>
+      stageCandidates.some(
+        (stageCandidate) =>
+          candidate === stageCandidate ||
+          candidate.includes(stageCandidate) ||
+          stageCandidate.includes(candidate)
+      )
+    );
+  });
+
+  return matchedIndex >= 0 ? matchedIndex : null;
+};
+
 const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
   const issuedCertificates = scenario.certificates
     .filter((certificate) => certificate.status === "issued")
     .map((certificate, index) => ({
       certificate,
-      index,
+      originalIndex: index,
+      stageIndex: resolveCertificateStageIndex(certificate, scenario.stages),
       issuedAt: certificate.issuedAt ?? new Date().toISOString(),
-    }));
+    }))
+    .sort((left, right) => {
+      const leftStage = left.stageIndex ?? Number.MAX_SAFE_INTEGER;
+      const rightStage = right.stageIndex ?? Number.MAX_SAFE_INTEGER;
+      if (leftStage !== rightStage) {
+        return leftStage - rightStage;
+      }
+
+      return left.originalIndex - right.originalIndex;
+    });
 
   return (
     <PageShell scenario={scenario}>
@@ -2232,7 +2441,7 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
           </section>
         ) : null}
 
-        {issuedCertificates.map(({ certificate, index, issuedAt }) => (
+        {issuedCertificates.map(({ certificate, originalIndex, stageIndex, issuedAt }) => (
           <article
             key={certificate.id}
             className="rounded-[28px] border border-white/70 bg-white/92 p-6 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.24)]"
@@ -2240,7 +2449,7 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-lg font-semibold text-slate-900 shadow-[0_12px_24px_-18px_rgba(15,23,42,0.35)]">
-                  {index + 1}
+                  {(stageIndex ?? originalIndex) + 1}
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -2260,9 +2469,10 @@ const CertificatesPage = ({ scenario }: { scenario: OnboardingScenario }) => {
               </span>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               {[
                 ["Nomor sertifikat", certificate.certificateNumber ?? certificate.id],
+                ["Tahap/Schedule", certificate.scheduleLabel ?? "-"],
                 ["Status", "Aktif"],
                 ["Penerbit", certificate.owner],
                 ["Tanggal terbit", formatDateTime(issuedAt)],
@@ -2391,19 +2601,28 @@ export const OnboardingPortalWorkspace = ({
 
   const scenario = scenarioOverride ?? getOnboardingScenario(portalKey);
   const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
+  const completedReadOnlyMode =
+    showAssessmentFeatures && isOnboardingCompleted(scenario);
+  const completedLandingPath = completedReadOnlyMode
+    ? `${scenario.basePath}/certificates`
+    : scenario.basePath;
 
   return (
     <Routes>
       <Route
         index
         element={
-          <StagesPage
-            scenario={scenario}
-            onRuntimeRefresh={onRuntimeRefresh}
-          />
+          completedReadOnlyMode ? (
+            <Navigate to={completedLandingPath} replace />
+          ) : (
+            <StagesPage
+              scenario={scenario}
+              onRuntimeRefresh={onRuntimeRefresh}
+            />
+          )
         }
       />
-      <Route path="checklist" element={<Navigate to={scenario.basePath} replace />} />
+      <Route path="checklist" element={<Navigate to={completedLandingPath} replace />} />
       <Route
         path="assessments"
         element={
@@ -2427,7 +2646,9 @@ export const OnboardingPortalWorkspace = ({
       <Route
         path="exam/:stageId"
         element={
-          showAssessmentFeatures ? (
+          completedReadOnlyMode ? (
+            <Navigate to={completedLandingPath} replace />
+          ) : showAssessmentFeatures ? (
             <ExamPage
               scenario={scenario}
               onRuntimeRefresh={onRuntimeRefresh}
@@ -2437,7 +2658,7 @@ export const OnboardingPortalWorkspace = ({
           )
         }
       />
-      <Route path="*" element={<Navigate to={scenario.basePath} replace />} />
+      <Route path="*" element={<Navigate to={completedLandingPath} replace />} />
     </Routes>
   );
 };

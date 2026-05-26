@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../../components/atoms/BackButton";
 import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
+import { getCardNavigationHandlers } from "../../lib/card-navigation";
 import type { InfluencerUserProfile } from "../components/InfluencerSidebar";
 
 type InfluencerAdminRecord = {
@@ -184,7 +185,7 @@ export const InfluencerAdministratorPage = ({
       title: "Influencer List",
       description: "Daftar talent, tier, platform utama, dan kesiapan campaign.",
       iconClass: "fa-solid fa-camera-retro",
-      onClick: () => navigate("/influencer/administrator/influencers"),
+      route: "/influencer/administrator/influencers",
     },
   ];
 
@@ -224,7 +225,10 @@ export const InfluencerAdministratorPage = ({
             <button
               key={module.id}
               type="button"
-              onClick={module.onClick}
+              {...getCardNavigationHandlers({
+                route: module.route,
+                navigate,
+              })}
               className={`min-h-[152px] w-full max-w-[320px] px-5 py-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_24px_40px_-28px_rgba(15,23,42,0.26)] ${adminCardClass}`}
             >
               <div className="flex items-center gap-3 text-[#c2410c]">

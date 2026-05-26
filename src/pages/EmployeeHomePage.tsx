@@ -2,11 +2,9 @@ import { Navigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import PortalOnboardingDashboard from "../features/onboarding/PortalOnboardingDashboard";
 import { useOmsProgramAccess } from "../hooks/useOmsProgramAccess";
-import { useOmsPortalPrograms } from "../hooks/useOmsPortalPrograms";
 import { useResponsiveSidebar } from "../hooks/useResponsiveSidebar";
 import {
   DOMAS_PRIMARY,
-  getOmsProgramDefinition,
 } from "../lib/oms-portal";
 const EMPLOYEE_PORTAL_KEY = "EMPLOYEE";
 
@@ -18,8 +16,6 @@ const EmployeeHomePage = () => {
     toggleSidebar,
     closeMobileSidebar,
   } = useResponsiveSidebar();
-  const { programs } = useOmsPortalPrograms();
-  const employeeProgram = getOmsProgramDefinition("EMPLOYEE", programs);
   const {
     profile,
     loading: programLoading,
@@ -69,8 +65,6 @@ const EmployeeHomePage = () => {
           <PortalOnboardingDashboard
             portalKey="EMPLOYEE"
             userName={profile?.name ?? null}
-            userRole={profile?.roleName ?? null}
-            workspaceLabel={employeeProgram?.title ?? "Employee Workspace"}
           />
           </div>
         </div>

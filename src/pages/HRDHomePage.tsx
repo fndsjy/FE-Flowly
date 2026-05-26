@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { apiFetch } from "../lib/api";
+import { getCardNavigationHandlers } from "../lib/card-navigation";
 
 const domasColor = "#272e79";
 
@@ -134,7 +135,10 @@ const HRDHomePage = () => {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => navigate(item.route)}
+                  {...getCardNavigationHandlers({
+                    route: item.route,
+                    navigate,
+                  })}
                   className="group rounded-3xl border border-slate-100 bg-white p-6 text-left shadow-lg shadow-gray-400 transition hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-xl"
                 >
                   <div className="flex items-start justify-between gap-4">

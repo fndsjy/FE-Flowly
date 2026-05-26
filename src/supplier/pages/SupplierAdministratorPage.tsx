@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../../components/atoms/BackButton";
 import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
+import { getCardNavigationHandlers } from "../../lib/card-navigation";
 import type { SupplierUserProfile } from "../components/SupplierSidebar";
 
 type SupplierAdminRecord = {
@@ -174,7 +175,7 @@ export const SupplierAdministratorPage = ({
       title: "Supplier",
       description: "Modul Supplier",
       iconClass: "fa-solid fa-truck-field",
-      onClick: () => navigate("/supplier/administrator/suppliers"),
+      route: "/supplier/administrator/suppliers",
     },
   ];
   const normalizedQuery = query.trim().toLowerCase();
@@ -214,7 +215,10 @@ export const SupplierAdministratorPage = ({
             <button
               key={module.id}
               type="button"
-              onClick={module.onClick}
+              {...getCardNavigationHandlers({
+                route: module.route,
+                navigate,
+              })}
               className={`min-h-[136px] w-full max-w-[300px] px-5 py-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_24px_40px_-28px_rgba(15,23,42,0.26)] ${adminCardClass}`}
             >
               <div className="flex items-center gap-3 text-[#243c91]">

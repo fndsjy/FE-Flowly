@@ -4,6 +4,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch } from "../lib/api";
+import { getCardNavigationHandlers } from "../lib/card-navigation";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 
@@ -48,10 +49,10 @@ const PilarPage = () => {
   const { loading: accessLoading, isAdmin, moduleAccessMap, orgScope, orgAccess } = useAccessSummary();
   const pilarModuleLevel = moduleAccessMap.get("PILAR");
   const sbuModuleLevel = moduleAccessMap.get("SBU");
+  const pilarCreateLevel = moduleAccessMap.get("PILAR_CREATE");
   const hasPilarModuleRead = isAdmin
     || pilarModuleLevel === "READ"
     || pilarModuleLevel === "CRUD";
-  const hasPilarModuleCrud = isAdmin || pilarModuleLevel === "CRUD";
   const hasSbuModuleRead = isAdmin
     || sbuModuleLevel === "READ"
     || sbuModuleLevel === "CRUD";
@@ -60,9 +61,10 @@ const PilarPage = () => {
     || orgAccess.pilarRead.size > 0
     || orgAccess.pilarCrud.size > 0;
   const canRead = hasPilarModuleRead && hasPilarOrgRead;
-  const canCreate = hasPilarModuleCrud;
+  const canCreate = isAdmin
+    || pilarCreateLevel === "READ"
+    || pilarCreateLevel === "CRUD";
   const canCrudItem = (id: string) => {
-    if (!hasPilarModuleCrud) return false;
     if (isAdmin) return true;
     const numericId = Number(id);
     if (Number.isNaN(numericId)) return false;
@@ -328,15 +330,16 @@ const PilarPage = () => {
             {filtered.map((item) => (
               <div
                 key={item.id}
-                onClick={() => {
-                  if (!canReadSbu) {
-                    showToast("Tidak ada akses ke SBU.", "error");
-                    return;
-                  }
-                  navigate(`sbu/${item.id}`);
-                }}
+                role="button"
+                tabIndex={0}
+                {...getCardNavigationHandlers({
+                  route: `/pilar/sbu/${item.id}`,
+                  navigate,
+                  disabled: !canReadSbu,
+                  onBlocked: () => showToast("Tidak ada akses ke SBU.", "error"),
+                })}
                 className="bg-white rounded-2xl p-5 shadow-lg shadow-gray-400
-                hover:shadow-xl hover:border-rose-300 transition duration-300 flex flex-col"
+                hover:shadow-xl hover:border-rose-300 transition duration-300 cursor-pointer flex flex-col"
               >
                 <div className="flex-1">
                   <h2 className="text-xl font-semibold line-clamp-2" style={{ color: domasColor }}>

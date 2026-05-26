@@ -79,6 +79,7 @@ const Sidebar = ({
     loading: accessLoading,
     isAdmin: accessIsAdmin,
     menuAccessMap,
+    menuAccessConfiguredKeySet,
     moduleAccessMap,
     orgScope,
   } = useAccessSummary();
@@ -97,7 +98,6 @@ const Sidebar = ({
   const homeLinkTarget = isPasswordResetRequired ? "/me" : "/";
   const publicMenuKeys = new Set([
     "EMPLOYEE_DASHBOARD",
-    "EMPLOYEE_LEARNING",
     "PROSEDUR",
     "FISHBONE",
     "ONBOARDING",
@@ -277,23 +277,28 @@ const Sidebar = ({
     }
 
     const normalizedKey = item.resourceKey.toUpperCase();
-    if (normalizedKey === "EMPLOYEE_LEARNING" && !user?.onboardingPassed) {
-      return false;
+    const isAdmin = accessIsAdmin || user?.roleLevel === 1;
+    const hasCompletedEmployeeOnboarding = Boolean(
+      user?.onboardingPassed || user?.statusLMS
+    );
+    if (
+      !isAdmin &&
+      normalizedKey === "EMPLOYEE_LEARNING" &&
+      user?.employeeUserId !== null &&
+      user?.employeeUserId !== undefined
+    ) {
+      return hasCompletedEmployeeOnboarding;
     }
 
-    const isAdmin = accessIsAdmin || user?.roleLevel === 1;
     if (isAdmin) {
       return true;
-    }
-
-    if (normalizedKey === "ADMIN") {
-      return false;
     }
 
     return hasMenuAccess({
       menuKey: normalizedKey,
       isAdmin,
       menuAccessMap,
+      menuAccessConfiguredKeySet,
       moduleAccessMap,
       orgScope,
       publicMenuKeys,

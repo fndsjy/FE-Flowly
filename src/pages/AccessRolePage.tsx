@@ -113,6 +113,65 @@ const orgResourceDescriptions: Record<OrgResourceType, string> = {
   SBU_SUB: "Akses detail SBU Sub.",
 };
 
+const orgModuleAccessItems: ResourceItem[] = [
+  {
+    resourceType: "MODULE",
+    resourceKey: "PILAR",
+    label: "Pilar",
+    meta: "Akses halaman daftar Pilar.",
+  },
+  {
+    resourceType: "MODULE",
+    resourceKey: "SBU",
+    label: "SBU",
+    meta: "Akses halaman daftar SBU.",
+  },
+  {
+    resourceType: "MODULE",
+    resourceKey: "SBU_SUB",
+    label: "SBU Sub",
+    meta: "Akses halaman daftar SBU Sub.",
+  },
+  {
+    resourceType: "MODULE",
+    resourceKey: "CHART",
+    label: "Struktur Organisasi",
+    meta: "Tampilkan dan izinkan tambah/edit/hapus posisi struktur.",
+  },
+  {
+    resourceType: "MODULE",
+    resourceKey: "CHART_MEMBER",
+    label: "Member Struktur Organisasi",
+    meta: "Tampilkan dan izinkan assign/remove member struktur.",
+  },
+];
+
+const orgCreateActionItems: ResourceItem[] = [
+  {
+    resourceType: "MODULE",
+    resourceKey: "PILAR_CREATE",
+    label: "Tambah Pilar",
+    meta: "Tampilkan tombol tambah di halaman Pilar.",
+  },
+  {
+    resourceType: "MODULE",
+    resourceKey: "SBU_CREATE",
+    label: "Tambah SBU",
+    meta: "Tampilkan tombol tambah di halaman SBU.",
+  },
+  {
+    resourceType: "MODULE",
+    resourceKey: "SBU_SUB_CREATE",
+    label: "Tambah SBU Sub",
+    meta: "Tampilkan tombol tambah di halaman SBU Sub.",
+  },
+];
+
+const visibleOrgModuleAccessKeySet = new Set(["CHART", "CHART_MEMBER"]);
+const orgCreateActionKeySet = new Set(
+  orgCreateActionItems.map((item) => item.resourceKey)
+);
+
 const createOrgSectionState = (): Record<OrgResourceType, boolean> => ({
   PILAR: false,
   SBU: false,
@@ -239,8 +298,8 @@ const AccessRolePage = () => {
     return new Map(pilars.map((item) => [item.id, item.pilarName]));
   }, [pilars]);
 
-  const sbuMap = useMemo(() => {
-    return new Map(sbus.map((item) => [item.id, item.sbuName]));
+  const sbuByIdMap = useMemo(() => {
+    return new Map(sbus.map((item) => [item.id, item]));
   }, [sbus]);
 
   const subjectItems = useMemo<SubjectItem[]>(() => {
@@ -288,6 +347,10 @@ const AccessRolePage = () => {
     const list: ResourceItem[] = [];
     const shouldHide = (value?: string | null) => hiddenAccessKeys.has(normalizeKey(value));
 
+    if (useOrgAccessBuilder) {
+      list.push(...orgModuleAccessItems, ...orgCreateActionItems);
+    }
+
     if (!useOrgAccessBuilder) {
       const menuList = [...menus]
         .filter((item) => !item.isDeleted)
@@ -318,9 +381,42 @@ const AccessRolePage = () => {
       }
     }
 
-    const pilarList = [...pilars].sort((a, b) =>
-      a.pilarName.localeCompare(b.pilarName)
-    );
+    const compareAccessText = (left: string, right: string) =>
+      left.localeCompare(right, "id", { numeric: true, sensitivity: "base" });
+    const getPilarOrder = (pilarId?: number | null) =>
+      pilarId === null || pilarId === undefined
+        ? Number.MAX_SAFE_INTEGER
+        : pilarId;
+    const getPilarName = (pilarId?: number | null) => {
+      if (pilarId === null || pilarId === undefined) {
+        return "-";
+      }
+      return pilarMap.get(pilarId) ?? `ID ${pilarId}`;
+    };
+    const getSbuName = (sbuId?: number | null) => {
+      if (sbuId === null || sbuId === undefined) {
+        return "-";
+      }
+      return sbuByIdMap.get(sbuId)?.sbuName ?? `ID ${sbuId}`;
+    };
+    const getSbuSubPilarId = (sbuSub: SbuSubData) => {
+      if (sbuSub.sbuPilar !== null && sbuSub.sbuPilar !== undefined) {
+        return sbuSub.sbuPilar;
+      }
+      if (sbuSub.sbuId === null || sbuSub.sbuId === undefined) {
+        return null;
+      }
+      return sbuByIdMap.get(sbuSub.sbuId)?.sbuPilar ?? null;
+    };
+
+    const pilarList = [...pilars].sort((a, b) => {
+      const idCompare = a.id - b.id;
+      if (idCompare !== 0) {
+        return idCompare;
+      }
+
+      return compareAccessText(a.pilarName, b.pilarName);
+    });
     for (const pilar of pilarList) {
       list.push({
         resourceType: "PILAR",
@@ -330,11 +426,27 @@ const AccessRolePage = () => {
       });
     }
 
-    const sbuList = [...sbus].sort((a, b) =>
-      a.sbuName.localeCompare(b.sbuName)
-    );
+    const sbuList = [...sbus].sort((a, b) => {
+      const pilarCompare = getPilarOrder(a.sbuPilar) - getPilarOrder(b.sbuPilar);
+      if (pilarCompare !== 0) {
+        return pilarCompare;
+      }
+
+      const nameCompare = compareAccessText(a.sbuName, b.sbuName);
+      if (nameCompare !== 0) {
+        return nameCompare;
+      }
+
+      return compareAccessText(a.sbuCode, b.sbuCode);
+    });
+    const sbuOrderMap = new Map(sbuList.map((sbu, index) => [sbu.id, index]));
+    const getSbuOrder = (sbuId?: number | null) =>
+      sbuId === null || sbuId === undefined
+        ? Number.MAX_SAFE_INTEGER
+        : sbuOrderMap.get(sbuId) ?? Number.MAX_SAFE_INTEGER;
+
     for (const sbu of sbuList) {
-      const pilarName = pilarMap.get(sbu.sbuPilar) ?? `ID ${sbu.sbuPilar}`;
+      const pilarName = getPilarName(sbu.sbuPilar);
       list.push({
         resourceType: "SBU",
         resourceKey: String(sbu.id),
@@ -343,16 +455,22 @@ const AccessRolePage = () => {
       });
     }
 
-    const sbuSubList = [...sbuSubs].sort((a, b) =>
-      a.sbuSubName.localeCompare(b.sbuSubName)
-    );
+    const sbuSubList = [...sbuSubs].sort((a, b) => {
+      const sbuCompare = getSbuOrder(a.sbuId) - getSbuOrder(b.sbuId);
+      if (sbuCompare !== 0) {
+        return sbuCompare;
+      }
+
+      const nameCompare = compareAccessText(a.sbuSubName, b.sbuSubName);
+      if (nameCompare !== 0) {
+        return nameCompare;
+      }
+
+      return compareAccessText(a.sbuSubCode, b.sbuSubCode);
+    });
     for (const sbuSub of sbuSubList) {
-      const sbuName = sbuSub.sbuId !== null
-        ? sbuMap.get(sbuSub.sbuId) ?? `ID ${sbuSub.sbuId}`
-        : "-";
-      const pilarName = sbuSub.sbuPilar !== null
-        ? pilarMap.get(sbuSub.sbuPilar) ?? `ID ${sbuSub.sbuPilar}`
-        : "-";
+      const sbuName = getSbuName(sbuSub.sbuId);
+      const pilarName = getPilarName(getSbuSubPilarId(sbuSub));
       list.push({
         resourceType: "SBU_SUB",
         resourceKey: String(sbuSub.id),
@@ -362,7 +480,7 @@ const AccessRolePage = () => {
     }
 
     return list;
-  }, [menus, modules, pilars, sbus, sbuSubs, pilarMap, sbuMap, useOrgAccessBuilder]);
+  }, [menus, modules, pilars, sbus, sbuSubs, pilarMap, sbuByIdMap, useOrgAccessBuilder]);
 
   const filteredResources = useMemo(() => {
     const term = resourceSearch.trim().toLowerCase();
@@ -756,9 +874,38 @@ const AccessRolePage = () => {
 
     const subjectTypeKey = selectedSubject.type === "ROLE" ? "ROLE" : "USER";
     const subjectId = selectedSubject.id;
+    const effectiveAccessSelections: Record<string, AccessChoice> = {
+      ...accessSelections,
+    };
+
+    if (useOrgAccessBuilder) {
+      const syncOrgModuleAccess = (
+        resourceType: OrgResourceType,
+        createResourceKey: string
+      ) => {
+        const moduleKey = buildAccessKey("MODULE", resourceType);
+        const createKey = buildAccessKey("MODULE", createResourceKey);
+        const hasItemAccess = resourceItems.some((item) => {
+          if (item.resourceType !== resourceType) {
+            return false;
+          }
+          const key = buildAccessKey(item.resourceType, item.resourceKey);
+          return (effectiveAccessSelections[key] ?? "NONE") !== "NONE";
+        });
+        const hasCreateAccess =
+          (effectiveAccessSelections[createKey] ?? "NONE") !== "NONE";
+
+        effectiveAccessSelections[moduleKey] =
+          hasItemAccess || hasCreateAccess ? "READ" : "NONE";
+      };
+
+      syncOrgModuleAccess("PILAR", "PILAR_CREATE");
+      syncOrgModuleAccess("SBU", "SBU_CREATE");
+      syncOrgModuleAccess("SBU_SUB", "SBU_SUB_CREATE");
+    }
 
     const allKeys = new Set([
-      ...Object.keys(accessSelections),
+      ...Object.keys(effectiveAccessSelections),
       ...Object.keys(existingAccessMap),
     ]);
 
@@ -774,7 +921,7 @@ const AccessRolePage = () => {
     }> = [];
 
     for (const key of allKeys) {
-      const desired = accessSelections[key] ?? "NONE";
+      const desired = effectiveAccessSelections[key] ?? "NONE";
       const existing = existingAccessMap[key];
 
       if (desired === "NONE") {
@@ -1084,6 +1231,93 @@ const AccessRolePage = () => {
     );
   };
 
+  const renderCreateActionRow = (item: ResourceItem) => {
+    const key = buildAccessKey(item.resourceType, item.resourceKey);
+    const existing = existingAccessMap[key];
+    const value = accessSelections[key] ?? "NONE";
+    const isModuleLevelAccess = visibleOrgModuleAccessKeySet.has(item.resourceKey);
+    const checked = value !== "NONE";
+
+    return (
+      <div
+        key={key}
+        className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between"
+      >
+        {isModuleLevelAccess ? (
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-700">{item.label}</p>
+            {item.meta ? (
+              <p className="text-xs text-gray-400">{item.meta}</p>
+            ) : null}
+          </div>
+        ) : (
+          <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(event) =>
+                handleSelectionChange(key, event.target.checked ? "READ" : "NONE")
+              }
+              className="mt-1 h-4 w-4 accent-[#272e79]"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-gray-700">
+                {item.label}
+              </span>
+              {item.meta ? (
+                <span className="block text-xs text-gray-400">{item.meta}</span>
+              ) : null}
+            </span>
+          </label>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {isModuleLevelAccess ? (
+            (["NONE", "READ", "CRUD"] as const).map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => handleSelectionChange(key, level)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  value === level
+                    ? "border-[#272e79] bg-[#272e79] text-white"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-[#272e79]"
+                }`}
+              >
+                {level === "NONE" ? "Nonaktif" : level}
+              </button>
+            ))
+          ) : (
+            <span
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                checked
+                  ? "bg-[#272e79] text-white"
+                  : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {checked ? "Aktif" : "Nonaktif"}
+            </span>
+          )}
+          {existing ? (
+            <button
+              type="button"
+              onClick={() =>
+                setDeleteConfirm({
+                  open: true,
+                  accessId: existing.accessId,
+                  label: `${resourceTypeLabels[item.resourceType]} - ${item.label}`,
+                })
+              }
+              className="text-sm text-rose-500 hover:text-rose-600"
+            >
+              <i className="fa-solid fa-trash" /> Hapus
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
   const orderedResourceTypes: ResourceType[] = useOrgAccessBuilder
     ? orgResourceTypes
     : ["MENU", "MODULE", "PILAR", "SBU", "SBU_SUB"];
@@ -1102,7 +1336,7 @@ const AccessRolePage = () => {
             <BackButton />
             <div>
               <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
-                Manajemen Hak Akses
+                Hak Akses Organisasi
               </h1>
               <p className="text-sm text-gray-500">
                 {useOrgAccessBuilder
@@ -1206,6 +1440,25 @@ const AccessRolePage = () => {
 
                 {useOrgAccessBuilder ? (
                   <div className="space-y-5">
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+                      <div className="mb-3">
+                        <h3 className="text-lg font-semibold text-gray-700">
+                          Akses Tombol Tambah & Struktur
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                          Centang akses tambahan yang boleh aktif untuk subject ini.
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        {(resourceGroups.MODULE ?? [])
+                          .filter((item) =>
+                            orgCreateActionKeySet.has(item.resourceKey) ||
+                            visibleOrgModuleAccessKeySet.has(item.resourceKey)
+                          )
+                          .map(renderCreateActionRow)}
+                      </div>
+                    </div>
+
                     <div className="grid gap-3 md:grid-cols-3">
                       {orgResourceTypes.map((type) => {
                         const selectedCount = orgSelectionCounts[type];

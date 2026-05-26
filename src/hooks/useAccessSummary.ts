@@ -40,7 +40,10 @@ export type OrgAccessSets = {
 export type AccessSummary = {
   isAdmin: boolean;
   menuAccess: AccessSummaryItem[];
+  menuAccessConfiguredKeys: string[];
   moduleAccess: AccessSummaryItem[];
+  portalAccess: AccessSummaryItem[];
+  portalAccessConfigured: boolean;
   focusPilarIds: number[];
   orgScope: OrgScopeSummary;
   orgAccess: OrgAccessSummary;
@@ -79,7 +82,10 @@ const defaultOrgAccess: OrgAccessSummary = {
 const defaultSummary: AccessSummary = {
   isAdmin: false,
   menuAccess: [],
+  menuAccessConfiguredKeys: [],
   moduleAccess: [],
+  portalAccess: [],
+  portalAccessConfigured: false,
   focusPilarIds: [],
   orgScope: defaultOrgScope,
   orgAccess: defaultOrgAccess,
@@ -147,9 +153,18 @@ const fetchAccessSummary = async () => {
         menuAccess: Array.isArray(data.response.menuAccess)
           ? data.response.menuAccess
           : [],
+        menuAccessConfiguredKeys: Array.isArray(data.response.menuAccessConfiguredKeys)
+          ? data.response.menuAccessConfiguredKeys
+              .map((key: unknown) => String(key).trim().toUpperCase())
+              .filter(Boolean)
+          : [],
         moduleAccess: Array.isArray(data.response.moduleAccess)
           ? data.response.moduleAccess
           : [],
+        portalAccess: Array.isArray(data.response.portalAccess)
+          ? data.response.portalAccess
+          : [],
+        portalAccessConfigured: Boolean(data.response.portalAccessConfigured),
         focusPilarIds: normalizeIdList(data.response.focusPilarIds),
         orgScope: {
           ...defaultOrgScope,
@@ -249,6 +264,27 @@ export const useAccessSummary = ({ enabled = true }: UseAccessSummaryOptions = {
     return map;
   }, [summary.moduleAccess]);
 
+  const menuAccessConfiguredKeySet = useMemo(() => {
+    return new Set(summary.menuAccessConfiguredKeys);
+  }, [summary.menuAccessConfiguredKeys]);
+
+  const portalAccessMap = useMemo(() => {
+    const map = new Map<string, AccessLevel>();
+    for (const item of summary.portalAccess) {
+      if (item.resourceType?.toUpperCase() !== "PORTAL") {
+        continue;
+      }
+      const key = item.resourceKey?.toUpperCase();
+      if (!key) continue;
+      const level = item.accessLevel === "CRUD" ? "CRUD" : "READ";
+      const existing = map.get(key);
+      if (!existing || (existing === "READ" && level === "CRUD")) {
+        map.set(key, level);
+      }
+    }
+    return map;
+  }, [summary.portalAccess]);
+
   const orgAccess = useMemo<OrgAccessSets>(() => {
     return {
       pilarRead: new Set(summary.orgAccess.pilarRead),
@@ -268,7 +304,10 @@ export const useAccessSummary = ({ enabled = true }: UseAccessSummaryOptions = {
     loading,
     isAdmin: summary.isAdmin,
     menuAccessMap,
+    menuAccessConfiguredKeySet,
     moduleAccessMap,
+    portalAccessMap,
+    portalAccessConfigured: summary.portalAccessConfigured,
     focusPilarIds,
     orgScope: summary.orgScope ?? defaultOrgScope,
     orgAccess,

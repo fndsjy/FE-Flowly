@@ -95,6 +95,7 @@ export type AdminPortalParticipant = {
   email: string | null;
   status: string;
   startedAt: string;
+  completedAt: string | null;
   dueAt: string | null;
   currentStageOrder: number | null;
   currentStageName: string | null;

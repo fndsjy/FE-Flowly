@@ -237,6 +237,65 @@ export const formatExamScore = (score?: number | null) => {
   return Number.isInteger(score) ? `${score}` : score.toFixed(1);
 };
 
+const getDateTime = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+};
+
+const getMostRecentTextDate = (values: Array<string | null | undefined>) =>
+  values.reduce<string | null>((current, value) => {
+    const valueTime = getDateTime(value);
+    if (valueTime === null) {
+      return current;
+    }
+
+    const currentTime = getDateTime(current);
+    return currentTime === null || valueTime > currentTime ? value ?? null : current;
+  }, null);
+
+export const getParticipantCompletedAt = (
+  participant: AdminPortalParticipant
+) =>
+  participant.completedAt ??
+  getMostRecentTextDate(
+    participant.stages.flatMap((stage) => [stage.completedAt, stage.passedAt])
+  );
+
+export const formatOnboardingCompletionDuration = (
+  startedAt?: string | null,
+  completedAt?: string | null
+) => {
+  const startTime = getDateTime(startedAt);
+  const completedTime = getDateTime(completedAt);
+  if (startTime === null || completedTime === null || completedTime < startTime) {
+    return "-";
+  }
+
+  const dayCount = Math.max(
+    1,
+    Math.ceil((completedTime - startTime) / (24 * 60 * 60 * 1000))
+  );
+
+  return `Selesai dalam ${dayCount} hari`;
+};
+
+export const getParticipantCompletionDuration = (
+  participant: AdminPortalParticipant
+) => {
+  if (!isParticipantCompleted(participant)) {
+    return "Belum selesai";
+  }
+
+  return formatOnboardingCompletionDuration(
+    participant.startedAt,
+    getParticipantCompletedAt(participant)
+  );
+};
+
 export const getParticipantLatestExamStage = (
   participant: AdminPortalParticipant
 ) => {
@@ -267,6 +326,20 @@ export const getParticipantLatestExamStage = (
 export const getParticipantLatestExamScore = (
   participant: AdminPortalParticipant
 ) => getParticipantLatestExamStage(participant)?.examScore ?? null;
+
+export const getParticipantAverageExamScore = (
+  participant: AdminPortalParticipant
+) => {
+  const scores = participant.stages
+    .map((stage) => stage.examScore)
+    .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+
+  if (scores.length === 0) {
+    return null;
+  }
+
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+};
 
 export const getParticipantLastActivityAt = (
   participant: AdminPortalParticipant

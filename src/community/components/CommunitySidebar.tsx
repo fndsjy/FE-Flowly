@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
+  hasPortalSidebarMenuAccess,
   loadPortalSidebarData,
+  shouldFilterPortalMenuAccess,
   type PortalSidebarItem,
 } from "../../lib/portal-sidebar";
 import DomasLogo from "../../components/atoms/DomasLogo";
 import SidebarMenuSkeleton from "../../components/organisms/SidebarMenuSkeleton";
+import { useAccessSummary } from "../../hooks/useAccessSummary";
 
 export type CommunityUserProfile = {
   userId: string;
@@ -94,6 +97,13 @@ const CommunitySidebar = ({
   );
   const location = useLocation();
   const navigate = useNavigate();
+  const {
+    loading: accessLoading,
+    isAdmin,
+    menuAccessConfiguredKeySet,
+    menuAccessMap,
+    portalAccessConfigured,
+  } = useAccessSummary({ enabled: Boolean(user) });
 
   useEffect(() => {
     let isMounted = true;
@@ -147,9 +157,18 @@ const CommunitySidebar = ({
   const isProfileActive =
     location.pathname === "/community/profile" ||
     location.pathname.startsWith("/community/profile/");
-  const isAdminUser = user?.roleLevel === 1;
+  const isAdminUser = isAdmin || user?.roleLevel === 1;
+  const shouldFilterByMenuAccess = shouldFilterPortalMenuAccess({
+    isAdminUser,
+    portalAccessConfigured,
+    menuAccessConfiguredKeySet,
+    menuItems,
+  });
   const visibleMenuItems = menuItems.filter(
-    (item) => isAdminUser || !item.resourceKey.toUpperCase().includes("ADMIN")
+    (item) =>
+      isAdminUser ||
+      !shouldFilterByMenuAccess ||
+      hasPortalSidebarMenuAccess(item, menuAccessMap, menuAccessConfiguredKeySet)
   );
   const dismissMobileSidebar = () => {
     if (!isDesktop) {
@@ -253,7 +272,7 @@ const CommunitySidebar = ({
           isDesktop ? "pl-2" : "px-2"
         }`}
       >
-        {menuLoading ? (
+        {menuLoading || accessLoading ? (
           <SidebarMenuSkeleton isOpen={isOpen} />
         ) : (
           visibleMenuItems.map((item) => {
@@ -341,9 +360,6 @@ const CommunitySidebar = ({
                 >
                   {user.name}
                 </Link>
-                <p className="mt-1 truncate text-xs uppercase tracking-[0.22em] text-gray-400">
-                  {user.roleName || "Community Workspace"}
-                </p>
 
                 <button
                   type="button"

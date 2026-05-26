@@ -6,6 +6,7 @@ import { invalidateAccessSummary } from "../hooks/useAccessSummary";
 import { useOmsProgramAccess } from "../hooks/useOmsProgramAccess";
 import { useOmsPortalPrograms } from "../hooks/useOmsPortalPrograms";
 import { apiFetch } from "../lib/api";
+import { getCardNavigationHandlers } from "../lib/card-navigation";
 import { DOMAS_PRIMARY, isEmployeeOmsProgram } from "../lib/oms-portal";
 
 const revealContainer = {
@@ -158,9 +159,6 @@ const HomePage = () => {
                       <div className="truncate text-base font-semibold text-slate-800">
                         {profile?.name ?? "-"}
                       </div>
-                      <div className="truncate text-sm text-slate-500">
-                        {profile?.roleName ?? "OMS"}
-                      </div>
                     </div>
                   </div>
 
@@ -215,7 +213,10 @@ const HomePage = () => {
                   {primaryProgram && (
                     <button
                       type="button"
-                      onClick={() => navigate(primaryProgram.route)}
+                      {...getCardNavigationHandlers({
+                        route: primaryProgram.route,
+                        navigate,
+                      })}
                       className="inline-flex h-12 items-center justify-center gap-2 rounded-[18px] bg-[#111827] px-5 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5 hover:bg-[#0b1222]"
                     >
                       <i className="fa-solid fa-arrow-right"></i>
@@ -288,7 +289,10 @@ const HomePage = () => {
                 animate="show"
                 whileHover={{ y: -6 }}
                 whileTap={{ scale: 0.985 }}
-                onClick={() => navigate(program.route)}
+                {...getCardNavigationHandlers({
+                  route: program.route,
+                  navigate,
+                })}
                 className="group relative min-h-[248px] overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/96 p-5 text-left shadow-[0_22px_60px_-42px_rgba(15,23,42,0.18)] transition duration-300 hover:border-slate-300 hover:shadow-[0_30px_80px_-46px_rgba(15,23,42,0.24)] sm:p-6"
               >
                 <div className="absolute inset-x-0 top-0 h-[2px] bg-[linear-gradient(90deg,#111827_0%,#5d76ff_45%,#dbe4ff_100%)] opacity-80"></div>

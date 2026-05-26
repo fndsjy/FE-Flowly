@@ -220,8 +220,6 @@ const InfluencerPage = () => {
                 <PortalOnboardingDashboard
                   portalKey="INFLUENCER"
                   userName={user?.name ?? null}
-                  userRole={user?.roleName ?? null}
-                  workspaceLabel="Influencer Workspace"
                 />
               }
             />
@@ -233,7 +231,7 @@ const InfluencerPage = () => {
             <Route
               path="administrator"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="INFLUENCER" menuKey="INFLUENCER_ADMIN">
                   <InfluencerAdministratorPage user={user} />
                 </ProtectedRoute>
               }
@@ -241,7 +239,7 @@ const InfluencerPage = () => {
             <Route
               path="administrator/influencers"
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute portalKey="INFLUENCER" menuKey="INFLUENCER_ADMIN">
                   <InfluencerAdministratorInfluencersPage user={user} />
                 </ProtectedRoute>
               }
@@ -323,9 +321,6 @@ const InfluencerProfile = ({ user }: { user: InfluencerUserProfile | null }) => 
             </div>
             <div>
               <p className="text-sm font-semibold text-white">{user?.name || "OMS Team"}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/52">
-                PIC portal
-              </p>
             </div>
           </div>
         </div>

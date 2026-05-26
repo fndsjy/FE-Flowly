@@ -64,6 +64,18 @@ const getAdministratorMenuIcon = (resourceKey: string) => {
     return <i className="fa-solid fa-clock-rotate-left h-5 w-5" aria-hidden="true"></i>;
   }
 
+  if (normalized.includes("USERS") || normalized.includes("USER")) {
+    return <i className="fa-solid fa-user-group h-5 w-5" aria-hidden="true"></i>;
+  }
+
+  if (normalized.includes("JABATAN")) {
+    return <i className="fa-solid fa-briefcase h-5 w-5" aria-hidden="true"></i>;
+  }
+
+  if (normalized.includes("PORTAL_ACCESS") || normalized.includes("AKSES_PORTAL")) {
+    return <i className="fa-solid fa-door-open h-5 w-5" aria-hidden="true"></i>;
+  }
+
   if (
     normalized.includes("NOTIFICATION") ||
     normalized.includes("WHATSAPP") ||
@@ -73,24 +85,6 @@ const getAdministratorMenuIcon = (resourceKey: string) => {
   }
 
   return <i className="fa-solid fa-grid-2 h-5 w-5" aria-hidden="true"></i>;
-};
-
-const administratorAuditLogItem: PortalSidebarItem = {
-  id: "ADMINISTRATOR_AUDIT_LOG",
-  label: "Audit Log",
-  path: "/portal-administrator/audit-log",
-  icon: getAdministratorMenuIcon("ADMINISTRATOR_AUDIT_LOG"),
-  resourceKey: "ADMINISTRATOR_AUDIT_LOG",
-};
-
-const ensureAdministratorAuditLogItem = (items: PortalSidebarItem[]) => {
-  const hasAuditLog = items.some(
-    (item) =>
-      item.resourceKey.toUpperCase() === "ADMINISTRATOR_AUDIT_LOG" ||
-      item.path === administratorAuditLogItem.path
-  );
-
-  return hasAuditLog ? items : [...items, administratorAuditLogItem];
 };
 
 const AdministratorSidebar = ({
@@ -121,7 +115,7 @@ const AdministratorSidebar = ({
           return;
         }
 
-        setMenuItems(ensureAdministratorAuditLogItem(nextMenuItems));
+        setMenuItems(nextMenuItems);
         setModuleRoutesByParent(nextModuleRoutes);
       })
       .catch(() => {
@@ -129,7 +123,7 @@ const AdministratorSidebar = ({
           return;
         }
 
-        setMenuItems([administratorAuditLogItem]);
+        setMenuItems([]);
         setModuleRoutesByParent(new Map());
       })
       .finally(() => {
@@ -321,9 +315,6 @@ const AdministratorSidebar = ({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-white">
                   {user?.name ?? "Administrator"}
-                </p>
-                <p className="truncate text-xs text-slate-400">
-                  {user?.roleName ?? "Admin"}
                 </p>
               </div>
             ) : null}

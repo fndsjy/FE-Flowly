@@ -524,7 +524,7 @@ const NotificationTemplatePage = () => {
               <BackButton to="/administrator" />
               <div>
                 <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
-                  Template Notifikasi
+                  Template Notif A3
                 </h1>
                 <p className="text-sm text-slate-500 mt-1">
                   Kelola template WA default untuk case/project dan alur assign.

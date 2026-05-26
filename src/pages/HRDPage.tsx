@@ -80,6 +80,7 @@ interface EmployeeOnboardingSummaryData {
   portalKey: string;
   status: string | null;
   startedAt: string | null;
+  completedAt: string | null;
   dueAt: string | null;
   failedAt: string | null;
   currentStageOrder: number | null;
@@ -200,6 +201,24 @@ const getDateTime = (value?: string | null) => {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.getTime();
+};
+
+const formatOnboardingCompletionDuration = (
+  startedAt?: string | null,
+  completedAt?: string | null
+) => {
+  const startTime = getDateTime(startedAt);
+  const completedTime = getDateTime(completedAt);
+  if (startTime === null || completedTime === null || completedTime < startTime) {
+    return "Selesai onboarding";
+  }
+
+  const dayCount = Math.max(
+    1,
+    Math.ceil((completedTime - startTime) / (24 * 60 * 60 * 1000))
+  );
+
+  return `Selesai dalam ${dayCount} hari`;
 };
 
 const isDateOnOrAfter = (value: string | null | undefined, minDate?: string) => {
@@ -430,6 +449,11 @@ const isEmployeeMainStatusInactive = (status?: string | null) => {
   return code === "I" || code === "N";
 };
 
+const isEmployeeMainStatusActive = (status?: string | null) => {
+  const code = status?.trim().toUpperCase();
+  return !code || code === "A";
+};
+
 const isEmployeeOperationalActive = (employee: EmployeeData) =>
   !employee.ResignDate &&
   !isEmployeeMainStatusInactive(employee.status) &&
@@ -561,7 +585,7 @@ const getEmployeeStatus = (employee: EmployeeData) => {
     };
   }
 
-  if (isEmployeeLmsActive(employee.statusLMS)) {
+  if (isEmployeeMainStatusActive(employee.status) || isEmployeeLmsActive(employee.statusLMS)) {
     return {
       label: "Aktif",
       className: "bg-emerald-100 text-emerald-700",
@@ -616,12 +640,16 @@ const getOnboardingStatusMeta = (
   if (
     normalizedStatus === "COMPLETED" ||
     normalizedStatus === "PASSED" ||
+    normalizedStatus === "PASSED_TO_LMS" ||
     normalizedStatus === "PASSED_OVERRIDE"
   ) {
     return {
       label: "Onboarding selesai",
       className: "bg-emerald-100 text-emerald-700",
-      helper: `Mulai ${formatCompactDate(summary.startedAt)}`,
+      helper: formatOnboardingCompletionDuration(
+        summary.startedAt,
+        summary.completedAt
+      ),
     };
   }
 
@@ -654,7 +682,7 @@ const getOnboardingStatusMeta = (
   return {
     label: `Status ${summary.status}`,
     className: "bg-amber-100 text-amber-700",
-    helper: `Mulai ${formatCompactDate(summary.startedAt)}`,
+    helper: `Deadline ${formatCompactDate(summary.dueAt)}`,
   };
 };
 

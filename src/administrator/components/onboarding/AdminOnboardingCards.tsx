@@ -12,8 +12,8 @@ import {
   getAdminOnboardingTheme,
   getCurrentStage,
   getInitials,
-  getParticipantLatestExamScore,
-  getParticipantLastActivityAt,
+  getParticipantAverageExamScore,
+  getParticipantCompletionDuration,
   getParticipantMaterialProgress,
   getParticipantNextAction,
   getParticipantProgress,
@@ -226,7 +226,7 @@ export const ParticipantCard = ({
   const currentStageStatus = normalizeStageStatus(currentStage?.status);
   const participantHref = `${adminNavigation.basePath}/portal/${portal.portalKey}/user/${encodeURIComponent(participant.participantId)}`;
   const theme = getAdminOnboardingTheme(visualMode);
-  const latestExamScore = getParticipantLatestExamScore(participant);
+  const averageExamScore = getParticipantAverageExamScore(participant);
 
   return (
     <Link
@@ -296,11 +296,8 @@ export const ParticipantCard = ({
             <div className="grid gap-3 sm:grid-cols-2">
               {[
                 ["Materi dibuka", getParticipantMaterialProgress(participant)],
-                ["Nilai ujian", formatExamScore(latestExamScore)],
-                [
-                  "Aktivitas terakhir",
-                  formatDateTime(getParticipantLastActivityAt(participant)),
-                ],
+                ["Nilai rata-rata", formatExamScore(averageExamScore)],
+                ["Durasi onboarding", getParticipantCompletionDuration(participant)],
                 ["Progress", `${progress}%`],
               ].map(([label, value]) => (
                 <div key={label} className={`rounded-[18px] border px-4 py-3 ${theme.mutedPanelClass}`}>

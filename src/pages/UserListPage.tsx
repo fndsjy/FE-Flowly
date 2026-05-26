@@ -45,7 +45,17 @@ const parseApiJson = async <T,>(res: Response): Promise<ApiPayload<T>> => {
   }
 };
 
-const UserListPage = () => {
+type UserListPageProps = {
+  embedded?: boolean;
+  backTo?: string;
+  registerPath?: string;
+};
+
+const UserListPage = ({
+  embedded = false,
+  backTo,
+  registerPath = "/register",
+}: UserListPageProps = {}) => {
   const [isOpen, setIsOpen] = useState(true);
   const [users, setUsers] = useState<UserData[]>([]);
   const [roles, setRoles] = useState<RoleData[]>([]);
@@ -234,17 +244,25 @@ const UserListPage = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <Sidebar isOpen={isOpen} onToggle={toggleSidebar} />
+    <div
+      className={
+        embedded ? "" : "flex min-h-screen bg-gradient-to-br from-gray-50 to-blue-50"
+      }
+    >
+      {!embedded ? <Sidebar isOpen={isOpen} onToggle={toggleSidebar} /> : null}
 
       <div
-        className={`transition-all duration-300 ${
-          isOpen ? "ml-64" : "ml-16"
-        } flex-1 p-8`}
+        className={
+          embedded
+            ? ""
+            : `transition-all duration-300 ${
+                isOpen ? "ml-64" : "ml-16"
+              } flex-1 p-8`
+        }
       >
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BackButton />
+            <BackButton to={backTo} />
             <h1 className="text-3xl font-bold" style={{ color: domasColor }}>
               Manajemen Admin
             </h1>
@@ -267,7 +285,7 @@ const UserListPage = () => {
           </div>
 
           <button
-            onClick={() => navigate("/register")}
+            onClick={() => navigate(registerPath)}
             className="rounded-xl bg-[#272e79] px-4 py-2 text-white shadow transition hover:border hover:border-[#272e79] hover:bg-white hover:text-[#272e79]"
           >
             + Registrasi Admin

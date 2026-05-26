@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
+import { getCardNavigationHandlers } from "../lib/card-navigation";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark } from "../components/atoms/FormMarks";
 
@@ -282,13 +283,10 @@ const ProsedurPage = () => {
               key={item.id}
               role="button"
               tabIndex={0}
-              onClick={() => navigate(`/prosedur/sop/${item.id}`)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  navigate(`/prosedur/sop/${item.id}`);
-                }
-              }}
+              {...getCardNavigationHandlers({
+                route: `/prosedur/sop/${item.id}`,
+                navigate,
+              })}
               className={`group relative rounded-3xl border p-5 shadow-lg shadow-gray transition duration-300 hover:-translate-y-1 hover:shadow-xl cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 ${
                 isFocus
                   ? "border-blue-200/80 bg-gradient-to-br from-blue-50/80 via-white to-blue-50/40"
