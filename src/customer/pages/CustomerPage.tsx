@@ -74,6 +74,16 @@ type CustomerLearningStagesApiResponse = {
 
 type CustomerMaterialFileDisposition = "inline" | "attachment";
 type CustomerLearningMode = "onboarding" | "lms";
+type PartnerLearningPortalKey = "CUSTOMER" | "SUPPLIER";
+
+type PartnerLearningUser = {
+  name?: string | null;
+  roleLevel?: number | null;
+  roleId?: string | null;
+  custid?: string | null;
+  customer?: Record<string, unknown> | null;
+  customerData?: Record<string, unknown>[];
+};
 
 const getCustomerLearningProgramType = (mode: CustomerLearningMode) =>
   mode === "lms" ? "LEARNING" : "ONBOARDING";
@@ -92,11 +102,11 @@ const PDF_VIEWER_HASH_PARAMS: Record<string, string> = {
   view: "FitH",
 };
 
-const getCustomerRecord = (user: CustomerUserProfile | null) =>
+const getCustomerRecord = (user: PartnerLearningUser | null) =>
   user?.customer ?? user?.customerData?.[0] ?? null;
 
 const isCustomerPortalUser = (
-  user: CustomerUserProfile | null,
+  user: PartnerLearningUser | null,
   customer: Record<string, unknown> | null
 ) =>
   Boolean(customer) ||
@@ -373,12 +383,12 @@ const CustomerPage = () => {
             <Route
               index
               element={
-                <CustomerOnboardingHome user={user} onLogout={handleLogout} />
+                <PartnerLearningHome user={user} onLogout={handleLogout} />
               }
             />
             <Route
               path="onboarding/*"
-              element={<CustomerOnboardingHome user={user} onLogout={handleLogout} />}
+              element={<PartnerLearningHome user={user} onLogout={handleLogout} />}
             />
             <Route path="profile" element={<CustomerProfile user={user} />} />
             <Route
@@ -472,31 +482,34 @@ const getLearningModeText = (
   return mode === "lms" ? replaceOnboardingTerm(normalized) : normalized;
 };
 
-const getCustomerLearningModeCopy = (mode: CustomerLearningMode) =>
+const getCustomerLearningModeCopy = (
+  mode: CustomerLearningMode,
+  portalLabel = "customer"
+) =>
   mode === "lms"
     ? {
         eyebrow: "LMS",
         title: "Materi Learning",
         unit: "Learning",
         emptyUnit: "learning",
-        emptyStages: "Belum ada materi learning customer aktif.",
+        emptyStages: `Belum ada materi learning ${portalLabel} aktif.`,
         emptyStage: "Tahap ini belum punya materi learning aktif.",
         emptyFile: "Belum ada file di learning ini.",
         detailEyebrow: "Detail Learning",
         previewEyebrow: "Preview Learning",
-        fallbackDescription: "Materi learning customer siap dipelajari.",
+        fallbackDescription: `Materi learning ${portalLabel} siap dipelajari.`,
       }
     : {
         eyebrow: "Menu Belajar",
         title: "Materi Onboarding",
         unit: "Materi",
         emptyUnit: "materi",
-        emptyStages: "Belum ada materi onboarding customer aktif.",
+        emptyStages: `Belum ada materi onboarding ${portalLabel} aktif.`,
         emptyStage: "Tahap ini belum punya materi aktif.",
         emptyFile: "Belum ada file di materi ini.",
         detailEyebrow: "Detail Materi",
         previewEyebrow: "Preview Materi",
-        fallbackDescription: "Materi onboarding customer siap dipelajari.",
+        fallbackDescription: `Materi onboarding ${portalLabel} siap dipelajari.`,
       };
 
 const getStageDescription = (
@@ -533,9 +546,11 @@ const getCustomerMaterialFileUrl = (
   material: CustomerLearningMaterial,
   file: CustomerLearningMaterialFile,
   disposition: CustomerMaterialFileDisposition,
-  programType: string
+  programType: string,
+  portalKey: PartnerLearningPortalKey
 ) => {
   const query = new URLSearchParams({
+    portalKey,
     onboardingStageMaterialId: material.onboardingStageMaterialId,
     programType,
     sourceFileId: String(file.id),
@@ -562,7 +577,7 @@ const getCustomerMaterialFileUrl = (
     query.set("fileTitle", file.title.trim());
   }
 
-  return buildApiUrl(`/onboarding-stage/customer-learning/file?${query}`);
+  return buildApiUrl(`/onboarding-stage/portal-learning/file?${query}`);
 };
 
 const getFileExtension = (file: CustomerLearningMaterialFile) => {
@@ -685,12 +700,18 @@ const formatCustomerLearningDate = (value: string | null) => {
   }).format(date);
 };
 
-const CustomerOnboardingHome = ({
+export const PartnerLearningHome = ({
   user,
   onLogout,
+  portalKey = "CUSTOMER",
+  homeTarget,
+  displayName,
 }: {
-  user: CustomerUserProfile | null;
+  user: PartnerLearningUser | null;
   onLogout: () => void;
+  portalKey?: PartnerLearningPortalKey;
+  homeTarget?: string;
+  displayName?: string | null;
 }) => {
   const [learningStages, setLearningStages] = useState<CustomerLearningStage[]>([]);
   const [learningLoading, setLearningLoading] = useState(true);
@@ -700,15 +721,42 @@ const CustomerOnboardingHome = ({
   const [learningRefreshTick, setLearningRefreshTick] = useState(0);
   const [learningMode, setLearningMode] =
     useState<CustomerLearningMode>("onboarding");
-  const customer = getCustomerRecord(user);
-  const customerName = readCustomerValue(
-    customer,
-    ["custname", "namapenerima", "attn"],
-    user?.name ?? "Customer Domas"
-  );
+  const portalLabel = portalKey === "SUPPLIER" ? "Supplier" : "Customer";
+  const portalLabelLower = portalLabel.toLowerCase();
+  const customer = portalKey === "CUSTOMER" ? getCustomerRecord(user) : null;
+  const partnerName =
+    displayName?.trim() ||
+    (portalKey === "CUSTOMER"
+      ? readCustomerValue(
+          customer,
+          ["custname", "namapenerima", "attn"],
+          user?.name ?? "Customer Domas"
+        )
+      : user?.name?.trim() || "Supplier Domas");
   const isAdminView = user?.roleLevel === 1;
-  const logoHomeTarget = isCustomerPortalUser(user, customer) ? "/customer" : "/";
-  const learningCopy = getCustomerLearningModeCopy(learningMode);
+  const logoHomeTarget =
+    homeTarget ??
+    (portalKey === "CUSTOMER" && isCustomerPortalUser(user, customer)
+      ? "/customer"
+      : `/${portalKey.toLowerCase()}`);
+  const sectionId = `${portalKey.toLowerCase()}-onboarding-stages`;
+  const detailId = `${portalKey.toLowerCase()}-stage-detail`;
+  const learningCopy = getCustomerLearningModeCopy(
+    learningMode,
+    portalLabelLower
+  );
+  const heroCopy =
+    portalKey === "SUPPLIER"
+      ? {
+          description:
+            "Yuk, pelajari standar vendor, alur pengiriman, dokumen compliance, dan cara kerja supplier Domas dengan mudah.",
+          imageAlt: "Domas supplier onboarding guide pointing to learning menu",
+        }
+      : {
+          description:
+            "Yuk, pelajari alur order, informasi produk, klaim, dan channel support dengan mudah dan menyenangkan.",
+          imageAlt: "Domas onboarding guide pointing to learning menu",
+        };
   const switchLearningMode = (
     mode: CustomerLearningMode,
     options?: { scrollToSection?: boolean }
@@ -719,7 +767,7 @@ const CustomerOnboardingHome = ({
     if (options?.scrollToSection) {
       window.setTimeout(() => {
         document
-          .getElementById("customer-onboarding-stages")
+          .getElementById(sectionId)
           ?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
     }
@@ -764,9 +812,10 @@ const CustomerOnboardingHome = ({
       try {
         const expectedProgramType = getCustomerLearningProgramType(learningMode);
         const query = new URLSearchParams({
+          portalKey,
           programType: expectedProgramType,
         });
-        const res = await apiFetch(`/onboarding-stage/customer-learning?${query}`, {
+        const res = await apiFetch(`/onboarding-stage/portal-learning?${query}`, {
           method: "GET",
           credentials: "include",
         });
@@ -774,13 +823,14 @@ const CustomerOnboardingHome = ({
 
         if (!res.ok) {
           throw new Error(
-            getApiErrorMessage(json, "Gagal memuat materi customer")
+            getApiErrorMessage(json, `Gagal memuat materi ${portalLabelLower}`)
           );
         }
 
-        const portalKey = json.response?.portal?.portalKey?.trim().toUpperCase();
+        const responsePortalKey =
+          json.response?.portal?.portalKey?.trim().toUpperCase();
         const stages =
-          portalKey === "CUSTOMER" && Array.isArray(json.response?.stages)
+          responsePortalKey === portalKey && Array.isArray(json.response?.stages)
             ? json.response.stages.filter(
                 (stage) =>
                   stage.programType?.trim().toUpperCase() === expectedProgramType
@@ -796,7 +846,7 @@ const CustomerOnboardingHome = ({
           setLearningError(
             err instanceof Error
               ? err.message
-              : "Gagal memuat materi customer"
+              : `Gagal memuat materi ${portalLabelLower}`
           );
         }
       } finally {
@@ -811,7 +861,7 @@ const CustomerOnboardingHome = ({
     return () => {
       mounted = false;
     };
-  }, [learningMode, learningRefreshTick]);
+  }, [learningMode, learningRefreshTick, portalKey, portalLabelLower]);
 
   useEffect(() => {
     if (
@@ -833,7 +883,7 @@ const CustomerOnboardingHome = ({
     setSelectedStageId(stage.onboardingStageTemplateId);
     window.setTimeout(() => {
       document
-        .getElementById("customer-stage-detail")
+        .getElementById(detailId)
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   };
@@ -842,11 +892,12 @@ const CustomerOnboardingHome = ({
     material: CustomerLearningMaterial,
     file: CustomerLearningMaterialFile
   ) => {
-    const res = await apiFetch("/onboarding-stage/customer-learning/file-open", {
+    const res = await apiFetch("/onboarding-stage/portal-learning/file-open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
+        portalKey,
         onboardingAssignmentId: material.onboardingAssignmentId,
         onboardingStageProgressId: material.onboardingStageProgressId,
         onboardingStageMaterialId: material.onboardingStageMaterialId,
@@ -873,7 +924,8 @@ const CustomerOnboardingHome = ({
       material,
       file,
       "inline",
-      getCustomerLearningProgramType(learningMode)
+      getCustomerLearningProgramType(learningMode),
+      portalKey
     );
 
     if (previewKind === "download") {
@@ -947,11 +999,11 @@ const CustomerOnboardingHome = ({
 
         <div className="flex min-w-0 items-center gap-2 rounded-[22px] border border-white/90 bg-white/84 px-2 py-1.5 shadow-[0_18px_40px_-30px_rgba(30,64,175,0.36)] sm:gap-3 sm:rounded-[26px] sm:px-3 sm:py-2">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#edf4ff,_#f2ecff)] text-xs font-bold text-[#2458f2] sm:h-11 sm:w-11 sm:text-sm">
-            {getCustomerInitials(customerName)}
+            {getCustomerInitials(partnerName)}
           </span>
           <div className="hidden min-w-0 sm:block">
             <p className="max-w-[220px] truncate text-sm font-extrabold leading-5 text-[#1d2b44]">
-              {customerName}
+              {partnerName}
             </p>
           </div>
           <div className="hidden h-9 w-px bg-[#d8e4ff] sm:block" />
@@ -1003,11 +1055,10 @@ const CustomerOnboardingHome = ({
               className={`mt-7 max-w-xl text-base leading-8 text-[#30446c] ${introBaseClass} ${introUpClass}`}
               style={{ transitionDelay: "360ms" }}
             >
-              Yuk, pelajari alur order, informasi produk, klaim, dan channel support
-              dengan mudah dan menyenangkan.
+              {heroCopy.description}
             </p>
             <a
-              href="#customer-onboarding-stages"
+              href={`#${sectionId}`}
               onClick={handleOpenLms}
               className={`mt-8 inline-flex items-center gap-3 rounded-full bg-[linear-gradient(135deg,_#2f68ff,_#7c3aed)] px-8 py-4 text-sm font-extrabold text-white shadow-[0_24px_46px_-24px_rgba(37,99,235,0.9)] hover:-translate-y-0.5 ${introBaseClass} ${introUpClass}`}
               style={{ transitionDelay: "480ms" }}
@@ -1026,7 +1077,7 @@ const CustomerOnboardingHome = ({
               <div className="customer-float-soft">
                 <AppImage
                   src="images/tunjuk-bawah.png"
-                  alt="Domas onboarding guide pointing to learning menu"
+                  alt={heroCopy.imageAlt}
                   className="h-[380px] w-auto max-w-none object-contain drop-shadow-[0_34px_36px_rgba(30,64,175,0.24)] sm:h-[470px] lg:h-[560px]"
                 />
               </div>
@@ -1036,7 +1087,7 @@ const CustomerOnboardingHome = ({
       </section>
 
       <section
-        id="customer-onboarding-stages"
+        id={sectionId}
         className={`relative z-20 -mt-1 px-5 pb-7 sm:px-8 ${introBaseClass} ${introUpClass}`}
         style={{ transitionDelay: "620ms" }}
       >
@@ -1190,7 +1241,7 @@ const CustomerOnboardingHome = ({
 
           {selectedStage ? (
             <div
-              id="customer-stage-detail"
+              id={detailId}
               className="mt-8 border-t border-[#dbe7ff] pt-6"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1319,7 +1370,8 @@ const CustomerOnboardingHome = ({
                                         material,
                                         file,
                                         "attachment",
-                                        getCustomerLearningProgramType(learningMode)
+                                        getCustomerLearningProgramType(learningMode),
+                                        portalKey
                                       )}
                                       className="inline-flex min-h-[38px] items-center gap-2 rounded-full border border-[#dbe7ff] bg-white px-4 text-xs font-extrabold text-[#2458f2] transition hover:border-[#96b4ff] hover:bg-[#f8fbff]"
                                     >
