@@ -736,7 +736,7 @@ const ChartPage = () => {
           Jabatan: {jabatanInfo.jabatanName ?? "-"} | Level: {jabatanInfo.jabatanLevel ?? "-"}
         </div>
         {node.jobDesc && (
-          <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{node.jobDesc}</p>
+          <p className="mt-2 text-left text-xs leading-relaxed text-gray-600 whitespace-pre-line">{node.jobDesc}</p>
         )}
 
       <div className="mt-3 text-left space-y-2">
@@ -777,7 +777,7 @@ const ChartPage = () => {
                   >
                     Assign
                   </button>
-                  {isAdmin && employeeUserId !== null && (
+                  {employeeUserId !== null && (
                     <button
                       title="Edit job description"
                       onClick={(e) => {
@@ -1072,7 +1072,7 @@ const ChartPage = () => {
                       </p>
                     )}
                     {currentPilar.jobDesc && (
-                      <p className="text-xs mt-2 text-white/90 whitespace-pre-line">
+                      <p className="text-left text-xs leading-relaxed mt-2 text-white/90 whitespace-pre-line">
                         <span className="font-medium"></span> {currentPilar.jobDesc}
                       </p>
                     )}
@@ -1087,7 +1087,7 @@ const ChartPage = () => {
                       </p>
                     )}
                     {currentSbu.jobDesc && (
-                      <p className="text-xs mt-2 text-white/90 whitespace-pre-line">
+                      <p className="text-left text-xs leading-relaxed mt-2 text-white/90 whitespace-pre-line">
                         <span className="font-medium"></span> {currentSbu.jobDesc}
                       </p>
                     )}
@@ -1102,7 +1102,7 @@ const ChartPage = () => {
                       </p>
                     )}
                     {currentSbuSub.jobDesc && (
-                      <p className="text-xs mt-2 text-white/90 whitespace-pre-line">
+                      <p className="text-left text-xs leading-relaxed mt-2 text-white/90 whitespace-pre-line">
                         <span className="font-medium"></span> {currentSbuSub.jobDesc}
                       </p>
                     )}

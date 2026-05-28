@@ -1,8 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import isOnboardingExamPath from "../../features/onboarding/isOnboardingExamPath";
-import OnboardingPortalWorkspace from "../../features/onboarding/OnboardingPortalWorkspace";
-import PortalOnboardingDashboard from "../../features/onboarding/PortalOnboardingDashboard";
+import { PartnerLearningHome } from "../../customer/pages/CustomerPage";
 import { invalidateAccessSummary } from "../../hooks/useAccessSummary";
 import { useResponsiveSidebar } from "../../hooks/useResponsiveSidebar";
 import { apiFetch } from "../../lib/api";
@@ -131,7 +129,9 @@ const SupplierPage = () => {
     closeMobileSidebar,
   } = useResponsiveSidebar();
   const navigate = useNavigate();
-  const isExamMode = isOnboardingExamPath(location.pathname);
+  const isLearningMode =
+    location.pathname === "/supplier" ||
+    location.pathname.startsWith("/supplier/onboarding");
 
   useEffect(() => {
     let isMounted = true;
@@ -177,12 +177,30 @@ const SupplierPage = () => {
     }
   };
 
-  if (isExamMode) {
+  if (isLearningMode) {
     return (
       <Routes>
         <Route
+          index
+          element={
+            <PartnerLearningHome
+              portalKey="SUPPLIER"
+              user={user}
+              onLogout={handleLogout}
+              homeTarget="/supplier"
+            />
+          }
+        />
+        <Route
           path="onboarding/*"
-          element={<OnboardingPortalWorkspace portalKey="SUPPLIER" />}
+          element={
+            <PartnerLearningHome
+              portalKey="SUPPLIER"
+              user={user}
+              onLogout={handleLogout}
+              homeTarget="/supplier"
+            />
+          }
         />
         <Route path="*" element={<Navigate to="/supplier/onboarding" replace />} />
       </Routes>
@@ -207,19 +225,7 @@ const SupplierPage = () => {
       >
         <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(42,168,161,0.14),_transparent_32%),linear-gradient(180deg,_#f7fbfb_0%,_#edf3ff_100%)] px-4 pb-6 pt-16 sm:px-6 md:px-8 lg:pt-6 2xl:px-10">
           <Routes>
-            <Route
-              index
-              element={
-                <PortalOnboardingDashboard
-                  portalKey="SUPPLIER"
-                  userName={user?.name ?? null}
-                />
-              }
-            />
-            <Route
-              path="onboarding/*"
-              element={<OnboardingPortalWorkspace portalKey="SUPPLIER" />}
-            />
+            <Route path="onboarding/*" element={<Navigate to="/supplier/onboarding" replace />} />
             <Route path="directory" element={<SupplierDirectory user={user} />} />
             <Route
               path="documents"
