@@ -8,6 +8,7 @@ import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { getPublicAssetUrl } from "../lib/assets";
 import { openIkPreviewWindow } from "../lib/ik-preview";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
+import EmployeeSearchPicker from "../components/organisms/EmployeeSearchPicker";
 
 type MasterIkItem = {
   ikId: string;
@@ -468,10 +469,6 @@ const MasterIkPage = () => {
     const name = employee.Name?.trim() || "Nama tidak tersedia";
     const deptName = employee.DeptName?.trim();
     return deptName ? `${name} - ${deptName}` : name;
-  };
-
-  const getEmployeeOptionLabel = (employee: Employee) => {
-    return formatEmployeeLabel(employee);
   };
 
   const getEmployeeDisplayName = (employeeId: number | null | undefined) => {
@@ -1318,25 +1315,15 @@ const MasterIkPage = () => {
                   Dibuat oleh
                   <OptionalMark />
                 </label>
-                <select
-                  value={formData.dibuatOleh ?? ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      dibuatOleh: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-                >
-                  <option value="">
-                    {employees.length ? "Pilih employee" : "Tidak ada data employee"}
-                  </option>
-                  {employees.map((emp) => (
-                    <option key={emp.UserId} value={emp.UserId}>
-                      {getEmployeeOptionLabel(emp)}
-                    </option>
-                  ))}
-                </select>
+                <EmployeeSearchPicker
+                  employees={employees}
+                  value={formData.dibuatOleh}
+                  onChange={(dibuatOleh) => setFormData({ ...formData, dibuatOleh })}
+                  placeholder="Cari employee..."
+                  clearLabel="Hapus pilihan"
+                  className="mt-2"
+                  listMode="focus"
+                />
               </div>
 
               <div>
@@ -1344,25 +1331,15 @@ const MasterIkPage = () => {
                   Diketahui oleh
                   <OptionalMark />
                 </label>
-                <select
-                  value={formData.diketahuiOleh ?? ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      diketahuiOleh: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-                >
-                  <option value="">
-                    {employees.length ? "Pilih employee" : "Tidak ada data employee"}
-                  </option>
-                  {employees.map((emp) => (
-                    <option key={emp.UserId} value={emp.UserId}>
-                      {getEmployeeOptionLabel(emp)}
-                    </option>
-                  ))}
-                </select>
+                <EmployeeSearchPicker
+                  employees={employees}
+                  value={formData.diketahuiOleh}
+                  onChange={(diketahuiOleh) => setFormData({ ...formData, diketahuiOleh })}
+                  placeholder="Cari employee..."
+                  clearLabel="Hapus pilihan"
+                  className="mt-2"
+                  listMode="focus"
+                />
               </div>
 
               <div>
@@ -1370,25 +1347,15 @@ const MasterIkPage = () => {
                   Disetujui oleh
                   <OptionalMark />
                 </label>
-                <select
-                  value={formData.disetujuiOleh ?? ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      disetujuiOleh: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
-                >
-                  <option value="">
-                    {employees.length ? "Pilih employee" : "Tidak ada data employee"}
-                  </option>
-                  {employees.map((emp) => (
-                    <option key={emp.UserId} value={emp.UserId}>
-                      {getEmployeeOptionLabel(emp)}
-                    </option>
-                  ))}
-                </select>
+                <EmployeeSearchPicker
+                  employees={employees}
+                  value={formData.disetujuiOleh}
+                  onChange={(disetujuiOleh) => setFormData({ ...formData, disetujuiOleh })}
+                  placeholder="Cari employee..."
+                  clearLabel="Hapus pilihan"
+                  className="mt-2"
+                  listMode="focus"
+                />
               </div>
             </div>
 

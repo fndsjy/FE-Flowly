@@ -19,6 +19,9 @@ export type SupplierUserProfile = {
   roleId: string;
   roleName: string;
   roleLevel: number;
+  supplierId?: string;
+  supplier?: Record<string, unknown> | null;
+  supplierData?: Record<string, unknown>[];
 };
 
 export type SupplierSidebarItem = PortalSidebarItem;
@@ -85,6 +88,23 @@ const getSupplierMenuIcon = (resourceKey: string) => {
   return <i className="fa-solid fa-circle h-4 w-4" aria-hidden="true"></i>;
 };
 
+const supplierSsoSidebarItems: SupplierSidebarItem[] = [
+  {
+    id: "SUPPLIER_DASHBOARD",
+    label: "Dashboard",
+    path: "/supplier",
+    icon: getSupplierMenuIcon("SUPPLIER_DASHBOARD"),
+    resourceKey: "SUPPLIER_DASHBOARD",
+  },
+  {
+    id: "SUPPLIER_PROFILE",
+    label: "Profile",
+    path: "/supplier/profile",
+    icon: getSupplierMenuIcon("SUPPLIER_PROFILE"),
+    resourceKey: "SUPPLIER_PROFILE",
+  },
+];
+
 const SupplierSidebar = ({
   isOpen,
   isDesktop,
@@ -100,17 +120,27 @@ const SupplierSidebar = ({
   );
   const location = useLocation();
   const navigate = useNavigate();
+  const isSupplierSsoUser = Boolean(user?.supplierId);
   const {
     loading: accessLoading,
     isAdmin,
     menuAccessConfiguredKeySet,
     menuAccessMap,
     portalAccessConfigured,
-  } = useAccessSummary({ enabled: Boolean(user) });
+  } = useAccessSummary({ enabled: Boolean(user) && !isSupplierSsoUser });
 
   useEffect(() => {
     let isMounted = true;
     setMenuLoading(true);
+
+    if (isSupplierSsoUser) {
+      setMenuItems(supplierSsoSidebarItems);
+      setModuleRoutesByParent(new Map());
+      setMenuLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
 
     loadPortalSidebarData({
       portalKey: "SUPPLIER",
@@ -141,7 +171,7 @@ const SupplierSidebar = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isSupplierSsoUser]);
 
   const isPathActive = (path: string) =>
     path === "/supplier"

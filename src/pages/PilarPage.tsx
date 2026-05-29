@@ -7,6 +7,7 @@ import { apiFetch } from "../lib/api";
 import { getCardNavigationHandlers } from "../lib/card-navigation";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
+import EmployeeSearchPicker from "../components/organisms/EmployeeSearchPicker";
 
 interface pilar {
   id: string;
@@ -430,8 +431,8 @@ const PilarPage = () => {
 
       {/* -------------------- MODAL FORM -------------------- */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-96">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4 backdrop-blur-sm flex items-center justify-center">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto bg-white p-6 rounded-xl shadow-xl">
             <h2 className="font-bold text-xl tracking-wide mb-4 text-[#272e79]">
               {formMode === "add" ? "Tambah Pilar" : "Edit Pilar"}
             </h2>
@@ -482,22 +483,14 @@ const PilarPage = () => {
                 PIC
                 <OptionalMark />
               </label>
-              <select
-                value={formData.pic ?? ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, pic: e.target.value ? Number(e.target.value) : null })
-                }
-                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 
-                          focus:border-rose-400 focus:ring-rose-400 focus:ring-1 outline-none"
-              >
-                <option value="">— Pilih PIC —</option>
-
-                {employees.map((emp) => (
-                  <option key={emp.UserId} value={emp.UserId}>
-                    {formatEmployeeLabel(emp)}
-                  </option>
-                ))}
-              </select>
+              <EmployeeSearchPicker
+                employees={employees}
+                value={formData.pic}
+                onChange={(pic) => setFormData({ ...formData, pic })}
+                placeholder="Cari PIC..."
+                clearLabel="Hapus PIC"
+                listMode="focus"
+              />
               <label className="text-xs uppercase tracking-wide text-slate-400">
                 Jabatan
                 <OptionalMark />

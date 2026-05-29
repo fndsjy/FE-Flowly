@@ -136,28 +136,45 @@ const SupplierPage = () => {
   useEffect(() => {
     let isMounted = true;
 
-    apiFetch("/profile", {
-      method: "GET",
-      credentials: "include",
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (!isMounted) {
-          return;
-        }
+    const loadProfile = async () => {
+      const [internalProfile, supplierProfile] = await Promise.all([
+        apiFetch("/profile", {
+          method: "GET",
+          credentials: "include",
+          suppressUnauthorizedRedirect: true,
+        })
+          .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+          .catch(() => ({ ok: false, data: null })),
+        apiFetch("/supplier-sso/profile", {
+          method: "GET",
+          credentials: "include",
+          suppressUnauthorizedRedirect: true,
+        })
+          .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+          .catch(() => ({ ok: false, data: null })),
+      ]);
 
-        if (ok && data?.response) {
-          setUser(data.response as SupplierUserProfile);
-          return;
-        }
+      if (!isMounted) {
+        return;
+      }
 
-        setUser(null);
-      })
-      .catch(() => {
-        if (isMounted) {
-          setUser(null);
-        }
-      });
+      const internalUser = internalProfile.data?.response as
+        | SupplierUserProfile
+        | undefined;
+      if (internalProfile.ok && internalUser) {
+        setUser(internalUser);
+        return;
+      }
+
+      if (supplierProfile.ok && supplierProfile.data?.response) {
+        setUser(supplierProfile.data.response as SupplierUserProfile);
+        return;
+      }
+
+      setUser(null);
+    };
+
+    void loadProfile();
 
     return () => {
       isMounted = false;
@@ -166,10 +183,16 @@ const SupplierPage = () => {
 
   const handleLogout = async () => {
     try {
-      await apiFetch("/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+      await Promise.allSettled([
+        apiFetch("/supplier-sso/logout", {
+          method: "POST",
+          credentials: "include",
+        }),
+        apiFetch("/logout", {
+          method: "POST",
+          credentials: "include",
+        }),
+      ]);
     } finally {
       invalidateAccessSummary();
       setUser(null);
