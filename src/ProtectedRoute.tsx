@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAccessSummary } from "./hooks/useAccessSummary";
 import { useCustomerSsoProfile } from "./hooks/useCustomerSsoProfile";
 import { useProfile } from "./hooks/useProfile";
+import { useSupplierSsoProfile } from "./hooks/useSupplierSsoProfile";
 import { hasMenuAccess } from "./lib/access";
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   portalKey?: string;
   adminOnly?: boolean;
   customerAllowed?: boolean;
+  supplierAllowed?: boolean;
 }
 
 const PUBLIC_MENU_KEYS = new Set([
@@ -26,12 +28,13 @@ const ProtectedRoute = ({
   portalKey,
   adminOnly = false,
   customerAllowed = false,
+  supplierAllowed = false,
 }: Props) => {
   const location = useLocation();
   const normalizedMenuKey = (menuKey ?? "").trim().toUpperCase();
   const normalizedPortalKey = (portalKey ?? "").trim().toUpperCase();
   const { profile, loading: authLoading } = useProfile({
-    suppressUnauthorizedRedirect: customerAllowed,
+    suppressUnauthorizedRedirect: customerAllowed || supplierAllowed,
   });
   const isLoggedIn = Boolean(profile);
   const isRoleOneUser = profile?.roleLevel === 1;
@@ -57,11 +60,19 @@ const ProtectedRoute = ({
   } = useCustomerSsoProfile({
     enabled: customerAllowed && !isLoggedIn,
   });
+  const {
+    profile: supplierProfile,
+    loading: supplierLoading,
+  } = useSupplierSsoProfile({
+    enabled: supplierAllowed && !isLoggedIn,
+  });
   const hasCustomerSession = customerAllowed && Boolean(customerProfile);
+  const hasSupplierSession = supplierAllowed && Boolean(supplierProfile);
   const isAdminUser = isAdmin || isRoleOneUser;
   const isLoading =
     authLoading ||
     (customerAllowed && !isLoggedIn && customerLoading) ||
+    (supplierAllowed && !isLoggedIn && supplierLoading) ||
     (isLoggedIn && (requiresAccessSummary || requiresPortalAccess) && accessLoading);
   const hasAllowedPortal =
     !requiresPortalAccess ||
@@ -72,11 +83,11 @@ const ProtectedRoute = ({
     return <p className="text-gray-500 p-5">Memeriksa akses...</p>;
   }
 
-  if (!isLoggedIn && !hasCustomerSession) {
+  if (!isLoggedIn && !hasCustomerSession && !hasSupplierSession) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!isLoggedIn && hasCustomerSession) {
+  if (!isLoggedIn && (hasCustomerSession || hasSupplierSession)) {
     return <>{children}</>;
   }
 

@@ -6,6 +6,7 @@ import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
+import EmployeeSearchPicker from "../components/organisms/EmployeeSearchPicker";
 
 type SbuSub = {
   id: number;
@@ -1534,13 +1535,17 @@ const A3Page = () => {
     return originSbuSubOptions[0]?.id ?? null;
   }, [originSbuSubOptions]);
 
-  const getEmployeeOptionLabel = (employee: Employee) => {
-    return formatEmployeeLabel(employee);
-  };
-
   const getEmployeeOptionValue = (employee: Employee) => {
     const name = employee.Name?.trim();
     return name ? name : `ID ${employee.UserId}`;
+  };
+
+  const getEmployeeIdByOptionValue = (value: string) => {
+    if (!value) return null;
+    const employee = employees.find(
+      (item) => getEmployeeOptionValue(item) === value
+    );
+    return employee?.UserId ?? null;
   };
 
   const fetchProfile = async () => {
@@ -5516,6 +5521,8 @@ const A3Page = () => {
                                 </div>
                                 {(() => {
                                   const checkByValue = item.checkBy ?? "";
+                                  const selectedCheckByUserId =
+                                    getEmployeeIdByOptionValue(checkByValue);
                                   const hasLegacyCheckBy =
                                     checkByValue.length > 0 &&
                                     !employees.some(
@@ -5527,46 +5534,39 @@ const A3Page = () => {
                                     ? "Nama tidak tersedia"
                                     : checkByValue;
                                   const canEditCheckBy =
-                                      canEditItem && !employeesLoading;
+                                    canEditItem && !employeesLoading;
                                   return (
-                                    <select
-                                      value={checkByValue}
-                                      disabled={!canEditCheckBy}
-                                      onChange={(event) =>
-                                        updatePdcaItem(index, {
-                                          checkBy: event.target.value,
-                                        })
-                                      }
-                                      className={`w-full px-3 py-2 rounded-lg border text-sm ${
-                                        canEditCheckBy
-                                          ? "border-slate-200"
-                                          : "border-slate-100 bg-slate-50 text-slate-500"
-                                      }`}
-                                    >
-                                      <option value="">
-                                      {employeesLoading
-                                        ? "Memuat karyawan..."
-                                        : "Pilih checker"}
-                                    </option>
-                                    {hasLegacyCheckBy && (
-                                      <option value={checkByValue}>
-                                        {legacyLabel}
-                                      </option>
-                                    )}
-                                      {employees.map((employee) => {
-                                        const value = getEmployeeOptionValue(
-                                          employee
-                                        );
-                                        return (
-                                          <option
-                                            key={employee.UserId}
-                                            value={value}
-                                          >
-                                            {getEmployeeOptionLabel(employee)}
-                                          </option>
-                                        );
-                                      })}
-                                    </select>
+                                    <div>
+                                      {hasLegacyCheckBy && (
+                                        <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                                          Terpilih: {legacyLabel}
+                                        </div>
+                                      )}
+                                      <EmployeeSearchPicker
+                                        employees={employees}
+                                        value={selectedCheckByUserId}
+                                        onChange={(userId) => {
+                                          const employee = userId
+                                            ? employees.find(
+                                                (item) => item.UserId === userId
+                                              )
+                                            : null;
+                                          updatePdcaItem(index, {
+                                            checkBy: employee
+                                              ? getEmployeeOptionValue(employee)
+                                              : "",
+                                          });
+                                        }}
+                                        placeholder={
+                                          employeesLoading
+                                            ? "Memuat karyawan..."
+                                            : "Cari checker..."
+                                        }
+                                        clearLabel="Hapus checker"
+                                        disabled={!canEditCheckBy}
+                                        listMode="focus"
+                                      />
+                                    </div>
                                   );
                                 })()}
                                 <textarea

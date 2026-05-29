@@ -8,6 +8,7 @@ import BackButton from "../components/atoms/BackButton";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
+import EmployeeSearchPicker from "../components/organisms/EmployeeSearchPicker";
 
 // Interfaces tetap sama
 interface ChartNode {
@@ -283,7 +284,8 @@ const ChartPage = () => {
     chartId: string;
     memberChartId: string;
     slotIndex: number;
-  }>({ open: false, chartId: "", memberChartId: "", slotIndex: 0 });
+    currentUserId: number | null;
+  }>({ open: false, chartId: "", memberChartId: "", slotIndex: 0, currentUserId: null });
 
   const [jobDescModal, setJobDescModal] = useState({
     open: false,
@@ -453,8 +455,13 @@ const ChartPage = () => {
     }
   };
 
-  const handleOpenAssign = (chartId: string, memberChartId: string, slotIndex: number) => {
-    setSlotAssign({ open: true, chartId, memberChartId, slotIndex });
+  const handleOpenAssign = (
+    chartId: string,
+    memberChartId: string,
+    slotIndex: number,
+    currentUserId: number | null
+  ) => {
+    setSlotAssign({ open: true, chartId, memberChartId, slotIndex, currentUserId });
   };
 
   const handleAssign = async (userId: number | null) => {
@@ -474,7 +481,7 @@ const ChartPage = () => {
       }
       showToast("Slot berhasil diperbarui.", "success");
       await fetchMembersForChart(slotAssign.chartId);
-      setSlotAssign({ open: false, chartId: "", memberChartId: "", slotIndex: 0 });
+      setSlotAssign({ open: false, chartId: "", memberChartId: "", slotIndex: 0, currentUserId: null });
     } catch (err) {
       console.error("Gagal assign:", err);
       showToast("Terjadi kesalahan saat assign.", "error");
@@ -768,11 +775,11 @@ const ChartPage = () => {
               {canCrudChartMember && (
                 <div className="flex gap-1">
                   <button
-                    title="Assign / Ubah anggota"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenAssign(node.chartId, m.memberChartId, idx);
-                    }}
+                      title="Assign / Ubah anggota"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenAssign(node.chartId, m.memberChartId, idx, employeeUserId);
+                      }}
                     className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded"
                   >
                     Assign
@@ -1184,8 +1191,8 @@ const ChartPage = () => {
 
       {/* Modal Form */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-5 md:p-6 rounded-xl shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white p-5 md:p-6 rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h2 className="font-bold text-xl mb-4 text-[#272e79]">
               {formMode === "add" ? "Tambah Anggota" : "Edit Root"}
             </h2>
@@ -1272,26 +1279,6 @@ const ChartPage = () => {
                   />
                 </div>
 
-                {/* {formMode === "add" && employees.length > 0 && (
-                  <select
-                    value={formData.assignUserId ?? ""}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        assignUserId: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border"
-                  >
-                    <option value="">-- Pilih pegawai (opsional) --</option>
-                    {employees.map((emp) => (
-                      <option key={emp.UserId} value={emp.UserId}>
-                        {formatEmployeeLabel(emp)}
-                      </option>
-                    ))}
-                  </select>
-                )} */}
-
                 {formData.parentId && (
                   <div className="text-sm text-gray-500">
                     Menambah di bawah:{" "}
@@ -1327,8 +1314,8 @@ const ChartPage = () => {
 
       {/* Assign slot modal */}
       {slotAssign.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-5 md:p-6 rounded-xl shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white p-5 md:p-6 rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-lg mb-3">
               Assign Slot #{slotAssign.slotIndex + 1}
             </h3>
@@ -1336,27 +1323,22 @@ const ChartPage = () => {
               Pilih Pegawai
               <OptionalMark />
             </label>
-            <select
-              onChange={(e) => {
-                const u = e.target.value ? Number(e.target.value) : null;
-                handleAssign(u);
-              }}
-              className="w-full px-3 py-2 rounded-lg border"
-              defaultValue=""
-            >
-              <option value="">-- Pilih pegawai (kosong untuk clear) --</option>
-              {employees.map((emp) => (
-                <option key={emp.UserId} value={emp.UserId}>
-                  {formatEmployeeLabel(emp)}
-                </option>
-              ))}
-            </select>
+            <EmployeeSearchPicker
+              employees={employees}
+              value={slotAssign.currentUserId}
+              onChange={(userId) => handleAssign(userId)}
+              placeholder="Cari nama atau departemen karyawan..."
+              clearLabel="Lepas karyawan dari slot"
+              listClassName="max-h-72"
+              listLayout="inline"
+              autoFocus
+            />
 
             <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() =>
-                  setSlotAssign({ open: false, chartId: "", memberChartId: "", slotIndex: 0 })
-                }
+                onClick={() => {
+                  setSlotAssign({ open: false, chartId: "", memberChartId: "", slotIndex: 0, currentUserId: null });
+                }}
                 className="px-4 py-2 bg-rose-400 text-white rounded-lg"
               >
                 Tutup
@@ -1368,8 +1350,8 @@ const ChartPage = () => {
 
       {/* Update job desc modal */}
       {jobDescModal.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-5 md:p-6 rounded-xl shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white p-5 md:p-6 rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-lg mb-3">
               Job Description - {jobDescModal.name}
             </h3>

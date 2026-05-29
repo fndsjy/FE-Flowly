@@ -36,6 +36,7 @@ import CustomerPage from './customer/pages/CustomerPage';
 import InfluencerPage from './influencer/pages/InfluencerPage';
 import SupplierPage from './supplier/pages/SupplierPage';
 import CustomerSsoCallbackPage from './pages/CustomerSsoCallbackPage';
+import SupplierSsoCallbackPage from './pages/SupplierSsoCallbackPage';
 import { getRouterBasename } from './lib/routes';
 
 const basename = getRouterBasename();
@@ -48,6 +49,8 @@ const App = () => {
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/custid/:token" element={<CustomerSsoCallbackPage />} />
+          <Route path="/supplierId/:token" element={<SupplierSsoCallbackPage />} />
+          <Route path="/supplierid/:token" element={<SupplierSsoCallbackPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/pilar" element={<ProtectedRoute menuKey="ORGANISASI"><PilarPage /></ProtectedRoute>} />
           <Route path="/pilar/sbu/:pilarId" element={<ProtectedRoute menuKey="ORGANISASI"><SBUPage /></ProtectedRoute>} />
@@ -62,7 +65,7 @@ const App = () => {
           <Route path="/hrd" element={<ProtectedRoute menuKey="HRD"><HRDHomePage /></ProtectedRoute>} />
           <Route path="/karyawan" element={<ProtectedRoute menuKey="HRD"><HRDPage /></ProtectedRoute>} />
           <Route path="/hrd/employee" element={<ProtectedRoute menuKey="HRD"><HRDPage /></ProtectedRoute>} />
-          <Route path="/supplier/*" element={<ProtectedRoute portalKey="SUPPLIER"><SupplierPage /></ProtectedRoute>} />
+          <Route path="/supplier/*" element={<ProtectedRoute supplierAllowed portalKey="SUPPLIER"><SupplierPage /></ProtectedRoute>} />
           <Route path="/customer/*" element={<ProtectedRoute customerAllowed portalKey="CUSTOMER"><CustomerPage /></ProtectedRoute>} />
           <Route path="/affiliate/*" element={<ProtectedRoute portalKey="AFFILIATE"><AffiliatePage /></ProtectedRoute>} />
           <Route path="/influencer/*" element={<ProtectedRoute portalKey="INFLUENCER"><InfluencerPage /></ProtectedRoute>} />

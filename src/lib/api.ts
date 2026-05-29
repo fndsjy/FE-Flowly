@@ -8,8 +8,8 @@ const SESSION_STORAGE_KEYS_TO_CLEAR = [
   "flowly.oms.portal-programs",
 ];
 const AUTH_PAGE_PATHS = ["/login", "/register"];
-const AUTH_PAGE_PREFIXES = ["/custid/"];
-const AUTH_REQUEST_PATHS = ["/login", "/customer-sso/login"];
+const AUTH_PAGE_PREFIXES = ["/custid/", "/supplierid/"];
+const AUTH_REQUEST_PATHS = ["/login", "/customer-sso/login", "/supplier-sso/login"];
 
 let isHandlingUnauthorized = false;
 
