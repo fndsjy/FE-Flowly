@@ -2738,10 +2738,10 @@ const HRDPage = () => {
                 </select>
                 <p className="text-xs text-slate-400">
                   {isLoadingFingerMachines
-                    ? "Daftar IP sedang diambil dari server mesin finger."
+                    ? "Daftar IP sedang diambil dari master perangkat finger."
                     : fingerMachines.length > 0
-                    ? "Pilih IP dari daftar mesin finger yang tersedia di server absensi."
-                    : "Belum ada data IP mesin finger yang tersedia dari server absensi."}
+                    ? "Pilih IP dari daftar perangkat finger yang tersedia."
+                    : "Belum ada data IP mesin finger yang tersedia di master perangkat."}
                 </p>
               </div>
 
