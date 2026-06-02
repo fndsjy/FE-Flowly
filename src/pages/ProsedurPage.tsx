@@ -173,6 +173,38 @@ const ProsedurPage = () => {
     return null;
   };
 
+  const compareProcedureOrder = (left: SbuSub, right: SbuSub) => {
+    const localeOptions = { sensitivity: "base", numeric: true } as const;
+    const compareText = (leftValue: string, rightValue: string) =>
+      leftValue.localeCompare(rightValue, "id", localeOptions);
+
+    const leftPilarId = resolvePilarId(left);
+    const rightPilarId = resolvePilarId(right);
+    const leftPilar = leftPilarId !== null ? pilarMap.get(leftPilarId) : null;
+    const rightPilar = rightPilarId !== null ? pilarMap.get(rightPilarId) : null;
+    const pilarCompare = compareText(
+      leftPilar?.pilarName ?? `ID ${leftPilarId ?? Number.MAX_SAFE_INTEGER}`,
+      rightPilar?.pilarName ?? `ID ${rightPilarId ?? Number.MAX_SAFE_INTEGER}`
+    );
+    if (pilarCompare !== 0) return pilarCompare;
+
+    const leftSbu = left.sbuId !== null ? sbuMap.get(left.sbuId) : null;
+    const rightSbu = right.sbuId !== null ? sbuMap.get(right.sbuId) : null;
+    const sbuCompare = compareText(
+      leftSbu ? `${leftSbu.sbuName} ${leftSbu.sbuCode}` : `ID ${left.sbuId ?? Number.MAX_SAFE_INTEGER}`,
+      rightSbu ? `${rightSbu.sbuName} ${rightSbu.sbuCode}` : `ID ${right.sbuId ?? Number.MAX_SAFE_INTEGER}`
+    );
+    if (sbuCompare !== 0) return sbuCompare;
+
+    const sbuSubCompare = compareText(
+      `${left.sbuSubName} ${left.sbuSubCode}`,
+      `${right.sbuSubName} ${right.sbuSubCode}`
+    );
+    if (sbuSubCompare !== 0) return sbuSubCompare;
+
+    return left.id - right.id;
+  };
+
   const focusedPilarNames = useMemo(() => {
     if (focusPilarIds.size === 0) return [];
     return Array.from(focusPilarIds)
@@ -209,8 +241,8 @@ const ProsedurPage = () => {
       return matchesTerm && matchesPilar && matchesSbu;
     });
 
-    return list.sort((a, b) => a.sbuSubName.localeCompare(b.sbuSubName));
-  }, [data, search, selectedPilarId, selectedSbuId, sbuMap]);
+    return list.sort(compareProcedureOrder);
+  }, [data, search, selectedPilarId, selectedSbuId, sbuMap, pilarMap]);
 
   const recommendedList = useMemo(() => {
     if (focusPilarIds.size === 0) return [];
