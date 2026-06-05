@@ -7,8 +7,13 @@ import { useToast } from "../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 import { getPublicAssetUrl } from "../lib/assets";
 import { openIkPreviewWindow } from "../lib/ik-preview";
+import {
+  getIkContentPlainText,
+  normalizeIkContentForStorage,
+} from "../lib/ik-content";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 import EmployeeSearchPicker from "../components/organisms/EmployeeSearchPicker";
+import IkContentEditor from "../components/molecules/IkContentEditor";
 
 type MasterIkItem = {
   ikId: string;
@@ -259,7 +264,7 @@ const MasterIkPage = () => {
       return (
         item.ikName.toLowerCase().includes(term) ||
         item.ikNumber.toLowerCase().includes(term) ||
-        (item.ikContent ?? "").toLowerCase().includes(term)
+        getIkContentPlainText(item.ikContent).toLowerCase().includes(term)
       );
     });
   }, [iks, search, canCrud, statusFilter]);
@@ -310,7 +315,7 @@ const MasterIkPage = () => {
       ikName: item.ikName,
       ikNumber: item.ikNumber,
       effectiveDate: toDateInputValue(item.effectiveDate),
-      ikContent: item.ikContent ?? "",
+      ikContent: normalizeIkContentForStorage(item.ikContent ?? ""),
       dibuatOleh: item.dibuatOleh ?? null,
       diketahuiOleh: item.diketahuiOleh ?? null,
       disetujuiOleh: item.disetujuiOleh ?? null,
@@ -363,7 +368,7 @@ const MasterIkPage = () => {
     setIsSubmitting(true);
     try {
       if (formMode === "add") {
-        const content = formData.ikContent.trim();
+        const content = normalizeIkContentForStorage(formData.ikContent);
         const payload: Record<string, unknown> = {
           ikName: formData.ikName.trim(),
           ikNumber: formData.ikNumber.trim(),
@@ -396,7 +401,7 @@ const MasterIkPage = () => {
         return;
       }
 
-      const content = formData.ikContent.trim();
+      const content = normalizeIkContentForStorage(formData.ikContent);
       const payload: Record<string, unknown> = {
         ikId: formData.ikId,
         ikName: formData.ikName.trim(),
@@ -666,21 +671,33 @@ const MasterIkPage = () => {
       .content p {
         margin: 0 0 6px;
       }
-      .content ol,
+      .content ol {
+        margin: 0 0 8px 34px;
+        padding-left: 8px;
+        list-style-position: outside;
+        list-style-type: decimal;
+      }
       .content ul {
-        margin: 0 0 8px 22px;
-        padding: 0;
+        margin: 0 0 8px 52px;
+        padding-left: 8px;
+        list-style-position: outside;
+        list-style-type: disc;
       }
       .content li {
         margin-bottom: 4px;
       }
+      .content li > ol {
+        margin-top: 4px;
+        margin-left: 28px;
+      }
+      .content li > ul {
+        margin-top: 4px;
+        margin-left: 36px;
+      }
       .content li.continued {
         list-style: none;
-        margin-left: -22px;
-        padding-left: 22px;
-      }
-      .content ol {
-        list-style-type: decimal;
+        margin-left: -34px;
+        padding-left: 34px;
       }
       @media print {
         .toolbar {
@@ -1144,6 +1161,7 @@ const MasterIkPage = () => {
               const statusClass = item.isActive
                 ? "bg-emerald-100 text-emerald-700"
                 : "bg-slate-200 text-slate-600";
+              const ikContentSummary = getIkContentPlainText(item.ikContent);
               return (
                 <div
                   key={item.ikId}
@@ -1187,7 +1205,7 @@ const MasterIkPage = () => {
                     <div className="rounded-2xl border border-slate-200/70 bg-white px-3 py-3">
                       <p className="text-[11px] uppercase tracking-wide text-slate-400">Ringkasan IK</p>
                       <p className="text-sm text-slate-600 line-clamp-3">
-                        {item.ikContent ? item.ikContent : "Belum ada konten."}
+                        {ikContentSummary || "Belum ada konten."}
                       </p>
                     </div>
 
@@ -1490,11 +1508,9 @@ const MasterIkPage = () => {
               <p className="text-[11px] uppercase tracking-wide text-slate-400">
                 Konten IK
               </p>
-              <textarea
+              <IkContentEditor
                 value={formData.ikContent}
-                onChange={(e) => setFormData({ ...formData, ikContent: e.target.value })}
-                rows={5}
-                className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
+                onChange={(ikContent) => setFormData({ ...formData, ikContent })}
                 placeholder="Isi ringkas IK (opsional)."
               />
             </div>
