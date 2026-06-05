@@ -1,3 +1,6 @@
+import { getPublicAssetUrl } from "./assets";
+import { normalizeIkContentForStorage } from "./ik-content";
+
 type IkPreviewData = {
   ikName: string;
   ikNumber: string;
@@ -54,7 +57,7 @@ export const buildIkPreviewHtml = (data: IkPreviewData) => {
   const departmentName = data.departmentName ? escapeHtml(data.departmentName) : "-";
   const sopNames = Array.isArray(data.sopNames) ? data.sopNames : [];
   const departmentNames = Array.isArray(data.departmentNames) ? data.departmentNames : [];
-  const rawContent = data.ikContent ?? "";
+  const rawContent = normalizeIkContentForStorage(data.ikContent ?? "");
   const contentBase64 = toBase64(rawContent);
 
   return `<!doctype html>
@@ -130,7 +133,7 @@ export const buildIkPreviewHtml = (data: IkPreviewData) => {
         height: auto;
         max-width: 100%;
         max-height: 90px;
-        margin: 0 auto;
+        margin: auto auto;
         object-fit: contain;
       }
       .logo-tagline {
@@ -194,21 +197,33 @@ export const buildIkPreviewHtml = (data: IkPreviewData) => {
       .content p {
         margin: 0 0 6px;
       }
-      .content ol,
+      .content ol {
+        margin: 0 0 8px 34px;
+        padding-left: 8px;
+        list-style-position: outside;
+        list-style-type: decimal;
+      }
       .content ul {
-        margin: 0 0 8px 22px;
-        padding: 0;
+        margin: 0 0 8px 52px;
+        padding-left: 8px;
+        list-style-position: outside;
+        list-style-type: disc;
       }
       .content li {
         margin-bottom: 4px;
       }
+      .content li > ol {
+        margin-top: 4px;
+        margin-left: 28px;
+      }
+      .content li > ul {
+        margin-top: 4px;
+        margin-left: 36px;
+      }
       .content li.continued {
         list-style: none;
-        margin-left: -22px;
-        padding-left: 22px;
-      }
-      .content ol {
-        list-style-type: decimal;
+        margin-left: -34px;
+        padding-left: 34px;
       }
       @media print {
         .toolbar {
@@ -599,4 +614,3 @@ export const openIkPreviewWindow = (data: IkPreviewData) => {
     throw new Error("Preview failed");
   }
 };
-import { getPublicAssetUrl } from "./assets";

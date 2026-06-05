@@ -74,8 +74,14 @@ export const getPublicAssetCandidates = (path: string) => {
   );
 };
 
-export const getPublicAssetUrl = (path: string) =>
-  getPublicAssetCandidates(path)[0] ?? path;
+export const getPublicAssetUrl = (path: string) => {
+  const url = getPublicAssetCandidates(path)[0] ?? path;
+  if (!url || isExternalAsset(url) || typeof window === "undefined") {
+    return url;
+  }
+
+  return new URL(url, window.location.origin).href;
+};
 
 export const rememberPublicAssetUrl = (url: string) => {
   const parsedUrl =

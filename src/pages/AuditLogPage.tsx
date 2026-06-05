@@ -48,6 +48,7 @@ type SbuItem = { id: number; sbuName: string; sbuCode: string };
 type SbuSubItem = { id: number; sbuSubName: string; sbuSubCode: string };
 type UserItem = { userId: string; name: string; username: string };
 type EmployeeItem = { UserId: number; Name: string; DeptName?: string | null };
+type ChartItem = { chartId: string; position: string; jobDesc?: string | null };
 
 const formatEmployeeLabel = (employee?: EmployeeItem | null) => {
   if (!employee) return "-";
@@ -74,6 +75,18 @@ const moduleLabelFallbacks: Record<string, string> = {
   PORTAL_ACTION: "Aktivitas portal",
 };
 
+const modulePortalFallbacks: Record<string, string> = {
+  CASE: "Employee",
+  CHART: "Employee",
+  CHART_MEMBER: "Employee",
+  FISHBONE: "Employee",
+  HRD: "Employee",
+  PILAR: "Employee",
+  PROCEDURE: "Employee",
+  SBU: "Employee",
+  SBU_SUB: "Employee",
+};
+
 const entityLabelFallbacks: Record<string, string> = {
   ONBOARDING_STAGE: "Tahap onboarding",
   ONBOARDING_MATERIAL: "Materi onboarding",
@@ -86,14 +99,21 @@ const entityLabelFallbacks: Record<string, string> = {
 };
 
 const fieldLabelFallbacks: Record<string, string> = {
+  BadgeNum: "Badge number",
+  Name: "Nama",
+  UserId: "ID karyawan",
   badgeNumber: "Badge number",
   cardNumber: "Nomor kartu",
+  capacity: "Kapasitas",
+  chartId: "ID chart",
   durationDay: "Durasi hari",
   examId: "Ujian",
   fileName: "Nama file",
   fileTitle: "Judul file",
   isActive: "Status aktif",
   isDeleted: "Status hapus",
+  jabatan: "Jabatan",
+  jobDesc: "Job desc",
   materialDescription: "Deskripsi materi",
   materialTitle: "Judul materi",
   name: "Nama",
@@ -104,10 +124,15 @@ const fieldLabelFallbacks: Record<string, string> = {
   onboardingStageMaterialId: "ID materi tahap",
   onboardingStageTemplateId: "ID tahap onboarding",
   orderIndex: "Urutan",
+  parentId: "Parent chart",
   passScore: "Nilai lulus",
+  pilarId: "Pilar",
   portalKey: "Portal",
   portalName: "Nama portal",
+  position: "Posisi",
   roleId: "Role",
+  sbuId: "SBU",
+  sbuSubId: "SBU Sub",
   selectedFileIds: "File yang dipilih",
   sourceFileId: "File sumber",
   stageCode: "Kode tahap",
@@ -172,14 +197,38 @@ const getRequestSnapshot = (item: AuditLogItem) => {
   return request as Record<string, unknown>;
 };
 
-const getReadableRequestEntries = (item: AuditLogItem) => {
-  const request = getRequestSnapshot(item);
-  if (!request) return [];
+const getRecordSnapshot = (item: AuditLogItem) => {
+  const snapshot = item.snapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return null;
+  }
+  if ("request" in snapshot || "before" in snapshot) {
+    return null;
+  }
 
-  return Object.entries(request).filter(([field, value]) => {
+  return snapshot;
+};
+
+const getReadableEntries = (source: Record<string, unknown> | null) => {
+  if (!source) return [];
+
+  return Object.entries(source).filter(([field, value]) => {
     if (lowValueTechnicalFields.has(field)) return false;
     return value !== undefined && value !== null && value !== "";
   });
+};
+
+const getReadableRequestEntries = (item: AuditLogItem) => {
+  return getReadableEntries(getRequestSnapshot(item));
+};
+
+const getReadableRecordEntries = (item: AuditLogItem) => {
+  return getReadableEntries(getRecordSnapshot(item));
+};
+
+const getReadableDetailEntries = (item: AuditLogItem) => {
+  const requestEntries = getReadableRequestEntries(item);
+  return requestEntries.length > 0 ? requestEntries : getReadableRecordEntries(item);
 };
 
 const resolveActionLabel = (action: string) =>
@@ -213,23 +262,26 @@ const AuditLogPage = ({
   const [sbuSubMap, setSbuSubMap] = useState<Map<number, string>>(new Map());
   const [userMap, setUserMap] = useState<Map<string, string>>(new Map());
   const [employeeMap, setEmployeeMap] = useState<Map<number, string>>(new Map());
+  const [chartMap, setChartMap] = useState<Map<string, string>>(new Map());
 
   const fetchLookupData = async () => {
     try {
-      const [pilarRes, sbuRes, sbuSubRes, userRes, employeeRes] = await Promise.all([
+      const [pilarRes, sbuRes, sbuSubRes, userRes, employeeRes, chartRes] = await Promise.all([
         apiFetch("/pilar-public", { credentials: "include" }),
         apiFetch("/sbu-public", { credentials: "include" }),
         apiFetch("/sbu-sub-public", { credentials: "include" }),
         apiFetch("/users", { credentials: "include" }),
         apiFetch("/employee", { credentials: "include" }),
+        apiFetch("/chart", { credentials: "include" }),
       ]);
 
-      const [pilarJson, sbuJson, sbuSubJson, userJson, employeeJson] = await Promise.all([
+      const [pilarJson, sbuJson, sbuSubJson, userJson, employeeJson, chartJson] = await Promise.all([
         pilarRes.json(),
         sbuRes.json(),
         sbuSubRes.json(),
         userRes.ok ? userRes.json() : Promise.resolve({ response: [] }),
         employeeRes.ok ? employeeRes.json() : Promise.resolve({ response: [] }),
+        chartRes.ok ? chartRes.json() : Promise.resolve({ response: [] }),
       ]);
 
       const pilarItems: PilarItem[] = Array.isArray(pilarJson?.response) ? pilarJson.response : [];
@@ -237,12 +289,14 @@ const AuditLogPage = ({
       const sbuSubItems: SbuSubItem[] = Array.isArray(sbuSubJson?.response) ? sbuSubJson.response : [];
       const userItems: UserItem[] = Array.isArray(userJson?.response) ? userJson.response : [];
       const employeeItems: EmployeeItem[] = Array.isArray(employeeJson?.response) ? employeeJson.response : [];
+      const chartItems: ChartItem[] = Array.isArray(chartJson?.response) ? chartJson.response : [];
 
       setPilarMap(new Map(pilarItems.map((item) => [item.id, item.pilarName])));
       setSbuMap(new Map(sbuItems.map((item) => [item.id, `${item.sbuName} (${item.sbuCode})`])));
       setSbuSubMap(new Map(sbuSubItems.map((item) => [item.id, `${item.sbuSubName} (${item.sbuSubCode})`])));
       setUserMap(new Map(userItems.map((item) => [item.userId, item.name || item.username])));
       setEmployeeMap(new Map(employeeItems.map((item) => [item.UserId, formatEmployeeLabel(item)])));
+      setChartMap(new Map(chartItems.map((item) => [item.chartId, item.position || item.jobDesc || "-"])));
     } catch (err) {
       console.error("Error fetch lookup data:", err);
     }
@@ -334,12 +388,51 @@ const AuditLogPage = ({
 
   const resolveEntityName = (item: AuditLogItem) => {
     const entityKey = item.entity.toUpperCase();
+    if (entityKey === "CHART") return chartMap.get(item.entityId) ?? null;
     const idNumber = Number(item.entityId);
     if (Number.isNaN(idNumber)) return null;
     if (entityKey === "PILAR") return pilarMap.get(idNumber) ?? null;
     if (entityKey === "SBU") return sbuMap.get(idNumber) ?? null;
     if (entityKey === "SBU_SUB") return sbuSubMap.get(idNumber) ?? null;
+    if (entityKey === "EMPLOYEE") return employeeMap.get(idNumber) ?? null;
     return null;
+  };
+
+  const getLookupLabel = (field: string, value: unknown) => {
+    const fieldKey = field.toLowerCase();
+    if (value === null || value === undefined || value === "") return null;
+
+    if (fieldKey === "chartid" || fieldKey === "parentid") {
+      return chartMap.get(String(value)) ?? null;
+    }
+
+    const idNumber = Number(value);
+    if (Number.isNaN(idNumber)) return null;
+
+    if (fieldKey === "pilarid") return pilarMap.get(idNumber) ?? null;
+    if (fieldKey === "sbuid") return sbuMap.get(idNumber) ?? null;
+    if (fieldKey === "sbusubid") return sbuSubMap.get(idNumber) ?? null;
+    if (fieldKey === "userid" || fieldKey === "createdby" || fieldKey === "updatedby" || fieldKey === "deletedby") {
+      return employeeMap.get(idNumber) ?? userMap.get(String(value)) ?? null;
+    }
+
+    return null;
+  };
+
+  const formatAuditFieldValue = (field: string, value: unknown): string => {
+    if (Array.isArray(value)) {
+      return value.length > 0
+        ? value.map((entry) => formatAuditFieldValue(field, entry)).join(", ")
+        : "-";
+    }
+
+    const baseValue = formatAuditValue(value);
+    const lookupLabel = getLookupLabel(field, value);
+    if (!lookupLabel || baseValue === "-") {
+      return baseValue;
+    }
+
+    return `${baseValue} (${lookupLabel})`;
   };
 
   const resolveActorName = (item: AuditLogItem) => {
@@ -360,10 +453,12 @@ const AuditLogPage = ({
 
   const resolveAuditTarget = (item: AuditLogItem) => {
     const entityName = resolveEntityName(item);
-    if (entityName) return entityName;
+    if (entityName) return `${item.entityId} (${entityName})`;
 
     const request = getRequestSnapshot(item);
+    const snapshot = getRecordSnapshot(item);
     const candidateFields = [
+      "position",
       "stageName",
       "materialTitle",
       "fileTitle",
@@ -374,9 +469,9 @@ const AuditLogPage = ({
       "username",
     ];
     for (const field of candidateFields) {
-      const value = request?.[field];
+      const value = request?.[field] ?? snapshot?.[field];
       if (typeof value === "string" && value.trim()) {
-        return value.trim();
+        return item.entityId ? `${item.entityId} (${value.trim()})` : value.trim();
       }
     }
 
@@ -384,9 +479,13 @@ const AuditLogPage = ({
   };
 
   const buildChangeSummary = (item: AuditLogItem) => {
+    if (item.action.toUpperCase() === "DELETE") {
+      return `ID: ${item.entityId}`;
+    }
+
     const fields = item.changes?.length
       ? item.changes.map((change) => resolveKnownLabel(change.field, fieldLabelFallbacks))
-      : getReadableRequestEntries(item).map(([field]) =>
+      : getReadableDetailEntries(item).map(([field]) =>
           resolveKnownLabel(field, fieldLabelFallbacks)
         );
 
@@ -396,11 +495,18 @@ const AuditLogPage = ({
     return `${preview.join(", ")}${more}`;
   };
 
+  const getDetailSummaryLabel = (action: string) => {
+    const normalized = action.toUpperCase();
+    if (normalized === "CREATE") return "Bagian ditambah";
+    if (normalized === "DELETE") return "Data dihapus";
+    return "Bagian diubah";
+  };
+
   const resolvePortalLabel = (item: AuditLogItem) => {
     const meta = item.meta ?? {};
     const portalName = typeof meta.portalName === "string" ? meta.portalName : null;
     const portalKey = typeof meta.portalKey === "string" ? meta.portalKey : null;
-    return portalName || portalKey || "-";
+    return portalName || portalKey || modulePortalFallbacks[item.module.toUpperCase()] || "-";
   };
 
   const actionColor = (action: string) => {
@@ -500,7 +606,8 @@ const AuditLogPage = ({
               const targetName = resolveAuditTarget(item);
               const moduleLabel = resolveModuleLabel(item);
               const entityLabel = resolveEntityLabel(item);
-              const readableEntries = getReadableRequestEntries(item);
+              const readableEntries = getReadableDetailEntries(item);
+              const detailSummaryLabel = getDetailSummaryLabel(item.action);
               const isExpanded = expandedId === item.logId;
               return (
                 <div key={item.logId} className="border-b border-slate-100">
@@ -524,7 +631,7 @@ const AuditLogPage = ({
                         oleh {actorName}
                       </div>
                       <div className="text-xs text-slate-500 mt-1">
-                        Bagian diubah: {buildChangeSummary(item)}
+                        {detailSummaryLabel}: {buildChangeSummary(item)}
                       </div>
                       <button
                         type="button"
@@ -589,7 +696,7 @@ const AuditLogPage = ({
                           </div>
 
                           <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                            Bagian yang diisi atau diubah
+                            {detailSummaryLabel}
                           </h3>
                           {item.changes && item.changes.length > 0 ? (
                             <ul className="space-y-2">
@@ -606,13 +713,13 @@ const AuditLogPage = ({
                                       <span className="font-semibold text-slate-400">
                                         Sebelum:
                                       </span>{" "}
-                                      {formatAuditValue(change.from)}
+                                      {formatAuditFieldValue(change.field, change.from)}
                                     </div>
                                     <div>
                                       <span className="font-semibold text-slate-400">
                                         Sesudah:
                                       </span>{" "}
-                                      {formatAuditValue(change.to)}
+                                      {formatAuditFieldValue(change.field, change.to)}
                                     </div>
                                   </div>
                                 </li>
@@ -629,7 +736,7 @@ const AuditLogPage = ({
                                     {resolveKnownLabel(field, fieldLabelFallbacks)}
                                   </p>
                                   <p className="mt-1 font-semibold text-slate-800">
-                                    {formatAuditValue(value)}
+                                    {formatAuditFieldValue(field, value)}
                                   </p>
                                 </div>
                               ))}
