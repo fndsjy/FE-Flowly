@@ -38,8 +38,61 @@ const DROP_TAGS = new Set([
   "MATH",
 ]);
 
-const INLINE_TAGS = new Set(["BR", "STRONG", "EM", "U", "S"]);
+const HEADING_TAGS = new Set(["H1", "H2", "H3", "H4", "H5", "H6"]);
+const CONTENT_BLOCK_TAGS = new Set(["P", "BLOCKQUOTE", "FIGURE", "FIGCAPTION", "CAPTION"]);
+const INLINE_TAGS = new Set(["A", "BR", "SPAN", "STRONG", "EM", "U", "S"]);
 const LIST_TAGS = new Set(["OL", "UL", "LI"]);
+const TABLE_TAGS = new Set([
+  "COL",
+  "COLGROUP",
+  "TABLE",
+  "TBODY",
+  "TD",
+  "TFOOT",
+  "TH",
+  "THEAD",
+  "TR",
+]);
+const MEDIA_TAGS = new Set(["IMG"]);
+const SAFE_STYLE_PROPERTIES = new Set([
+  "aspect-ratio",
+  "background-color",
+  "border",
+  "border-color",
+  "border-style",
+  "border-width",
+  "color",
+  "float",
+  "font-family",
+  "font-size",
+  "height",
+  "list-style-type",
+  "margin-left",
+  "margin-right",
+  "max-width",
+  "min-width",
+  "padding",
+  "padding-bottom",
+  "padding-left",
+  "padding-right",
+  "padding-top",
+  "text-align",
+  "vertical-align",
+  "width",
+]);
+const WORD_VISUAL_STYLE_PROPERTIES = new Set([
+  "background-color",
+  "color",
+  "font-family",
+  "font-size",
+  "font-style",
+  "font-weight",
+  "mso-bidi-font-style",
+  "mso-bidi-font-weight",
+  "text-align",
+  "text-decoration",
+  "text-decoration-line",
+]);
 const BULLET_MARKERS = ["•", "·", "●", "○", "▪", "▫", "■", "□", "-", "*", "\uf0b7", "ï‚·"];
 
 type ListType = "ol" | "ul";
@@ -136,20 +189,187 @@ const stripWordPlainTextNoise = (text: string) => {
   return normalizeWhitespace(cleanLines.join("\n"));
 };
 
-const removeAttributes = (element: Element) => {
-  Array.from(element.attributes).forEach((attribute) => {
-    element.removeAttribute(attribute.name);
-  });
-};
-
 const normalizeTagName = (tagName: string) => {
   const upper = tagName.toUpperCase();
   if (upper === "B") return "STRONG";
   if (upper === "I") return "EM";
   if (upper === "STRIKE" || upper === "DEL") return "S";
-  if (upper === "SPAN") return "";
+  if (
+    upper === "SPAN" ||
+    HEADING_TAGS.has(upper) ||
+    CONTENT_BLOCK_TAGS.has(upper) ||
+    TABLE_TAGS.has(upper) ||
+    MEDIA_TAGS.has(upper)
+  ) {
+    return upper;
+  }
   if (BLOCK_TAGS.has(upper)) return "P";
   return upper;
+};
+
+const isAllowedTag = (tagName: string) =>
+  HEADING_TAGS.has(tagName) ||
+  CONTENT_BLOCK_TAGS.has(tagName) ||
+  INLINE_TAGS.has(tagName) ||
+  LIST_TAGS.has(tagName) ||
+  TABLE_TAGS.has(tagName) ||
+  MEDIA_TAGS.has(tagName);
+
+const isSafeUrl = (value: string, allowImageData = false) => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (allowImageData && /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(trimmed)) {
+    return true;
+  }
+  return /^(https?:|mailto:|tel:|\/|#|\.{1,2}\/)/i.test(trimmed);
+};
+
+const sanitizeClassName = (value: string) =>
+  value
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter((item) => /^[A-Za-z0-9_-]+$/.test(item))
+    .join(" ");
+
+const sanitizeStyle = (value: string) => {
+  const safeRules = value
+    .split(";")
+    .map((rule) => rule.trim())
+    .filter(Boolean)
+    .map((rule) => {
+      const separatorIndex = rule.indexOf(":");
+      if (separatorIndex <= 0) return "";
+      const property = rule.slice(0, separatorIndex).trim().toLowerCase();
+      const propertyValue = rule.slice(separatorIndex + 1).trim();
+      if (!SAFE_STYLE_PROPERTIES.has(property)) return "";
+      if (/expression\s*\(|javascript\s*:|url\s*\(/i.test(propertyValue)) return "";
+      return `${property}: ${propertyValue}`;
+    })
+    .filter(Boolean);
+
+  return safeRules.join("; ");
+};
+
+const sanitizeWordVisualStyle = (value: string) => {
+  const safeRules = value
+    .split(";")
+    .map((rule) => rule.trim())
+    .filter(Boolean)
+    .map((rule) => {
+      const separatorIndex = rule.indexOf(":");
+      if (separatorIndex <= 0) return "";
+      const property = rule.slice(0, separatorIndex).trim().toLowerCase();
+      const propertyValue = rule
+        .slice(separatorIndex + 1)
+        .replace(/\s*!important\s*$/i, "")
+        .trim();
+      if (!WORD_VISUAL_STYLE_PROPERTIES.has(property)) return "";
+      if (/expression\s*\(|javascript\s*:|url\s*\(/i.test(propertyValue)) return "";
+      return `${property}: ${propertyValue}`;
+    })
+    .filter(Boolean);
+
+  return safeRules.join("; ");
+};
+
+const inlineWordClassVisualStyles = (html: string) => {
+  if (!hasDocument() || !/<style[\s>]/i.test(html) || !WORD_MARKUP_PATTERN.test(html)) {
+    return html;
+  }
+
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const stylesByClass = new Map<string, string[]>();
+
+  parsed.querySelectorAll("style").forEach((styleElement) => {
+    const css = styleElement.textContent ?? "";
+    const rulePattern = /([^{}]+)\{([^{}]*)\}/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = rulePattern.exec(css))) {
+      const visualStyle = sanitizeWordVisualStyle(match[2]);
+      if (!visualStyle) continue;
+
+      match[1].split(",").forEach((selector) => {
+        const classMatches = Array.from(selector.matchAll(/\.([A-Za-z_][A-Za-z0-9_-]*)/g));
+        const className = classMatches.at(-1)?.[1];
+        if (!className) return;
+        const styles = stylesByClass.get(className) ?? [];
+        styles.push(visualStyle);
+        stylesByClass.set(className, styles);
+      });
+    }
+  });
+
+  parsed.body.querySelectorAll("[class]").forEach((element) => {
+    const classStyles = Array.from(element.classList)
+      .flatMap((className) => stylesByClass.get(className) ?? [])
+      .filter(Boolean);
+    if (classStyles.length === 0) return;
+
+    const inlineStyle = element.getAttribute("style") ?? "";
+    element.setAttribute("style", [...classStyles, inlineStyle].filter(Boolean).join("; "));
+  });
+
+  return parsed.body.innerHTML;
+};
+
+const copyNumberAttribute = (source: Element, target: Element, attributeName: string) => {
+  const value = Number.parseInt(source.getAttribute(attributeName) ?? "", 10);
+  if (Number.isFinite(value) && value > 0) {
+    target.setAttribute(attributeName, String(value));
+  }
+};
+
+const copySafeAttributes = (source: Element, target: Element, tagName: string) => {
+  const className = sanitizeClassName(source.getAttribute("class") ?? "");
+  const style = sanitizeStyle(source.getAttribute("style") ?? "");
+
+  if (className && (tagName === "FIGURE" || tagName === "IMG" || TABLE_TAGS.has(tagName))) {
+    target.setAttribute("class", className);
+  }
+  if (style) {
+    target.setAttribute("style", style);
+  }
+
+  if (tagName === "A") {
+    const href = source.getAttribute("href") ?? "";
+    if (isSafeUrl(href)) {
+      target.setAttribute("href", href.trim());
+      if (source.getAttribute("target") === "_blank") {
+        target.setAttribute("target", "_blank");
+        target.setAttribute("rel", "noopener noreferrer");
+      }
+    }
+  }
+
+  if (tagName === "IMG") {
+    const src = source.getAttribute("src") ?? "";
+    if (isSafeUrl(src, true)) {
+      target.setAttribute("src", src.trim());
+    }
+    const alt = source.getAttribute("alt");
+    if (alt) {
+      target.setAttribute("alt", alt.slice(0, 250));
+    }
+    copyNumberAttribute(source, target, "width");
+    copyNumberAttribute(source, target, "height");
+  }
+
+  if (tagName === "OL") {
+    copyNumberAttribute(source, target, "start");
+    if (source.hasAttribute("reversed")) {
+      target.setAttribute("reversed", "");
+    }
+  }
+
+  if (tagName === "LI") {
+    copyNumberAttribute(source, target, "value");
+  }
+
+  if (tagName === "TD" || tagName === "TH") {
+    copyNumberAttribute(source, target, "colspan");
+    copyNumberAttribute(source, target, "rowspan");
+  }
 };
 
 const getTextFormat = (element: Element, tagName: string): TextFormat => {
@@ -227,7 +447,7 @@ const appendSanitizedChildren = (source: Node, target: Node) => {
       target.appendChild(fragment);
       return;
     }
-    if (!INLINE_TAGS.has(tagName) && !LIST_TAGS.has(tagName) && tagName !== "P") {
+    if (!isAllowedTag(tagName)) {
       const fragment = document.createDocumentFragment();
       appendSanitizedChildren(sourceElement, applyTextFormat(fragment, textFormat));
       target.appendChild(fragment);
@@ -235,12 +455,9 @@ const appendSanitizedChildren = (source: Node, target: Node) => {
     }
 
     const clean = document.createElement(tagName.toLowerCase());
-    removeAttributes(clean);
-    if (tagName === "OL") {
-      const start = Number.parseInt(sourceElement.getAttribute("start") ?? "", 10);
-      if (Number.isFinite(start) && start > 1) {
-        clean.setAttribute("start", String(start));
-      }
+    copySafeAttributes(sourceElement, clean, tagName);
+    if (tagName === "IMG" && !clean.getAttribute("src")) {
+      return;
     }
     const childFormat = {
       ...textFormat,
@@ -250,16 +467,22 @@ const appendSanitizedChildren = (source: Node, target: Node) => {
       underline: tagName === "U" ? false : textFormat.underline,
     };
     const childTarget =
-      tagName === "P" || tagName === "LI" || INLINE_TAGS.has(tagName)
+      tagName === "P" ||
+      tagName === "LI" ||
+      HEADING_TAGS.has(tagName) ||
+      CONTENT_BLOCK_TAGS.has(tagName) ||
+      INLINE_TAGS.has(tagName)
         ? applyTextFormat(clean, childFormat)
         : clean;
-    appendSanitizedChildren(sourceElement, childTarget);
+    if (tagName !== "BR" && tagName !== "IMG" && tagName !== "COL") {
+      appendSanitizedChildren(sourceElement, childTarget);
+    }
     target.appendChild(clean);
   });
 };
 
 const cleanEmptyMarkup = (root: HTMLElement) => {
-  root.querySelectorAll("span,font,style,script,meta,link,xml").forEach((node) => {
+  root.querySelectorAll("font,style,script,meta,link,xml").forEach((node) => {
     node.remove();
   });
 
@@ -530,7 +753,7 @@ const plainTextToHtml = (text: string) => {
 };
 
 const sanitizeHtmlToSafe = (html: string) => {
-  const cleaned = stripWordHtmlNoise(html);
+  const cleaned = stripWordHtmlNoise(inlineWordClassVisualStyles(html));
   if (!cleaned.trim()) return "";
   if (!hasDocument()) {
     return escapeHtml(htmlToPlainText(cleaned)).replace(/\n/g, "<br>");
