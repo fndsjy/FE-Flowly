@@ -1256,7 +1256,7 @@ const MasterIkPage = () => {
           onClick={() => setShowForm(false)}
         >
           <div
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl p-6 lg:p-7 max-h-[94vh] overflow-y-auto"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 mb-4">

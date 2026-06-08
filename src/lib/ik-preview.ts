@@ -225,6 +225,118 @@ export const buildIkPreviewHtml = (data: IkPreviewData) => {
         margin-left: -34px;
         padding-left: 34px;
       }
+      .content h1,
+      .content h2,
+      .content h3,
+      .content h4,
+      .content h5,
+      .content h6 {
+        margin: 8px 0 6px;
+        line-height: 1.25;
+        font-weight: bold;
+      }
+      .content h1 {
+        font-size: 16pt;
+      }
+      .content h2 {
+        font-size: 14pt;
+      }
+      .content h3,
+      .content h4,
+      .content h5,
+      .content h6 {
+        font-size: 12pt;
+      }
+      .content blockquote {
+        margin: 8px 0 8px 18px;
+        padding-left: 10px;
+        border-left: 2px solid #555;
+      }
+      .content figure {
+        margin: 8px 0;
+      }
+      .content figure.table {
+        width: 100%;
+        overflow: visible;
+      }
+      .content table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        margin: 8px 0;
+      }
+      .content table td,
+      .content table th {
+        border: 1px solid #000;
+        padding: 4px 6px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      .content table th {
+        font-weight: bold;
+        text-align: center;
+      }
+      .content figure.image,
+      .content .image {
+        text-align: center;
+      }
+      .content figure.image-style-align-left {
+        float: left;
+        max-width: 50%;
+        margin: 0 14px 8px 0;
+        text-align: left;
+      }
+      .content figure.image-style-align-right,
+      .content figure.image-style-side {
+        float: right;
+        max-width: 50%;
+        margin: 0 0 8px 14px;
+        text-align: right;
+      }
+      .content figure.image-style-in-front-of-text {
+        position: relative;
+        z-index: 3;
+        float: right;
+        max-width: 50%;
+        margin: 0 0 -3.5rem 14px;
+        text-align: right;
+      }
+      .content figure.image-style-align-block-left {
+        margin-left: 0;
+        margin-right: auto;
+        text-align: left;
+      }
+      .content figure.image-style-align-block-right {
+        margin-left: auto;
+        margin-right: 0;
+        text-align: right;
+      }
+      .content figure.image-style-block,
+      .content figure.image-style-align-center {
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+      }
+      .content figure.image::after {
+        content: "";
+        display: table;
+        clear: both;
+      }
+      .content img {
+        max-width: 100%;
+        height: auto;
+        object-fit: contain;
+      }
+      .content figcaption,
+      .content caption {
+        margin-top: 4px;
+        font-size: 10pt;
+        text-align: center;
+      }
+      .content a {
+        color: inherit;
+        text-decoration: underline;
+      }
       @media print {
         .toolbar {
           display: none;
@@ -345,7 +457,11 @@ export const buildIkPreviewHtml = (data: IkPreviewData) => {
           const textNodes = container.querySelectorAll("*");
           textNodes.forEach((node) => {
             if (node.tagName === "LI") {
-              if (node.textContent && node.textContent.trim().length > 0) {
+              if (
+                node.children.length === 0 &&
+                node.textContent &&
+                node.textContent.trim().length > 0
+              ) {
                 node.textContent = node.textContent.trim();
               }
             }
