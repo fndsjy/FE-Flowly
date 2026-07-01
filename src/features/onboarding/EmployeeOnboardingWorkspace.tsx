@@ -565,8 +565,7 @@ const buildScenario = (
               trackOpenManually: shouldTrackOpenManually(file),
             };
           });
-        })
-      .sort((left, right) => left.title.localeCompare(right.title));
+        });
 
     const assessmentStatus = mapAssessmentStatus(stage.status);
     const exams = [...(stage.exams ?? [])].sort(

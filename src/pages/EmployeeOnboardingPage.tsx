@@ -1,9 +1,64 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import AdminOverviewPage from "../administrator/pages/onboarding/AdminOverviewPage";
+import AdminParticipantDetailPage from "../administrator/pages/onboarding/AdminParticipantDetailPage";
+import AdminPortalDetailPage from "../administrator/pages/onboarding/AdminPortalDetailPage";
 import Sidebar from "../components/organisms/Sidebar";
 import EmployeeOnboardingWorkspace from "../features/onboarding/EmployeeOnboardingWorkspace";
 import PicOnboardingDecisionWorkspace from "../features/onboarding/PicOnboardingDecisionWorkspace";
 import { useProfile } from "../hooks/useProfile";
 import { useResponsiveSidebar } from "../hooks/useResponsiveSidebar";
+
+const supervisorOnboardingNavigation = {
+  basePath: "/onboarding",
+};
+
+const SUPERVISOR_MONITORING_ENDPOINT = "/onboarding/employee-monitoring";
+
+const SupervisorOnboardingMonitoringWorkspace = () => (
+  <Routes>
+    <Route
+      index
+      element={
+        <AdminOverviewPage
+          navigation={supervisorOnboardingNavigation}
+          monitoringEndpoint={SUPERVISOR_MONITORING_ENDPOINT}
+        />
+      }
+    />
+    <Route
+      path="checklist"
+      element={<Navigate to={supervisorOnboardingNavigation.basePath} replace />}
+    />
+    <Route
+      path="assessments"
+      element={<Navigate to={supervisorOnboardingNavigation.basePath} replace />}
+    />
+    <Route
+      path="certificates"
+      element={<Navigate to={supervisorOnboardingNavigation.basePath} replace />}
+    />
+    <Route
+      path="portal/:managedPortalKey"
+      element={
+        <AdminPortalDetailPage
+          navigation={supervisorOnboardingNavigation}
+          monitoringEndpoint={SUPERVISOR_MONITORING_ENDPOINT}
+        />
+      }
+    />
+    <Route
+      path="portal/:managedPortalKey/user/:participantId"
+      element={
+        <AdminParticipantDetailPage
+          navigation={supervisorOnboardingNavigation}
+          monitoringEndpoint={SUPERVISOR_MONITORING_ENDPOINT}
+          allowExamReset={false}
+        />
+      }
+    />
+    <Route path="*" element={<Navigate to={supervisorOnboardingNavigation.basePath} replace />} />
+  </Routes>
+);
 
 const EmployeeOnboardingPage = () => {
   const { profile, loading } = useProfile();
@@ -29,6 +84,9 @@ const EmployeeOnboardingPage = () => {
     return <Navigate to="/portal-administrator/onboarding" replace />;
   }
 
+  const isNonBadgeUser =
+    profile?.employeeUserId === null || profile?.employeeUserId === undefined;
+
   return (
     <div className="flex min-h-[100dvh] bg-[radial-gradient(circle_at_top,_rgba(64,84,182,0.12),_transparent_28%),linear-gradient(180deg,_#f8faff_0%,_#eef3fb_100%)]">
       <Sidebar
@@ -46,11 +104,17 @@ const EmployeeOnboardingPage = () => {
       >
         <div className="mx-auto w-full max-w-[1600px] 2xl:max-w-[1880px]">
           <Routes>
-            <Route
-              path="decision/*"
-              element={<PicOnboardingDecisionWorkspace />}
-            />
-            <Route path="*" element={<EmployeeOnboardingWorkspace />} />
+            {isNonBadgeUser ? (
+              <Route path="*" element={<SupervisorOnboardingMonitoringWorkspace />} />
+            ) : (
+              <>
+                <Route
+                  path="decision/*"
+                  element={<PicOnboardingDecisionWorkspace />}
+                />
+                <Route path="*" element={<EmployeeOnboardingWorkspace />} />
+              </>
+            )}
           </Routes>
         </div>
       </div>

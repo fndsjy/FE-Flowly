@@ -6,6 +6,7 @@ import {
   faPenToSquare,
   faScaleBalanced,
   faTrash,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import BackButton from "../components/atoms/BackButton";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
@@ -13,6 +14,7 @@ import Sidebar from "../components/organisms/Sidebar";
 import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
 import { useToast } from "../components/organisms/MessageToast";
 import { useAccessSummary } from "../hooks/useAccessSummary";
+import { useProfile } from "../hooks/useProfile";
 import { apiFetch, getApiErrorMessage } from "../lib/api";
 
 interface EmployeeData {
@@ -475,7 +477,6 @@ const validateForm = (formData: FormState, employees: EmployeeData[]) => {
     ["Phone", "Nomor telepon wajib diisi."],
     ["city", "Kota wajib diisi."],
     ["state", "State wajib diisi."],
-    ["email", "Email wajib diisi."],
     ["IPMsnFinger", "IP mesin finger wajib diisi."],
   ];
 
@@ -675,7 +676,7 @@ const getOnboardingStatusMeta = (
     return {
       label: "Onboarding gagal final",
       className: "bg-rose-100 text-rose-700",
-      helper: `Deadline ${formatCompactDate(summary.dueAt)}`,
+      helper: `Gagal final ${formatCompactDate(summary.failedAt ?? summary.dueAt)}`,
     };
   }
 
@@ -684,6 +685,19 @@ const getOnboardingStatusMeta = (
     className: "bg-amber-100 text-amber-700",
     helper: `Deadline ${formatCompactDate(summary.dueAt)}`,
   };
+};
+
+const CANCELABLE_ONBOARDING_STATUSES = new Set(["IN_PROGRESS"]);
+
+const canCancelOnboardingSummary = (
+  summary?: EmployeeOnboardingSummaryData | null
+) => {
+  const status = summary?.status?.trim().toUpperCase() ?? "";
+  return Boolean(
+    summary?.onboardingAssignmentId &&
+      summary.hasActiveAssignment &&
+      CANCELABLE_ONBOARDING_STATUSES.has(status)
+  );
 };
 
 const getOnboardingPlacementDetails = (
@@ -814,10 +828,25 @@ const HRDPage = () => {
   const [cancelTransferConfirmOpen, setCancelTransferConfirmOpen] =
     useState(false);
   const [failFinalConfirmOpen, setFailFinalConfirmOpen] = useState(false);
+  const [cancelOnboardingTarget, setCancelOnboardingTarget] = useState<{
+    open: boolean;
+    employee: EmployeeData | null;
+    summary: EmployeeOnboardingSummaryData | null;
+  }>({
+    open: false,
+    employee: null,
+    summary: null,
+  });
+  const [isCancellingOnboarding, setIsCancellingOnboarding] = useState(false);
 
   const { showToast } = useToast();
   const { isAdmin, menuAccessMap } = useAccessSummary();
+  const { profile } = useProfile();
   const canCrud = isAdmin || menuAccessMap.get("HRD") === "CRUD";
+  const canCancelParticipantOnboarding = Boolean(
+    profile &&
+      (profile.roleId?.trim() === "1" || Number(profile.roleLevel) === 1)
+  );
 
   const canStartEmployeeOnboarding = (
     employee: EmployeeData,
@@ -1548,6 +1577,77 @@ const HRDPage = () => {
     setExtensionDays(String(DEFAULT_EXTENSION_DAYS));
   };
 
+  const openCancelOnboarding = (
+    employee: EmployeeData,
+    summary: EmployeeOnboardingSummaryData
+  ) => {
+    if (!summary.onboardingAssignmentId) return;
+
+    setCancelOnboardingTarget({
+      open: true,
+      employee,
+      summary,
+    });
+  };
+
+  const closeCancelOnboarding = () => {
+    if (isCancellingOnboarding) return;
+
+    setCancelOnboardingTarget({
+      open: false,
+      employee: null,
+      summary: null,
+    });
+  };
+
+  const handleCancelOnboarding = async () => {
+    const summary = cancelOnboardingTarget.summary;
+    const employee = cancelOnboardingTarget.employee;
+    if (!summary?.onboardingAssignmentId || isCancellingOnboarding) return;
+
+    setIsCancellingOnboarding(true);
+    try {
+      const res = await apiFetch("/onboarding/cancel-assignment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          onboardingAssignmentId: summary.onboardingAssignmentId,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(
+          getApiErrorMessage(json, "Gagal membatalkan onboarding"),
+          "error"
+        );
+        return;
+      }
+
+      showToast("Onboarding karyawan sudah dibatalkan.", "success");
+      setCancelOnboardingTarget({
+        open: false,
+        employee: null,
+        summary: null,
+      });
+      if (employee) {
+        setSelectedEmployeeIds((current) =>
+          current.filter((userId) => userId !== employee.UserId)
+        );
+        setRecentlyCreatedEmployee((current) =>
+          current?.UserId === employee.UserId ? null : current
+        );
+      }
+      await fetchPageData();
+    } catch (error) {
+      console.error("Error cancelling onboarding:", error);
+      showToast("Terjadi kesalahan saat membatalkan onboarding", "error");
+    } finally {
+      setIsCancellingOnboarding(false);
+    }
+  };
+
   const openFailFinalConfirm = () => {
     if (!normalizeText(decisionNote)) {
       showToast(
@@ -1678,6 +1778,11 @@ const HRDPage = () => {
       ? decisionTarget.employee.Name ||
         getEmployeeCardNumber(decisionTarget.employee)
       : "Karyawan";
+  const cancelOnboardingEmployeeLabel =
+    cancelOnboardingTarget.employee
+      ? cancelOnboardingTarget.employee.Name ||
+        getEmployeeCardNumber(cancelOnboardingTarget.employee)
+      : "karyawan ini";
   const cancelTransferPlacementDetails = getOnboardingPlacementDetails(
     decisionTarget.summary
   );
@@ -2136,7 +2241,7 @@ const HRDPage = () => {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-[1180px] w-full table-fixed text-sm">
+              <table className="min-w-[1210px] w-full table-fixed text-sm">
                 <colgroup>
                   {canCrud && <col className="w-[56px]" />}
                   <col className="w-[92px]" />
@@ -2144,7 +2249,7 @@ const HRDPage = () => {
                   <col className="w-[145px]" />
                   <col className="w-[190px]" />
                   <col className="w-[290px]" />
-                  {canCrud && <col className="w-[150px]" />}
+                  {canCrud && <col className="w-[180px]" />}
                 </colgroup>
                 <thead className="bg-slate-950/[0.03] text-left text-[11px] uppercase tracking-[0.24em] text-slate-500">
                   <tr>
@@ -2170,7 +2275,7 @@ const HRDPage = () => {
                     <th className="px-5 py-4">Kontak</th>
                     <th className="px-5 py-4">Status</th>
                     {canCrud && (
-                      <th className="w-[150px] min-w-[150px] py-4 pl-4 pr-8 text-right whitespace-nowrap">
+                      <th className="w-[180px] min-w-[180px] py-4 pl-4 pr-8 text-right whitespace-nowrap">
                         Aksi
                       </th>
                     )}
@@ -2221,6 +2326,10 @@ const HRDPage = () => {
                           );
                       const canDecideOnboarding = Boolean(
                         onboardingSummary?.requiresDecision
+                      );
+                      const canCancelOnboarding = Boolean(
+                        canCancelParticipantOnboarding &&
+                          canCancelOnboardingSummary(onboardingSummary)
                       );
 
                       return (
@@ -2340,7 +2449,7 @@ const HRDPage = () => {
                             </div>
                           </td>
                           {canCrud && (
-                            <td className="w-[150px] min-w-[150px] py-4 pl-4 pr-8 align-top">
+                            <td className="w-[180px] min-w-[180px] py-4 pl-4 pr-8 align-top">
                               <div className="flex flex-col items-stretch gap-2">
                                 {canDecideOnboarding && onboardingSummary && (
                                   <button
@@ -2373,6 +2482,17 @@ const HRDPage = () => {
                                   <FontAwesomeIcon icon={faTrash} />
                                   Delete
                                 </button>
+                                {canCancelOnboarding && onboardingSummary && (
+                                  <button
+                                    onClick={() =>
+                                      openCancelOnboarding(employee, onboardingSummary)
+                                    }
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white shadow-[0_14px_28px_-18px_rgba(225,29,72,0.75)] transition hover:bg-rose-700"
+                                  >
+                                    <FontAwesomeIcon icon={faXmark} />
+                                    Cancel Onboarding
+                                  </button>
+                                )}
                               </div>
                             </td>
                           )}
@@ -2631,7 +2751,7 @@ const HRDPage = () => {
               <div className="space-y-1">
                 <label className="text-xs uppercase tracking-wide text-slate-400">
                   Email
-                  <RequiredMark />
+                  <OptionalMark />
                 </label>
                 <input
                   type="email"
@@ -3126,6 +3246,26 @@ const HRDPage = () => {
         loadingLabel="Menggagalkan..."
         confirmLabel="Gagalkan"
         cancelLabel="Cek lagi"
+      />
+
+      <DeleteConfirmDialog
+        open={cancelOnboardingTarget.open}
+        title={
+          <>
+            Cancel onboarding{" "}
+            <span className="text-rose-500">
+              {cancelOnboardingEmployeeLabel}
+            </span>
+            ?
+          </>
+        }
+        description="Jika dilanjutkan, assignment, progres, attempt ujian, keputusan, dan notifikasi onboarding peserta ini akan dihapus. Data karyawan dan peserta lain tidak ikut dihapus."
+        onClose={closeCancelOnboarding}
+        onConfirm={handleCancelOnboarding}
+        isLoading={isCancellingOnboarding}
+        loadingLabel="Membatalkan..."
+        confirmLabel="Ya, cancel"
+        cancelLabel="Tidak"
       />
 
       <DeleteConfirmDialog

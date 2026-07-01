@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   NavLink,
   Navigate,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
@@ -25,11 +34,13 @@ import AdminOverviewPage from "../../administrator/pages/onboarding/AdminOvervie
 import AdminParticipantDetailPage from "../../administrator/pages/onboarding/AdminParticipantDetailPage";
 import AdminPortalDetailPage from "../../administrator/pages/onboarding/AdminPortalDetailPage";
 import { adminOnboardingNavigation } from "../../administrator/lib/onboarding/onboarding-admin-navigation";
+import type { AdminOnboardingVisualMode } from "../../administrator/lib/onboarding/adminOnboardingUtils";
 import { useToast } from "../../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../../lib/api";
 
 const ONBOARDING_WORKSPACE_REFRESH_EVENT = "flowly:onboarding-workspace-refresh";
 const ONBOARDING_EXAM_LOCK_STATE = "flowly:onboarding-exam-lock";
+const EXAM_APPROVAL_PASSWORD_LENGTH = 6;
 
 const formatDate = (value?: string | null) =>
   value
@@ -251,13 +262,36 @@ type RuntimeExamResponse = {
   }>;
 };
 
+type RuntimeExamStartApprovalResponse = {
+  approvalRequired: boolean;
+  approvalId?: string | null;
+  expiresAt?: string | null;
+  expiresInSeconds?: number;
+  hasActiveSession?: boolean;
+  message?: string;
+};
+
+type RuntimeExamStartApprovalInput = {
+  approvalId: string;
+  approvalPassword: string;
+};
+
+type RuntimeExamNavigationState = {
+  examApprovalId?: string;
+  examApprovalPassword?: string;
+};
+
 const runtimeExamStartRequests = new Map<
   string,
   Promise<RuntimeExamResponse | null>
 >();
 
-const startRuntimeExamOnce = (stageProgressId: string) => {
-  const existing = runtimeExamStartRequests.get(stageProgressId);
+const startRuntimeExamOnce = (
+  stageProgressId: string,
+  approval?: RuntimeExamStartApprovalInput | null
+) => {
+  const requestKey = `${stageProgressId}:${approval?.approvalId ?? "resume"}`;
+  const existing = runtimeExamStartRequests.get(requestKey);
   if (existing) {
     return existing;
   }
@@ -271,6 +305,12 @@ const startRuntimeExamOnce = (stageProgressId: string) => {
       },
       body: JSON.stringify({
         onboardingStageProgressId: stageProgressId,
+        ...(approval
+          ? {
+              approvalId: approval.approvalId,
+              approvalPassword: approval.approvalPassword,
+            }
+          : {}),
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -280,13 +320,32 @@ const startRuntimeExamOnce = (stageProgressId: string) => {
 
     return (json.response ?? null) as RuntimeExamResponse | null;
   })().finally(() => {
-    if (runtimeExamStartRequests.get(stageProgressId) === request) {
-      runtimeExamStartRequests.delete(stageProgressId);
+    if (runtimeExamStartRequests.get(requestKey) === request) {
+      runtimeExamStartRequests.delete(requestKey);
     }
   });
 
-  runtimeExamStartRequests.set(stageProgressId, request);
+  runtimeExamStartRequests.set(requestKey, request);
   return request;
+};
+
+const requestRuntimeExamStartApproval = async (stageProgressId: string) => {
+  const res = await apiFetch("/onboarding/exam/request-start", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      onboardingStageProgressId: stageProgressId,
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(getApiErrorMessage(json, "Gagal meminta password ujian"));
+  }
+
+  return (json.response ?? null) as RuntimeExamStartApprovalResponse | null;
 };
 
 const runtimeQuestionTypeLabel: Record<RuntimeExamQuestion["type"], string> = {
@@ -404,6 +463,10 @@ const clearLocalExamLock = () => {
     // Cross-tab lock is best-effort.
   }
 };
+
+const isExpiredExamSubmittedMessage = (message: string) =>
+  message.toLowerCase().includes("waktu ujian sudah habis") &&
+  message.toLowerCase().includes("otomatis dikirim");
 
 const buildExamQuestions = (stage: OnboardingStage): ExamQuestion[] => [
   {
@@ -733,14 +796,22 @@ const ExamPanel = ({
   stage,
   flowState,
   dependency,
+  onRuntimeRefresh,
 }: {
   scenario: OnboardingScenario;
   stage: OnboardingStage;
   flowState: FlowState;
   dependency: string | null;
+  onRuntimeRefresh?: () => void;
 }) => {
   const navigate = useNavigate();
+  const approvalPasswordInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [showExamAgreement, setShowExamAgreement] = useState(false);
+  const [approvalRequesting, setApprovalRequesting] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [approvalData, setApprovalData] =
+    useState<RuntimeExamStartApprovalResponse | null>(null);
+  const [approvalPassword, setApprovalPassword] = useState("");
   const doneMaterials = countReadMaterials(stage.materials);
   const ready =
     stage.materials.length === 0 || doneMaterials === stage.materials.length;
@@ -769,6 +840,173 @@ const ExamPanel = ({
           : "ready"
         : assessment.status;
   const examUrl = `${scenario.basePath}/exam/${stage.id}`;
+  const stageProgressId = stage.stageProgressId ?? stage.id;
+  const approvalExpiresAtLabel = approvalData?.expiresAt
+    ? formatDateTime(approvalData.expiresAt)
+    : null;
+  const approvalPasswordChars = approvalPassword
+    .padEnd(EXAM_APPROVAL_PASSWORD_LENGTH, " ")
+    .slice(0, EXAM_APPROVAL_PASSWORD_LENGTH)
+    .split("");
+  const approvalPasswordDigits = approvalPassword.replace(/\D+/g, "");
+  const closeExamAgreement = () => {
+    setShowExamAgreement(false);
+    setApprovalRequesting(false);
+    setApprovalError(null);
+    setApprovalData(null);
+    setApprovalPassword("");
+  };
+  const focusApprovalPasswordInput = (index: number) => {
+    const nextIndex = Math.min(
+      Math.max(index, 0),
+      EXAM_APPROVAL_PASSWORD_LENGTH - 1
+    );
+    window.requestAnimationFrame(() => {
+      approvalPasswordInputRefs.current[nextIndex]?.focus();
+      approvalPasswordInputRefs.current[nextIndex]?.select();
+    });
+  };
+  const applyApprovalPasswordDigits = (startIndex: number, rawValue: string) => {
+    const digits = rawValue.replace(/\D+/g, "").slice(0, EXAM_APPROVAL_PASSWORD_LENGTH);
+    if (!digits) {
+      clearApprovalPasswordDigit(startIndex);
+      return;
+    }
+
+    const nextValue = [...approvalPasswordChars];
+    digits.split("").forEach((digit, offset) => {
+      const targetIndex = startIndex + offset;
+      if (targetIndex < EXAM_APPROVAL_PASSWORD_LENGTH) {
+        nextValue[targetIndex] = digit;
+      }
+    });
+
+    setApprovalPassword(nextValue.join(""));
+    setApprovalError(null);
+    focusApprovalPasswordInput(Math.min(startIndex + digits.length, EXAM_APPROVAL_PASSWORD_LENGTH - 1));
+  };
+  const clearApprovalPasswordDigit = (index: number) => {
+    const nextValue = [...approvalPasswordChars];
+    nextValue[index] = " ";
+    setApprovalPassword(nextValue.join(""));
+    setApprovalError(null);
+  };
+  const handleApprovalPasswordKeyDown = (
+    index: number,
+    event: KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleStartWithApproval();
+      return;
+    }
+
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      if (approvalPasswordChars[index].trim()) {
+        clearApprovalPasswordDigit(index);
+        return;
+      }
+
+      clearApprovalPasswordDigit(Math.max(index - 1, 0));
+      focusApprovalPasswordInput(index - 1);
+      return;
+    }
+
+    if (event.key === "Delete") {
+      event.preventDefault();
+      clearApprovalPasswordDigit(index);
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      focusApprovalPasswordInput(index - 1);
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      focusApprovalPasswordInput(index + 1);
+    }
+  };
+  const openExamAgreement = () => {
+    if (examInProgress) {
+      navigate(examUrl);
+      return;
+    }
+
+    setApprovalError(null);
+    setApprovalData(null);
+    setApprovalPassword("");
+    setShowExamAgreement(true);
+  };
+  const handleRequestExamApproval = async () => {
+    if (examInProgress) {
+      closeExamAgreement();
+      navigate(examUrl);
+      return;
+    }
+
+    setApprovalRequesting(true);
+    setApprovalError(null);
+    try {
+      const response = await requestRuntimeExamStartApproval(stageProgressId);
+      if (!response?.approvalRequired || response.hasActiveSession) {
+        closeExamAgreement();
+        navigate(examUrl);
+        return;
+      }
+
+      setApprovalData(response);
+      setApprovalPassword("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Gagal meminta password ujian";
+      if (isExpiredExamSubmittedMessage(message)) {
+        clearLocalExamLock();
+        onRuntimeRefresh?.();
+      }
+      setApprovalError(message);
+    } finally {
+      setApprovalRequesting(false);
+    }
+  };
+  const handleStartWithApproval = async () => {
+    const approvalId = approvalData?.approvalId?.trim();
+    const password = approvalPasswordDigits;
+    if (!approvalId || password.length !== EXAM_APPROVAL_PASSWORD_LENGTH) {
+      setApprovalError("Password HRD wajib diisi 6 digit.");
+      return;
+    }
+
+    setApprovalRequesting(true);
+    setApprovalError(null);
+    try {
+      await startRuntimeExamOnce(stageProgressId, {
+        approvalId,
+        approvalPassword: password,
+      });
+      closeExamAgreement();
+      navigate(examUrl);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Password ujian tidak valid";
+      if (isExpiredExamSubmittedMessage(message)) {
+        clearLocalExamLock();
+        onRuntimeRefresh?.();
+      }
+      setApprovalError(message);
+    } finally {
+      setApprovalRequesting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showExamAgreement && approvalData?.approvalRequired) {
+      focusApprovalPasswordInput(0);
+    }
+  }, [approvalData?.approvalRequired, showExamAgreement]);
 
   return (
     <>
@@ -866,7 +1104,7 @@ const ExamPanel = ({
             {canPreviewExam ? (
               <button
                 type="button"
-                onClick={() => setShowExamAgreement(true)}
+                onClick={openExamAgreement}
                 className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
               >
                 {startLabel}
@@ -893,45 +1131,141 @@ const ExamPanel = ({
           <button
             type="button"
             aria-label="Tutup konfirmasi ujian"
-            onClick={() => setShowExamAgreement(false)}
+            onClick={closeExamAgreement}
             className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
           />
           <section className="relative w-full max-w-xl rounded-[28px] border border-white/75 bg-white p-6 shadow-[0_32px_90px_-34px_rgba(15,23,42,0.5)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-              Konfirmasi integritas
-            </p>
-            <h3 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
-              Sebelum mulai ujian
-            </h3>
-            <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-              Dengan melanjutkan, saya menyatakan akan mengerjakan ujian ini
-              secara mandiri, jujur, tidak menggunakan bantuan yang tidak
-              diperbolehkan, tidak membagikan soal atau jawaban, dan memahami
-              bahwa waktu ujian akan langsung berjalan saat halaman ujian
-              terbuka.
-            </div>
-            <p className="mt-4 text-sm leading-7 text-slate-600">
-              Pastikan koneksi stabil dan Anda siap fokus sampai ujian selesai.
-            </p>
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setShowExamAgreement(false)}
-                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowExamAgreement(false);
-                  navigate(examUrl);
-                }}
-                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${scenario.theme.buttonClass}`}
-              >
-                Saya setuju dan mulai ujian
-              </button>
-            </div>
+            {approvalData?.approvalRequired ? (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  Password HRD
+                </p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
+                  Masukkan password ujian
+                </h3>
+                <div className="mt-4 rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm leading-7 text-emerald-900">
+                  Password sudah dikirim ke HRD
+                  {approvalExpiresAtLabel ? ` dan berlaku sampai ${approvalExpiresAtLabel}` : ""}.
+                </div>
+                <fieldset className="mt-4">
+                  <legend className="text-sm font-semibold text-slate-700">
+                    Password 6 digit
+                  </legend>
+                  <div className="mt-2 grid grid-cols-6 gap-2 sm:gap-3">
+                    {Array.from({ length: EXAM_APPROVAL_PASSWORD_LENGTH }).map(
+                      (_, index) => (
+                        <input
+                          key={index}
+                          ref={(element) => {
+                            approvalPasswordInputRefs.current[index] = element;
+                          }}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          autoComplete={index === 0 ? "one-time-code" : "off"}
+                          maxLength={1}
+                          aria-label={`Digit password ${index + 1}`}
+                          value={approvalPasswordChars[index].trim()}
+                          disabled={approvalRequesting}
+                          onChange={(event) => {
+                            applyApprovalPasswordDigits(index, event.target.value);
+                          }}
+                          onPaste={(event) => {
+                            event.preventDefault();
+                            applyApprovalPasswordDigits(
+                              index,
+                              event.clipboardData.getData("text")
+                            );
+                          }}
+                          onKeyDown={(event) => {
+                            handleApprovalPasswordKeyDown(index, event);
+                          }}
+                          className="aspect-square w-full rounded-[16px] border border-slate-200 bg-white text-center text-xl font-semibold text-slate-900 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-100 disabled:cursor-wait disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                      )
+                    )}
+                  </div>
+                </fieldset>
+                {approvalError ? (
+                  <p className="mt-3 text-sm font-semibold text-rose-700">
+                    {approvalError}
+                  </p>
+                ) : null}
+                <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeExamAgreement}
+                    className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      approvalRequesting ||
+                      approvalPasswordDigits.length !== EXAM_APPROVAL_PASSWORD_LENGTH
+                    }
+                    onClick={() => {
+                      void handleStartWithApproval();
+                    }}
+                    className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      approvalRequesting
+                        ? "cursor-wait border border-slate-200 bg-slate-100 text-slate-400"
+                        : approvalPasswordDigits.length === EXAM_APPROVAL_PASSWORD_LENGTH
+                        ? scenario.theme.buttonClass
+                        : "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {approvalRequesting ? "Memeriksa password..." : startLabel}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  Konfirmasi integritas
+                </p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
+                  Sebelum mulai ujian
+                </h3>
+                <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                  Dengan melanjutkan, saya menyatakan akan mengerjakan ujian ini
+                  secara mandiri, jujur, tidak menggunakan bantuan yang tidak
+                  diperbolehkan, tidak membagikan soal atau jawaban, dan memahami
+                  bahwa waktu ujian akan langsung berjalan saat halaman ujian
+                  terbuka.
+                </div>
+                <p className="mt-4 text-sm leading-7 text-slate-600">
+                  Pastikan koneksi stabil dan Anda siap fokus sampai ujian selesai.
+                </p>
+                {approvalError ? (
+                  <p className="mt-3 text-sm font-semibold text-rose-700">
+                    {approvalError}
+                  </p>
+                ) : null}
+                <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeExamAgreement}
+                    className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    disabled={approvalRequesting}
+                    onClick={handleRequestExamApproval}
+                    className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      approvalRequesting
+                        ? "cursor-wait border border-slate-200 bg-slate-100 text-slate-400"
+                        : scenario.theme.buttonClass
+                    }`}
+                  >
+                    {approvalRequesting ? "Mengirim password..." : "Saya setuju"}
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         </div>
       ) : null}
@@ -1146,6 +1480,7 @@ const StageTimelineCard = ({
                     stage={stage}
                     flowState={flowState}
                     dependency={dependency}
+                    onRuntimeRefresh={onRuntimeRefresh}
                   />
                 ) : null}
               </>
@@ -1312,9 +1647,23 @@ const ExamPage = ({
 }) => {
   const { stageId } = useParams<{ stageId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const stage = scenario.stages.find((item) => item.id === stageId);
   const isRuntime = Boolean(scenario.isRuntime);
+  const examApproval = useMemo<RuntimeExamStartApprovalInput | null>(() => {
+    const state = location.state as RuntimeExamNavigationState | null;
+    const approvalId = state?.examApprovalId?.trim();
+    const approvalPassword = state?.examApprovalPassword?.trim();
+    if (!approvalId || !approvalPassword) {
+      return null;
+    }
+
+    return {
+      approvalId,
+      approvalPassword,
+    };
+  }, [location.state]);
   const answerSaveTimers = useRef<Record<number, number>>({});
   const examScrollRef = useRef<HTMLDivElement | null>(null);
   const focusWarningLastAtRef = useRef(0);
@@ -1697,7 +2046,8 @@ const ExamPage = ({
       setLoading(true);
       try {
         const response = await startRuntimeExamOnce(
-          stage.stageProgressId ?? stage.id
+          stage.stageProgressId ?? stage.id,
+          examApproval
         );
 
         if (!mounted) {
@@ -1740,6 +2090,22 @@ const ExamPage = ({
 
         const message =
           error instanceof Error ? error.message : "Gagal memulai ujian";
+        if (isExpiredExamSubmittedMessage(message)) {
+          clearLocalExamLock();
+          onRuntimeRefresh?.();
+          try {
+            window.localStorage.setItem(
+              ONBOARDING_WORKSPACE_REFRESH_EVENT,
+              String(Date.now())
+            );
+          } catch {
+            // Cross-tab refresh is best-effort.
+          }
+          showToast(message, "error");
+          navigate(scenario.basePath, { replace: true });
+          return;
+        }
+
         setErrorMessage(message);
         showToast(message, "error");
       } finally {
@@ -1755,7 +2121,16 @@ const ExamPage = ({
       mounted = false;
       clearAllAnswerSaveTimers();
     };
-  }, [clearAllAnswerSaveTimers, isRuntime, showToast, stage]);
+  }, [
+    clearAllAnswerSaveTimers,
+    examApproval,
+    isRuntime,
+    navigate,
+    onRuntimeRefresh,
+    scenario.basePath,
+    showToast,
+    stage,
+  ]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -2551,10 +2926,18 @@ export const OnboardingPortalWorkspace = ({
   portalKey,
   scenarioOverride,
   onRuntimeRefresh,
+  administratorMonitoringEndpoint,
+  administratorVisualMode = "admin",
+  administratorDashboardLabel = "Dashboard admin",
+  allowAdministratorExamReset = true,
 }: {
   portalKey: OnboardingPortalKey;
   scenarioOverride?: OnboardingScenario;
   onRuntimeRefresh?: () => void;
+  administratorMonitoringEndpoint?: string;
+  administratorVisualMode?: AdminOnboardingVisualMode;
+  administratorDashboardLabel?: string;
+  allowAdministratorExamReset?: boolean;
 }) => {
   const isAdministrator = portalKey === "ADMINISTRATOR";
 
@@ -2563,7 +2946,13 @@ export const OnboardingPortalWorkspace = ({
       <Routes>
         <Route
           index
-          element={<AdminOverviewPage navigation={adminOnboardingNavigation} />}
+          element={
+            <AdminOverviewPage
+              navigation={adminOnboardingNavigation}
+              monitoringEndpoint={administratorMonitoringEndpoint}
+              visualMode={administratorVisualMode}
+            />
+          }
         />
         <Route
           path="checklist"
@@ -2580,7 +2969,12 @@ export const OnboardingPortalWorkspace = ({
         <Route
           path="portal/:managedPortalKey"
           element={
-            <AdminPortalDetailPage navigation={adminOnboardingNavigation} />
+            <AdminPortalDetailPage
+              navigation={adminOnboardingNavigation}
+              monitoringEndpoint={administratorMonitoringEndpoint}
+              dashboardLabel={administratorDashboardLabel}
+              visualMode={administratorVisualMode}
+            />
           }
         />
         <Route
@@ -2588,6 +2982,10 @@ export const OnboardingPortalWorkspace = ({
           element={
             <AdminParticipantDetailPage
               navigation={adminOnboardingNavigation}
+              monitoringEndpoint={administratorMonitoringEndpoint}
+              dashboardLabel={administratorDashboardLabel}
+              visualMode={administratorVisualMode}
+              allowExamReset={allowAdministratorExamReset}
             />
           }
         />
