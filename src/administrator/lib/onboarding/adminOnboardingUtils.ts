@@ -12,7 +12,8 @@ export type AdminParticipantStageStatus =
   | "passed"
   | "remedial"
   | "transfer_review"
-  | "failed_window";
+  | "failed_window"
+  | "failed_final";
 
 export const formatDate = (value?: string | null) =>
   value
@@ -117,9 +118,10 @@ export const normalizeStageStatus = (
     case "TRANSFER_REVIEW":
       return "transfer_review";
     case "FAILED":
-    case "FAIL_FINAL":
     case "CANCELLED":
       return "failed_window";
+    case "FAIL_FINAL":
+      return "failed_final";
     default:
       return "not_started";
   }
@@ -134,6 +136,7 @@ export const stageStatusLabel: Record<AdminParticipantStageStatus, string> = {
   remedial: "Remedial",
   transfer_review: "Review HRD",
   failed_window: "Butuh keputusan",
+  failed_final: "Gagal final",
 };
 
 export const stageStatusClass: Record<AdminParticipantStageStatus, string> = {
@@ -145,6 +148,7 @@ export const stageStatusClass: Record<AdminParticipantStageStatus, string> = {
   remedial: "border-[#e7caa4] bg-[#f8ebd4] text-[#915d16]",
   transfer_review: "border-[#cbd8f7] bg-[#eef4ff] text-[#31438a]",
   failed_window: "border-[#ebcdc7] bg-[#f9ece8] text-[#8f4736]",
+  failed_final: "border-[#ebcdc7] bg-[#f9ece8] text-[#8f4736]",
 };
 
 export const getInitials = (name: string) =>
@@ -171,18 +175,14 @@ const getStageProgressRatio = (stage: AdminOnboardingParticipantStage) => {
   switch (normalized) {
     case "passed":
       return 1;
-    case "waiting_review":
-      return Math.max(0.88, materialRatio);
-    case "waiting_exam":
-      return Math.max(0.78, materialRatio);
-    case "remedial":
-      return Math.max(0.5, materialRatio);
-    case "transfer_review":
-      return Math.max(0.4, materialRatio);
-    case "failed_window":
-      return Math.max(0.4, materialRatio);
     case "reading":
-      return Math.max(0.12, materialRatio);
+    case "waiting_exam":
+    case "waiting_review":
+    case "remedial":
+    case "transfer_review":
+    case "failed_window":
+    case "failed_final":
+      return materialRatio;
     default:
       return 0;
   }
@@ -234,7 +234,10 @@ export const formatExamScore = (score?: number | null) => {
     return "-";
   }
 
-  return Number.isInteger(score) ? `${score}` : score.toFixed(1);
+  return new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(score);
 };
 
 const getDateTime = (value?: string | null) => {
@@ -416,6 +419,8 @@ export const getParticipantNextAction = (participant: AdminPortalParticipant) =>
       return `${currentStage.stageName} dibekukan untuk review HRD. Cek kemungkinan pindah departemen sebelum onboarding dilanjutkan.`;
     case "failed_window":
       return `${currentStage.stageName} butuh keputusan lanjutan karena belum berhasil clear.`;
+    case "failed_final":
+      return `${currentStage.stageName} sudah gagal final. Tidak ada keputusan lanjutan yang diperlukan.`;
     default:
       return `${currentStage.stageName} belum aktif penuh.`;
   }

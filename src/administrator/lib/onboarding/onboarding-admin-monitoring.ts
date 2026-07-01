@@ -54,6 +54,18 @@ export type AdminOnboardingStageTemplate = {
   materialCount: number;
 };
 
+export type AdminOnboardingExamAttempt = {
+  onboardingExamAttemptId: string;
+  examId: number | null;
+  attemptNo: number;
+  score: number | null;
+  status: string;
+  employeeExamSessionId: string | null;
+  submittedAt: string | null;
+  endedAt: string | null;
+  note: string | null;
+};
+
 export type AdminOnboardingParticipantStage = {
   onboardingStageProgressId: string | null;
   onboardingStageTemplateId: string;
@@ -74,6 +86,7 @@ export type AdminOnboardingParticipantStage = {
   examSubmittedAt: string | null;
   examReviewedAt: string | null;
   examNote: string | null;
+  examAttempts: AdminOnboardingExamAttempt[];
   totalMaterialCount: number;
   readMaterialCount: number;
   totalOpenCount: number;

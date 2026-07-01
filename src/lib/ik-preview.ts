@@ -198,15 +198,33 @@ export const buildIkPreviewHtml = (data: IkPreviewData) => {
         margin: 0 0 6px;
       }
       .content ol {
-        margin: 0 0 8px 34px;
-        padding-left: 8px;
+        margin: 0 0 8px 2.1rem;
+        padding-left: 1.25rem;
         list-style-position: outside;
         list-style-type: decimal;
       }
+      .content ol ol {
+        list-style-type: lower-alpha;
+      }
+      .content ol ol ol {
+        list-style-type: lower-roman;
+      }
+      .content ol ol ol ol {
+        list-style-type: decimal;
+      }
       .content ul {
-        margin: 0 0 8px 52px;
-        padding-left: 8px;
+        margin: 0 0 8px 2.15rem;
+        padding-left: 1.25rem;
         list-style-position: outside;
+        list-style-type: disc;
+      }
+      .content ul ul {
+        list-style-type: circle;
+      }
+      .content ul ul ul {
+        list-style-type: square;
+      }
+      .content ul ul ul ul {
         list-style-type: disc;
       }
       .content li {
@@ -214,11 +232,13 @@ export const buildIkPreviewHtml = (data: IkPreviewData) => {
       }
       .content li > ol {
         margin-top: 4px;
-        margin-left: 28px;
+        margin-left: 2.35rem;
+        padding-left: 1.2rem;
       }
       .content li > ul {
         margin-top: 4px;
-        margin-left: 36px;
+        margin-left: 2.4rem;
+        padding-left: 1.2rem;
       }
       .content li.continued {
         list-style: none;

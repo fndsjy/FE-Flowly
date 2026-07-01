@@ -35,6 +35,34 @@ type TestNotificationResponse = {
   failed?: number;
   skipped?: number;
 };
+type ManualNotificationRecipient = {
+  userId: number;
+  employeeName: string | null;
+  cardNumber: string | null;
+  badgeNumber: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  isFirstLogin: boolean;
+  latestAssignmentId: string | null;
+  latestAssignmentStatus: string | null;
+  latestStartedAt: string | null;
+  latestDueAt: string | null;
+};
+type ManualNotificationDefaults = {
+  portalKey: string;
+  portalName: string;
+  loginUrl: string;
+  hrdUrl: string;
+  supportName: string;
+  supportPhone: string;
+};
+type ManualNotificationRecipientsResponse = ManualNotificationDefaults & {
+  recipients?: ManualNotificationRecipient[];
+};
+type ManualSendNotificationResponse = {
+  queued?: number;
+  skipped?: number;
+};
 type NotificationFlowStep = {
   eventKey: string;
   step: number;
@@ -205,6 +233,14 @@ const RECIPIENT_ROLE_LABELS: Record<string, string> = {
 };
 const DEFAULT_MESSAGE =
   "Halo {recipientName},\n\nWelcome OMS. Onboarding Anda untuk portal {portalName} sudah dimulai dengan deadline {deadlineDays} hari sampai {dueDate}.\nCard number / username Anda: {cardNumber}\nPassword sementara Anda: {temporaryPassword}\n\nSilakan login melalui {loginUrl} dan segera ubah password Anda setelah berhasil masuk.\n\nJika ada kendala, hubungi {supportName} di {supportPhone}.";
+const DEFAULT_MANUAL_NOTIFICATION_DEFAULTS: ManualNotificationDefaults = {
+  portalKey: EMPLOYEE_PORTAL_KEY,
+  portalName: "Employee",
+  loginUrl: "",
+  hrdUrl: "",
+  supportName: "",
+  supportPhone: "",
+};
 
 const safeJson = async (res: Response) => {
   try {
@@ -224,6 +260,17 @@ const formatDateTime = (value?: string | null) => {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  });
+};
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
   });
 };
 
@@ -259,6 +306,14 @@ const getRecipientRoleLabel = (value?: string | null) => {
     ? RECIPIENT_ROLE_LABELS[sanitized] ?? sanitized.replaceAll("_", " ")
     : "-";
 };
+
+const renderTemplatePreview = (
+  template: string,
+  context: Record<string, string | number | null | undefined>
+) =>
+  template
+    .replace(/\{badgeNumber\}/g, String(context.cardNumber ?? ""))
+    .replace(/\{(\w+)\}/g, (_, key: string) => String(context[key] ?? ""));
 
 const getFlowStep = (eventKey?: string | null) =>
   NOTIFICATION_FLOW_STEP_MAP.get(sanitizeEventKey(eventKey ?? ""));
@@ -352,12 +407,25 @@ const AdministratorNotificationTemplatePage = () => {
   const [form, setForm] = useState<FormState>(createDefaultForm());
   const [channelManuallyChanged, setChannelManuallyChanged] = useState(false);
   const [isCustomEventKey, setIsCustomEventKey] = useState(false);
+  const [manualPortalKey, setManualPortalKey] = useState(EMPLOYEE_PORTAL_KEY);
+  const [manualTemplateId, setManualTemplateId] = useState("");
+  const [manualSearchInput, setManualSearchInput] = useState("");
+  const [manualRecipients, setManualRecipients] = useState<
+    ManualNotificationRecipient[]
+  >([]);
+  const [manualDefaults, setManualDefaults] =
+    useState<ManualNotificationDefaults>(DEFAULT_MANUAL_NOTIFICATION_DEFAULTS);
+  const [manualRecipientsLoading, setManualRecipientsLoading] = useState(false);
+  const [manualSelectedUserIds, setManualSelectedUserIds] = useState<number[]>([]);
+  const [manualMessageTemplate, setManualMessageTemplate] = useState("");
+  const [manualSending, setManualSending] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState({
     open: false,
     notificationTemplateId: "",
     label: "",
   });
   const deferredSearch = useDeferredValue(searchInput);
+  const deferredManualSearch = useDeferredValue(manualSearchInput);
   const isEditMode = mode === "edit";
 
   const portalLabelMap = useMemo(
@@ -405,6 +473,81 @@ const AdministratorNotificationTemplatePage = () => {
         label: getRecipientRoleLabel(value),
       }));
   }, [templates]);
+  const manualEligibleTemplates = useMemo(
+    () =>
+      templates
+        .filter((item) => {
+          if (!item.isActive) return false;
+          if (normalizeChannel(item.channel, "WHATSAPP") !== "WHATSAPP") {
+            return false;
+          }
+          if (sanitizeRecipientRole(item.recipientRole) !== DEFAULT_RECIPIENT_ROLE) {
+            return false;
+          }
+          if (item.appliesToAllPortals) return true;
+          return item.portalKeys.includes(manualPortalKey);
+        })
+        .sort(compareTemplatesByFlow),
+    [manualPortalKey, templates]
+  );
+  const selectedManualTemplate = useMemo(
+    () =>
+      manualEligibleTemplates.find(
+        (item) => item.notificationTemplateId === manualTemplateId
+      ) ?? null,
+    [manualEligibleTemplates, manualTemplateId]
+  );
+  const manualRecipientMap = useMemo(
+    () => new Map(manualRecipients.map((item) => [item.userId, item] as const)),
+    [manualRecipients]
+  );
+  const selectedManualRecipients = useMemo(
+    () =>
+      manualSelectedUserIds
+        .map((userId) => manualRecipientMap.get(userId))
+        .filter((item): item is ManualNotificationRecipient => Boolean(item)),
+    [manualRecipientMap, manualSelectedUserIds]
+  );
+  const manualPreviewRecipient =
+    selectedManualRecipients[0] ?? manualRecipients[0] ?? null;
+  const manualPreviewMessage = useMemo(() => {
+    const recipient = manualPreviewRecipient;
+    const employeeName =
+      recipient?.employeeName ??
+      (recipient ? `Employee ${recipient.userId}` : "Nama peserta");
+    const cardNumber =
+      recipient?.cardNumber ?? recipient?.badgeNumber ?? recipient?.userId ?? "";
+
+    return renderTemplatePreview(manualMessageTemplate, {
+      recipientName: employeeName,
+      employeeName,
+      participantName: employeeName,
+      portalName:
+        manualDefaults.portalName ||
+        portalLabelMap.get(manualPortalKey) ||
+        manualPortalKey,
+      portalKey: manualPortalKey,
+      cardNumber,
+      username: cardNumber,
+      temporaryPassword: "",
+      deadlineDays: "",
+      dueDate: recipient?.latestDueAt
+        ? formatDateOnly(recipient.latestDueAt)
+        : "Tanpa batas waktu",
+      startedDate: formatDateOnly(recipient?.latestStartedAt),
+      status: recipient?.latestAssignmentStatus ?? "",
+      loginUrl: manualDefaults.loginUrl,
+      hrdUrl: manualDefaults.hrdUrl,
+      supportName: manualDefaults.supportName,
+      supportPhone: manualDefaults.supportPhone,
+    });
+  }, [
+    manualDefaults,
+    manualMessageTemplate,
+    manualPortalKey,
+    manualPreviewRecipient,
+    portalLabelMap,
+  ]);
 
   const loadPortals = async () => {
     try {
@@ -452,10 +595,88 @@ const AdministratorNotificationTemplatePage = () => {
     }
   };
 
+  const loadManualRecipients = async () => {
+    setManualRecipientsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        portalKey: manualPortalKey,
+        limit: "100",
+      });
+      const search = deferredManualSearch.trim();
+      if (search) {
+        params.set("search", search);
+      }
+
+      const res = await apiFetch(
+        `/notification-template/manual-recipients?${params.toString()}`,
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+      const json = await safeJson(res);
+      if (!res.ok) {
+        showToast(getApiErrorMessage(json, "Gagal memuat penerima"), "error");
+        setManualRecipients([]);
+        return;
+      }
+
+      const response = (json?.response ?? {}) as ManualNotificationRecipientsResponse;
+      setManualDefaults({
+        portalKey: response.portalKey || manualPortalKey,
+        portalName:
+          response.portalName ||
+          portalLabelMap.get(manualPortalKey) ||
+          manualPortalKey,
+        loginUrl: response.loginUrl || "",
+        hrdUrl: response.hrdUrl || "",
+        supportName: response.supportName || "",
+        supportPhone: response.supportPhone || "",
+      });
+      setManualRecipients(
+        Array.isArray(response.recipients) ? response.recipients : []
+      );
+    } catch {
+      showToast("Gagal memuat penerima", "error");
+      setManualRecipients([]);
+    } finally {
+      setManualRecipientsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadPortals();
     loadTemplates();
   }, []);
+
+  useEffect(() => {
+    loadManualRecipients();
+  }, [deferredManualSearch, manualPortalKey]);
+
+  useEffect(() => {
+    setManualSelectedUserIds((prev) =>
+      prev.filter((userId) => manualRecipientMap.has(userId))
+    );
+  }, [manualRecipientMap]);
+
+  useEffect(() => {
+    if (
+      manualTemplateId &&
+      manualEligibleTemplates.some(
+        (item) => item.notificationTemplateId === manualTemplateId
+      )
+    ) {
+      return;
+    }
+
+    setManualTemplateId(
+      manualEligibleTemplates[0]?.notificationTemplateId ?? ""
+    );
+  }, [manualEligibleTemplates, manualTemplateId]);
+
+  useEffect(() => {
+    setManualMessageTemplate(selectedManualTemplate?.messageTemplate ?? "");
+  }, [selectedManualTemplate?.notificationTemplateId]);
 
   const resetForm = () => {
     setMode("add");
@@ -655,6 +876,81 @@ const AdministratorNotificationTemplatePage = () => {
     }
   };
 
+  const toggleManualRecipient = (userId: number) => {
+    setManualSelectedUserIds((prev) =>
+      prev.includes(userId)
+        ? prev.filter((item) => item !== userId)
+        : [...prev, userId].sort((left, right) => left - right)
+    );
+  };
+
+  const toggleAllManualRecipients = () => {
+    const visibleIds = manualRecipients.map((item) => item.userId);
+    const allVisibleSelected =
+      visibleIds.length > 0 &&
+      visibleIds.every((userId) => manualSelectedUserIds.includes(userId));
+
+    setManualSelectedUserIds((prev) => {
+      if (allVisibleSelected) {
+        return prev.filter((userId) => !visibleIds.includes(userId));
+      }
+
+      return Array.from(new Set([...prev, ...visibleIds])).sort(
+        (left, right) => left - right
+      );
+    });
+  };
+
+  const handleManualSend = async () => {
+    if (!selectedManualTemplate) {
+      showToast("Pilih template WhatsApp peserta terlebih dahulu", "error");
+      return;
+    }
+    if (manualSelectedUserIds.length === 0) {
+      showToast("Pilih minimal satu karyawan", "error");
+      return;
+    }
+    if (!manualMessageTemplate.trim()) {
+      showToast("Isi pesan wajib diisi", "error");
+      return;
+    }
+
+    setManualSending(true);
+    try {
+      const res = await apiFetch("/notification-template/manual-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          portalKey: manualPortalKey,
+          notificationTemplateId: selectedManualTemplate.notificationTemplateId,
+          userIds: manualSelectedUserIds,
+          messageTemplate: manualMessageTemplate,
+        }),
+      });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        showToast(getApiErrorMessage(json, "Gagal mengirim pesan manual"), "error");
+        return;
+      }
+
+      const response = (json?.response ?? {}) as ManualSendNotificationResponse;
+      const queued = Number(response.queued ?? 0);
+      const skipped = Number(response.skipped ?? 0);
+      showToast(
+        `Pesan manual: ${queued} masuk antrean, ${skipped} dilewati`,
+        queued > 0 ? "success" : "error"
+      );
+      if (queued > 0) {
+        setManualSelectedUserIds([]);
+      }
+    } catch {
+      showToast("Gagal mengirim pesan manual", "error");
+    } finally {
+      setManualSending(false);
+    }
+  };
+
   const filteredTemplates = useMemo(() => {
     const term = deferredSearch.trim().toLowerCase();
     return templates
@@ -791,6 +1087,220 @@ const AdministratorNotificationTemplatePage = () => {
               Template Baru
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className={`${pagePanelClass} p-5 sm:p-6`}>
+        <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.75fr)]">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Kirim manual
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                  Kirim ulang pesan ke peserta
+                </h2>
+              </div>
+              <span className="rounded-full border border-[#dbe3ec] bg-[#f8fafc] px-3 py-1.5 text-xs font-semibold text-slate-600">
+                {manualSelectedUserIds.length} dipilih
+              </span>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Portal
+                </label>
+                <select
+                  value={manualPortalKey}
+                  onChange={(event) => {
+                    setManualPortalKey(event.target.value);
+                    setManualSelectedUserIds([]);
+                  }}
+                  className="mt-2 w-full rounded-[18px] border border-[#dde5ee] bg-[#f8fafc] px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white"
+                >
+                  {portalOptions.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Template WhatsApp peserta
+                </label>
+                <select
+                  value={manualTemplateId}
+                  onChange={(event) => setManualTemplateId(event.target.value)}
+                  className="mt-2 w-full rounded-[18px] border border-[#dde5ee] bg-[#f8fafc] px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white"
+                >
+                  {manualEligibleTemplates.length === 0 ? (
+                    <option value="">Belum ada template WhatsApp peserta</option>
+                  ) : (
+                    manualEligibleTemplates.map((item) => (
+                      <option
+                        key={item.notificationTemplateId}
+                        value={item.notificationTemplateId}
+                      >
+                        {getEventKeyLabel(item.eventKey)} - {item.templateName}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[16rem] flex-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    Cari karyawan
+                  </label>
+                  <input
+                    type="text"
+                    value={manualSearchInput}
+                    onChange={(event) => setManualSearchInput(event.target.value)}
+                    placeholder="Nama, card number, badge, atau user ID"
+                    className="mt-2 w-full rounded-[18px] border border-[#dde5ee] bg-[#f8fafc] px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleAllManualRecipients}
+                  disabled={manualRecipients.length === 0}
+                  className={`rounded-full border px-4 py-2.5 text-sm font-semibold transition ${
+                    manualRecipients.length === 0
+                      ? "cursor-not-allowed border-slate-200 text-slate-300"
+                      : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                  }`}
+                >
+                  Pilih semua hasil
+                </button>
+              </div>
+
+              <div className="mt-3 max-h-[360px] space-y-2 overflow-auto rounded-[22px] border border-[#e8edf4] bg-[#fbfcfe] p-3">
+                {manualRecipientsLoading ? (
+                  <div className="rounded-[18px] border border-dashed border-[#d7dfeb] bg-white px-4 py-6 text-sm text-slate-500">
+                    Memuat penerima...
+                  </div>
+                ) : manualRecipients.length === 0 ? (
+                  <div className="rounded-[18px] border border-dashed border-[#d7dfeb] bg-white px-4 py-6 text-sm text-slate-500">
+                    Tidak ada karyawan yang cocok.
+                  </div>
+                ) : (
+                  manualRecipients.map((recipient) => {
+                    const checked = manualSelectedUserIds.includes(recipient.userId);
+                    const displayName =
+                      recipient.employeeName ?? `Employee ${recipient.userId}`;
+                    const identifier =
+                      recipient.cardNumber ??
+                      recipient.badgeNumber ??
+                      String(recipient.userId);
+
+                    return (
+                      <label
+                        key={recipient.userId}
+                        className={`flex cursor-pointer items-start gap-3 rounded-[18px] border px-4 py-3 transition ${
+                          checked
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-[#dde5ee] bg-white text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleManualRecipient(recipient.userId)}
+                          className="mt-1 h-4 w-4 shrink-0"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">
+                            {displayName}
+                          </span>
+                          <span
+                            className={`mt-1 block text-xs leading-5 ${
+                              checked ? "text-slate-200" : "text-slate-500"
+                            }`}
+                          >
+                            {identifier} | {recipient.phoneNumber ?? "No WA kosong"}
+                            {recipient.latestAssignmentStatus
+                              ? ` | ${recipient.latestAssignmentStatus}`
+                              : ""}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-[24px] border border-[#e8edf4] bg-[#fbfcfe] p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Isi pesan
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-slate-900">
+                  Preview dan edit sebelum kirim
+                </h3>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                WhatsApp
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    Template pesan
+                  </label>
+                  <span className="text-[11px] text-slate-400">
+                    {manualMessageTemplate.length}/1000
+                  </span>
+                </div>
+                <textarea
+                  value={manualMessageTemplate}
+                  maxLength={1000}
+                  onChange={(event) =>
+                    setManualMessageTemplate(event.target.value)
+                  }
+                  className="mt-2 h-44 w-full rounded-[18px] border border-[#dde5ee] bg-white px-4 py-3 text-sm leading-7 text-slate-700 outline-none transition focus:border-slate-300"
+                />
+              </div>
+
+              <div className="rounded-[20px] border border-[#e8edf4] bg-white p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Preview
+                </p>
+                <p className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                  {manualPreviewMessage || "Pilih template untuk melihat preview."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleManualSend}
+                disabled={
+                  manualSending ||
+                  !selectedManualTemplate ||
+                  manualSelectedUserIds.length === 0
+                }
+                className={`w-full rounded-full bg-[#0f172a] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#111827] ${
+                  manualSending ||
+                  !selectedManualTemplate ||
+                  manualSelectedUserIds.length === 0
+                    ? "cursor-not-allowed opacity-60"
+                    : ""
+                }`}
+              >
+                {manualSending ? "Mengirim..." : "Kirim manual"}
+              </button>
+            </div>
+          </aside>
         </div>
       </section>
 

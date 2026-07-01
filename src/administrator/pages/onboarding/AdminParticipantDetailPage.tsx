@@ -184,10 +184,28 @@ const buildMaterialDisplayItems = (materials: AdminOnboardingMaterial[]) =>
         openCount: file.openCount,
         files: [file],
       }));
-    })
-    .sort((left, right) => left.materialTitle.localeCompare(right.materialTitle));
+    });
 
 type MaterialDisplayItem = ReturnType<typeof buildMaterialDisplayItems>[number];
+
+const RESETTABLE_EXAM_ATTEMPT_STATUSES = new Set([
+  "IN_PROGRESS",
+  "WAITING_ADMIN",
+]);
+
+const getLatestExamAttempt = (stage: AdminOnboardingParticipantStage) =>
+  stage.examAttempts?.[0] ?? null;
+
+const canResetExamAttempt = (stage: AdminOnboardingParticipantStage) => {
+  const latestAttempt = getLatestExamAttempt(stage);
+  const latestStatus = latestAttempt?.status.trim().toUpperCase() ?? "";
+
+  return Boolean(
+    stage.onboardingStageProgressId &&
+      latestAttempt &&
+      RESETTABLE_EXAM_ATTEMPT_STATUSES.has(latestStatus)
+  );
+};
 
 const MaterialCard = ({
   material,
@@ -236,12 +254,14 @@ export default function AdminParticipantDetailPage({
   navigation,
   monitoringEndpoint,
   enableDecisionActions = false,
+  allowExamReset = true,
   dashboardLabel = "Dashboard admin",
   visualMode = "admin",
 }: {
   navigation: AdminOnboardingNavigation;
   monitoringEndpoint?: string;
   enableDecisionActions?: boolean;
+  allowExamReset?: boolean;
   dashboardLabel?: string;
   visualMode?: AdminOnboardingVisualMode;
 }) {
@@ -254,6 +274,9 @@ export default function AdminParticipantDetailPage({
   const { showToast } = useToast();
   const [decisionNote, setDecisionNote] = useState("");
   const [submittingDecision, setSubmittingDecision] = useState<string | null>(null);
+  const [resetExamTarget, setResetExamTarget] =
+    useState<AdminOnboardingParticipantStage | null>(null);
+  const [submittingExamReset, setSubmittingExamReset] = useState(false);
   const theme = getAdminOnboardingTheme(visualMode);
 
   if (!isManagedPortalKey(managedPortalKey) || !participantId) {
@@ -387,6 +410,53 @@ export default function AdminParticipantDetailPage({
       setSubmittingDecision(null);
     }
   };
+
+  const submitExamReset = async () => {
+    if (
+      submittingExamReset ||
+      !resetExamTarget?.onboardingStageProgressId ||
+      !canResetExamAttempt(resetExamTarget)
+    ) {
+      return;
+    }
+
+    setSubmittingExamReset(true);
+
+    try {
+      const res = await apiFetch("/onboarding/exam/reset-attempt", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          onboardingStageProgressId: resetExamTarget.onboardingStageProgressId,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(
+          getApiErrorMessage(json, "Gagal mengulang ujian onboarding")
+        );
+      }
+
+      showToast("Riwayat ujian tahap ini berhasil dihapus.", "success");
+      setResetExamTarget(null);
+      refresh();
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Gagal mengulang ujian onboarding",
+        "error"
+      );
+    } finally {
+      setSubmittingExamReset(false);
+    }
+  };
+
+  const resetExamLatestAttempt = resetExamTarget
+    ? getLatestExamAttempt(resetExamTarget)
+    : null;
 
   return (
     <div className="space-y-8">
@@ -640,6 +710,9 @@ export default function AdminParticipantDetailPage({
           const normalized = normalizeStageStatus(stage.status);
           const completion = stageCompletion(stage);
           const materialDisplayItems = buildMaterialDisplayItems(stage.materials);
+          const latestAttempt = getLatestExamAttempt(stage);
+          const canShowResetExam =
+            allowExamReset && visualMode === "admin" && canResetExamAttempt(stage);
 
           return (
             <article
@@ -660,20 +733,89 @@ export default function AdminParticipantDetailPage({
                     </p>
                   )}
                 </div>
-                <span
-                  className={`inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[normalized]}`}
-                >
-                  {stageStatusLabel[normalized]}
-                </span>
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                  <span
+                    className={`inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[normalized]}`}
+                  >
+                    {stageStatusLabel[normalized]}
+                  </span>
+                  {canShowResetExam ? (
+                    <button
+                      type="button"
+                      onClick={() => setResetExamTarget(stage)}
+                      className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                    >
+                      Ulang ujian
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                 <InfoRow label="Mulai tahap" value={formatDateTime(stage.startedAt)} visualMode={visualMode} />
                 <InfoRow label="Baca pertama" value={formatDateTime(stage.firstReadAt)} visualMode={visualMode} />
                 <InfoRow label="Baca terakhir" value={formatDateTime(stage.lastReadAt)} visualMode={visualMode} />
                 <InfoRow label="Nilai ujian" value={formatExamScore(stage.examScore)} visualMode={visualMode} />
                 <InfoRow label="Open count" value={`${stage.totalOpenCount}`} visualMode={visualMode} />
+                <InfoRow
+                  label="Attempt ujian"
+                  value={latestAttempt ? `#${latestAttempt.attemptNo}` : "-"}
+                  visualMode={visualMode}
+                />
               </div>
+
+              {stage.examAttempts.length > 0 ? (
+                <div className={`mt-5 rounded-[24px] border px-5 py-5 ${theme.mutedPanelClass}`}>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${theme.labelClass}`}>
+                      Riwayat ujian
+                    </p>
+                    <span className={`text-sm font-semibold ${theme.accentTextClass}`}>
+                      {stage.examAttempts.length} attempt
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {stage.examAttempts.map((attempt) => {
+                      const attemptStatus = normalizeStageStatus(attempt.status);
+
+                      return (
+                        <div
+                          key={attempt.onboardingExamAttemptId}
+                          className={`rounded-[18px] border px-4 py-4 ${theme.panelClass}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${theme.labelClass}`}>
+                                Attempt #{attempt.attemptNo}
+                              </p>
+                              <p className={`mt-2 text-2xl font-semibold ${theme.accentTextClass}`}>
+                                {formatExamScore(attempt.score)}
+                              </p>
+                            </div>
+                            <span className={`inline-flex w-fit rounded-full border px-3 py-1 text-[11px] font-semibold ${stageStatusClass[attemptStatus]}`}>
+                              {stageStatusLabel[attemptStatus]}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-sm">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className={theme.subtleTextClass}>Submit</span>
+                              <span className={`font-semibold ${theme.accentTextClass}`}>
+                                {formatDateTime(attempt.submittedAt)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className={theme.subtleTextClass}>Review</span>
+                              <span className={`font-semibold ${theme.accentTextClass}`}>
+                                {formatDateTime(attempt.endedAt)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               <div className={`mt-5 rounded-[24px] border px-5 py-5 ${theme.mutedPanelClass}`}>
                 <div className="flex items-center justify-between gap-3">
@@ -715,6 +857,50 @@ export default function AdminParticipantDetailPage({
           );
         })}
       </section>
+
+      {resetExamTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1b2238]/45 px-4 py-6">
+          <div className={`w-full max-w-xl rounded-[28px] border p-6 shadow-2xl ${theme.panelClass}`}>
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${theme.labelClass}`}>
+              Konfirmasi ulang ujian
+            </p>
+            <h3 className={`mt-3 text-[28px] font-semibold leading-tight tracking-[-0.05em] ${theme.accentTextClass}`}>
+              Hapus riwayat ujian tahap ini?
+            </h3>
+            <p className={`mt-3 text-sm leading-7 ${theme.bodyTextClass}`}>
+              {participant.participantName} akan kembali ke posisi sebelum attempt{" "}
+              {resetExamLatestAttempt
+                ? `#${resetExamLatestAttempt.attemptNo}`
+                : "terbaru"}{" "}
+              pada tahap {resetExamTarget.stageOrder} - {resetExamTarget.stageName}.
+              Sesi ujian dan jawaban untuk attempt ini akan dihapus. Data tahap lain
+              tidak ikut dihapus.
+            </p>
+            <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">
+              Attempt yang sudah dikoreksi atau sudah direlease tidak bisa dihapus.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={submittingExamReset}
+                onClick={() => setResetExamTarget(null)}
+                className={`rounded-full border px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${theme.infoClass} ${theme.accentTextClass}`}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={submittingExamReset || !canResetExamAttempt(resetExamTarget)}
+                onClick={submitExamReset}
+                className="rounded-full border border-rose-200 bg-rose-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submittingExamReset ? "Menghapus..." : "Ya, ulang ujian"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

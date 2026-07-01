@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/organisms/Sidebar";
 import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
@@ -34,6 +34,15 @@ type MasterIkItem = {
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
+  createdByName?: string | null;
+};
+
+type MasterIkListResponse = {
+  data: MasterIkItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  activeTotal: number;
 };
 
 type IkFormData = {
@@ -104,7 +113,12 @@ const MasterIkPage = () => {
   const [iks, setIks] = useState<MasterIkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [activeTotal, setActiveTotal] = useState(0);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [sopOptions, setSopOptions] = useState<ProcedureSopOption[]>([]);
   const [sopOptionsLoading, setSopOptionsLoading] = useState(false);
@@ -153,10 +167,20 @@ const MasterIkPage = () => {
     };
   }, []);
 
-  const fetchMasterIk = async () => {
+  const fetchMasterIk = useCallback(async (targetPage = page) => {
     setLoading(true);
     try {
-      const res = await apiFetch("/master-ik", { credentials: "include" });
+      const params = new URLSearchParams({
+        page: String(targetPage),
+        pageSize: String(pageSize),
+        status: statusFilter,
+      });
+      const trimmedSearch = deferredSearch.trim();
+      if (trimmedSearch) {
+        params.set("search", trimmedSearch);
+      }
+
+      const res = await apiFetch(`/master-ik?${params.toString()}`, { credentials: "include" });
       const json = await res.json();
       if (!res.ok) {
         showToast(
@@ -164,18 +188,31 @@ const MasterIkPage = () => {
           "error"
         );
         setIks([]);
+        setTotal(0);
+        setActiveTotal(0);
         return;
       }
-      const list = Array.isArray(json?.response) ? json.response : [];
+      const response: MasterIkListResponse = json?.response ?? {
+        data: [],
+        page: targetPage,
+        pageSize,
+        total: 0,
+        activeTotal: 0,
+      };
+      const list = Array.isArray(response.data) ? response.data : [];
       setIks(list);
+      setTotal(response.total ?? 0);
+      setActiveTotal(response.activeTotal ?? 0);
     } catch (err) {
       console.error("Error fetching master IK:", err);
       showToast("Gagal memuat Master IK", "error");
       setIks([]);
+      setTotal(0);
+      setActiveTotal(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [deferredSearch, page, pageSize, showToast, statusFilter]);
 
   const fetchEmployees = async () => {
     try {
@@ -238,36 +275,24 @@ const MasterIkPage = () => {
 
   useEffect(() => {
     fetchMasterIk();
+  }, [fetchMasterIk]);
+
+  useEffect(() => {
     fetchEmployees();
     fetchSopOptions();
   }, []);
 
   const activeCount = useMemo(() => {
-    return iks.filter((item) => item.isActive && !item.isDeleted).length;
-  }, [iks]);
+    return activeTotal;
+  }, [activeTotal]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const baseList = iks.filter((item) => {
-      if (item.isDeleted) return false;
-      if (!canCrud && !item.isActive) return false;
-      return true;
-    });
-    const statusFiltered =
-      statusFilter === "active"
-        ? baseList.filter((item) => item.isActive)
-        : statusFilter === "inactive"
-          ? baseList.filter((item) => !item.isActive)
-          : baseList;
-    if (!term) return statusFiltered;
-    return statusFiltered.filter((item) => {
-      return (
-        item.ikName.toLowerCase().includes(term) ||
-        item.ikNumber.toLowerCase().includes(term) ||
-        getIkContentPlainText(item.ikContent).toLowerCase().includes(term)
-      );
-    });
-  }, [iks, search, canCrud, statusFilter]);
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(total / pageSize)),
+    [pageSize, total]
+  );
+
+  const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const pageEnd = Math.min(total, page * pageSize);
 
   const filteredSopOptions = useMemo(() => {
     const term = sopSearch.trim().toLowerCase();
@@ -397,7 +422,8 @@ const MasterIkPage = () => {
         }
         showToast("Master IK berhasil ditambahkan", "success");
         setShowForm(false);
-        await fetchMasterIk();
+        setPage(1);
+        await fetchMasterIk(1);
         return;
       }
 
@@ -460,7 +486,9 @@ const MasterIkPage = () => {
       }
       showToast("Master IK berhasil dihapus", "success");
       setDeleteConfirm({ open: false, ikId: "", ikName: "" });
-      await fetchMasterIk();
+      const nextPage = iks.length <= 1 && page > 1 ? page - 1 : page;
+      setPage(nextPage);
+      await fetchMasterIk(nextPage);
     } catch (err) {
       console.error("Error deleting IK:", err);
       showToast("Terjadi kesalahan saat menghapus IK", "error");
@@ -672,15 +700,33 @@ const MasterIkPage = () => {
         margin: 0 0 6px;
       }
       .content ol {
-        margin: 0 0 8px 34px;
-        padding-left: 8px;
+        margin: 0 0 8px 40px;
+        padding-left: 10px;
         list-style-position: outside;
         list-style-type: decimal;
       }
+      .content ol ol {
+        list-style-type: lower-alpha;
+      }
+      .content ol ol ol {
+        list-style-type: lower-roman;
+      }
+      .content ol ol ol ol {
+        list-style-type: decimal;
+      }
       .content ul {
-        margin: 0 0 8px 52px;
-        padding-left: 8px;
+        margin: 0 0 8px 44px;
+        padding-left: 10px;
         list-style-position: outside;
+        list-style-type: disc;
+      }
+      .content ul ul {
+        list-style-type: circle;
+      }
+      .content ul ul ul {
+        list-style-type: square;
+      }
+      .content ul ul ul ul {
         list-style-type: disc;
       }
       .content li {
@@ -688,11 +734,13 @@ const MasterIkPage = () => {
       }
       .content li > ol {
         margin-top: 4px;
-        margin-left: 28px;
+        margin-left: 44px;
+        padding-left: 10px;
       }
       .content li > ul {
         margin-top: 4px;
-        margin-left: 36px;
+        margin-left: 46px;
+        padding-left: 10px;
       }
       .content li.continued {
         list-style: none;
@@ -1057,7 +1105,7 @@ const MasterIkPage = () => {
             </div>
             <div className="bg-white/90 rounded-2xl px-4 py-3 shadow-sm border border-slate-200/70 min-w-[120px]">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Total IK</p>
-              <p className="text-lg font-semibold text-slate-900">{iks.length}</p>
+              <p className="text-lg font-semibold text-slate-900">{total}</p>
             </div>
             {canCrud && (
               <button
@@ -1080,9 +1128,12 @@ const MasterIkPage = () => {
               </label>
               <input
                 type="text"
-                placeholder="Cari IK berdasarkan nama, nomor, atau isi..."
+                placeholder="Cari IK berdasarkan nama atau nomor..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-4 py-2.5 rounded-2xl bg-white/90 border border-slate-200
                 focus:border-blue-400 focus:ring-blue-400 focus:ring-1 outline-none transition"
               />
@@ -1095,7 +1146,10 @@ const MasterIkPage = () => {
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setStatusFilter("all")}
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setPage(1);
+                  }}
                   className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
                     statusFilter === "all"
                       ? "bg-slate-900 text-white"
@@ -1106,7 +1160,10 @@ const MasterIkPage = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatusFilter("active")}
+                  onClick={() => {
+                    setStatusFilter("active");
+                    setPage(1);
+                  }}
                   className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
                     statusFilter === "active"
                       ? "bg-emerald-500 text-white"
@@ -1117,7 +1174,10 @@ const MasterIkPage = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatusFilter("inactive")}
+                  onClick={() => {
+                    setStatusFilter("inactive");
+                    setPage(1);
+                  }}
                   className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
                     statusFilter === "inactive"
                       ? "bg-slate-600 text-white"
@@ -1130,7 +1190,26 @@ const MasterIkPage = () => {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-            <span>Menampilkan {filtered.length} IK</span>
+            <span>
+              Menampilkan {pageStart}-{pageEnd} dari {total} IK, urut update terbaru.
+            </span>
+            <label className="flex items-center gap-2">
+              <span>Per halaman</span>
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setPage(1);
+                }}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 outline-none"
+              >
+                {[10, 20, 30, 50].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
             {!canCrud && (
               <span className="rounded-full bg-slate-100 text-slate-500 px-3 py-1">
                 Mode baca saja
@@ -1141,7 +1220,7 @@ const MasterIkPage = () => {
 
         {loading ? (
           <p className="text-slate-500 animate-pulse">Memuat data IK...</p>
-        ) : filtered.length === 0 ? (
+        ) : iks.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 px-6 py-10 text-center text-slate-500">
             <p className="text-sm">Belum ada Master IK.</p>
             {canCrud && (
@@ -1156,12 +1235,13 @@ const MasterIkPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {filtered.map((item) => {
+            {iks.map((item) => {
               const statusLabel = item.isActive ? "Aktif" : "Nonaktif";
               const statusClass = item.isActive
                 ? "bg-emerald-100 text-emerald-700"
                 : "bg-slate-200 text-slate-600";
               const ikContentSummary = getIkContentPlainText(item.ikContent);
+              const createdByLabel = item.createdByName?.trim() || "-";
               return (
                 <div
                   key={item.ikId}
@@ -1194,10 +1274,29 @@ const MasterIkPage = () => {
                       </div>
                       <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 px-3 py-3">
                         <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                          Status data
+                          Update terakhir
                         </p>
                         <p className="text-sm font-semibold text-slate-700">
-                          {item.isActive ? "Aktif" : "Nonaktif"}
+                          {formatDate(item.updatedAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-600">
+                      <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                          Ditambahkan oleh
+                        </p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {createdByLabel}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                          Dibuat tanggal
+                        </p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {formatDate(item.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -1246,6 +1345,41 @@ const MasterIkPage = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {!loading && total > 0 && (
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Halaman <span className="font-semibold text-slate-900">{page}</span> dari{" "}
+              <span className="font-semibold text-slate-900">{totalPages}</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  page <= 1
+                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                Sebelumnya
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  page >= totalPages
+                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                Berikutnya
+              </button>
+            </div>
           </div>
         )}
       </div>

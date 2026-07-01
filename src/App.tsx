@@ -60,7 +60,7 @@ const App = () => {
           <Route path="/prosedur/sop/:sbuSubId" element={<ProtectedRoute menuKey="PROSEDUR"><ProcedureSopPage /></ProtectedRoute>} />
           <Route path="/prosedur/master-ik" element={<ProtectedRoute menuKey="PROSEDUR"><MasterIkPage /></ProtectedRoute>} />
           <Route path="/a3" element={<ProtectedRoute menuKey="A3"><A3Page /></ProtectedRoute>} />
-          <Route path="/absensi" element={<ProtectedRoute menuKey="ABSENSI"><AbsensiPage /></ProtectedRoute>} />
+          <Route path="/absensi" element={<AbsensiPage />} />
           <Route path="/onboarding/*" element={<ProtectedRoute menuKey="ONBOARDING"><EmployeeOnboardingPage /></ProtectedRoute>} />
           <Route path="/hrd" element={<ProtectedRoute menuKey="HRD"><HRDHomePage /></ProtectedRoute>} />
           <Route path="/karyawan" element={<ProtectedRoute menuKey="HRD"><HRDPage /></ProtectedRoute>} />
