@@ -287,6 +287,7 @@ const GENDER_OPTIONS = [
 const EMPLOYEE_TYPE_OPTIONS = [
   { value: "Karyawan", label: "Karyawan" },
   { value: "Staff", label: "Staff" },
+  { value: "PKWT", label: "PKWT" },
 ] as const;
 
 const LOCATION_OPTIONS = [
@@ -338,6 +339,10 @@ const normalizeEmployeeTypeValue = (value?: string | null) => {
 
   if (["staff", "staf"].includes(normalized)) {
     return "Staff";
+  }
+
+  if (["pkwt"].includes(normalized)) {
+    return "PKWT";
   }
 
   return trimmed;
