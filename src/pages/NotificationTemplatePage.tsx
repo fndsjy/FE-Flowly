@@ -779,7 +779,6 @@ const NotificationTemplatePage = () => {
                     <textarea
                       ref={messageTemplateRef}
                       value={notificationTemplateForm.messageTemplate}
-                      maxLength={1000}
                       onChange={(event) =>
                         setNotificationTemplateForm((prev) => ({
                           ...prev,
@@ -788,11 +787,6 @@ const NotificationTemplatePage = () => {
                       }
                       className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm h-28"
                     />
-                  <div className="flex items-center justify-between text-[11px] text-slate-400">
-                    <span>
-                      {notificationTemplateForm.messageTemplate.length}/1000
-                    </span>
-                  </div>
                 </div>
 
                 <label className="flex items-center gap-2 text-xs text-slate-500">

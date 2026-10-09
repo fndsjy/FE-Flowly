@@ -160,9 +160,21 @@ export const getInitials = (name: string) =>
     .join("");
 
 export const isParticipantCompleted = (participant: AdminPortalParticipant) =>
-  participant.stages.every(
-    (stage) => normalizeStageStatus(stage.status) === "passed"
-  );
+  [
+    "COMPLETED",
+    "PASSED",
+    "PASSED_TO_LMS",
+    "PASSED_OVERRIDE",
+    "PASSED_PREVIOUSLY",
+  ].includes(normalizeUpper(participant.status)) ||
+  (participant.stages.length > 0 &&
+    participant.stages.every(
+      (stage) => normalizeStageStatus(stage.status) === "passed"
+    ));
+
+export const isParticipantPassedPreviously = (
+  participant: AdminPortalParticipant
+) => normalizeUpper(participant.status) === "PASSED_PREVIOUSLY";
 
 const getStageProgressRatio = (stage: AdminOnboardingParticipantStage) => {
   const normalized = normalizeStageStatus(stage.status);
@@ -189,6 +201,10 @@ const getStageProgressRatio = (stage: AdminOnboardingParticipantStage) => {
 };
 
 export const getParticipantProgress = (participant: AdminPortalParticipant) => {
+  if (isParticipantCompleted(participant)) {
+    return 100;
+  }
+
   if (participant.stages.length === 0) {
     return 0;
   }
@@ -227,7 +243,10 @@ export const getCurrentStageIndex = (participant: AdminPortalParticipant) => {
 
 export const getParticipantMaterialProgress = (
   participant: AdminPortalParticipant
-) => `${participant.readMaterialCount}/${Math.max(participant.totalMaterialCount, 1)}`;
+) =>
+  isParticipantPassedPreviously(participant)
+    ? "-"
+    : `${participant.readMaterialCount}/${Math.max(participant.totalMaterialCount, 1)}`;
 
 export const formatExamScore = (score?: number | null) => {
   if (typeof score !== "number" || !Number.isFinite(score)) {
@@ -293,6 +312,10 @@ export const getParticipantCompletionDuration = (
     return "Belum selesai";
   }
 
+  if (normalizeUpper(participant.status) === "PASSED_PREVIOUSLY") {
+    return "Sudah lulus sebelumnya";
+  }
+
   return formatOnboardingCompletionDuration(
     participant.startedAt,
     getParticipantCompletedAt(participant)
@@ -356,6 +379,7 @@ export const getParticipantLastActivityAt = (
       stage.failedAt,
       stage.startedAt,
     ]),
+    participant.completedAt,
     participant.startedAt,
   ].filter(Boolean) as string[];
 
@@ -397,6 +421,10 @@ export const getStageLastActivityAt = (
 };
 
 export const getParticipantNextAction = (participant: AdminPortalParticipant) => {
+  if (isParticipantPassedPreviously(participant)) {
+    return "Peserta dicatat sudah lulus sebelumnya. Tidak ada tahap onboarding atau ujian yang perlu dijalankan.";
+  }
+
   if (isParticipantCompleted(participant)) {
     return "Onboarding portal ini sudah clear. Admin tinggal pantau histori baca dan arsip tahap.";
   }
@@ -440,6 +468,7 @@ export const getPortalMetrics = (portal: AdminOnboardingPortal) => {
 
   const pendingByStage = portal.stages.map((stage) =>
     portal.participants.filter((participant) => {
+      if (isParticipantCompleted(participant)) return false;
       const snapshot = participant.stages.find(
         (item) => item.stageOrder === stage.stageOrder
       );
@@ -448,6 +477,7 @@ export const getPortalMetrics = (portal: AdminOnboardingPortal) => {
   );
 
   const needsAttentionCount = portal.participants.filter((participant) => {
+    if (isParticipantCompleted(participant)) return false;
     const currentStage = getCurrentStage(participant);
     const currentStatus = normalizeStageStatus(currentStage?.status);
     const overdue =

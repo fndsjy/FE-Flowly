@@ -1,4 +1,6 @@
-import { Navigate, useParams } from "react-router-dom";
+import { useRef } from "react";
+import AdminParticipantDirectory from "../../components/onboarding/AdminParticipantDirectory";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ParticipantCard,
   getPortalTone,
@@ -7,8 +9,8 @@ import AdminOnboardingHeader from "../../components/onboarding/AdminOnboardingHe
 import {
   formatDateTime,
   getAdminOnboardingTheme,
-  getParticipantProgress,
   getPortalMetrics,
+  getParticipantProgress,
   type AdminOnboardingVisualMode,
 } from "../../lib/onboarding/adminOnboardingUtils";
 import type { AdminOnboardingNavigation } from "../../lib/onboarding/onboarding-admin-navigation";
@@ -93,6 +95,8 @@ const AdminPortalDetailPage = ({
   const { portals, loading, error } =
     useAdministratorOnboardingMonitoring(monitoringEndpoint);
   const theme = getAdminOnboardingTheme(visualMode);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const directoryRef = useRef<HTMLElement>(null);
 
   if (!isManagedPortalKey(managedPortalKey)) {
     return <Navigate to={navigation.basePath} replace />;
@@ -121,16 +125,7 @@ const AdminPortalDetailPage = ({
 
   const metrics = getPortalMetrics(portal);
   const tone = getPortalTone(portal.portalKey);
-  const sortedParticipants = [...portal.participants].sort((left, right) => {
-    const progressDiff =
-      getParticipantProgress(left) - getParticipantProgress(right);
-    if (progressDiff !== 0) {
-      return progressDiff;
-    }
-
-    return left.participantName.localeCompare(right.participantName);
-  });
-
+  const sortedParticipants = visualMode === "employee" ? [...portal.participants].sort((a, b) => getParticipantProgress(a) - getParticipantProgress(b) || a.participantName.localeCompare(b.participantName)) : [];
   const busiestStageIndex = metrics.pendingByStage.reduce(
     (bestIndex, count, index, values) => (count > values[bestIndex] ? index : bestIndex),
     0
@@ -256,13 +251,19 @@ const AdminPortalDetailPage = ({
                     </div>
                   </div>
                 </div>
+                {visualMode === "admin" ? <button type="button" className={`mt-4 w-full rounded-full px-4 py-2 text-sm font-semibold ${theme.buttonClass}`} aria-label={`Lihat peserta yang saat ini berada di tahap ${stage.stageOrder}`} onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("stage", stage.onboardingStageTemplateId); next.set("outcome", "current"); next.delete("page");
+                  setSearchParams(next, { preventScrollReset: true });
+                  window.requestAnimationFrame(() => directoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }}>Lihat peserta tahap ini</button> : null}
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section ref={directoryRef} className="scroll-mt-6 space-y-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <p className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${theme.labelClass}`}>
@@ -288,17 +289,9 @@ const AdminPortalDetailPage = ({
           </div>
         ) : null}
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          {sortedParticipants.map((participant) => (
-            <ParticipantCard
-              key={`${portal.portalKey}-${participant.participantId}`}
-              adminNavigation={navigation}
-              portal={portal}
-              participant={participant}
-              visualMode={visualMode}
-            />
-          ))}
-        </div>
+        {visualMode === "admin" ? <AdminParticipantDirectory portal={portal} navigation={navigation} visualMode={visualMode} /> : (
+          <div className="grid gap-4 xl:grid-cols-2">{sortedParticipants.map(participant => <ParticipantCard key={`${portal.portalKey}-${participant.participantId}`} adminNavigation={navigation} portal={portal} participant={participant} visualMode={visualMode} />)}</div>
+        )}
       </section>
     </div>
   );

@@ -647,15 +647,22 @@ const getOnboardingStatusMeta = (
     normalizedStatus === "COMPLETED" ||
     normalizedStatus === "PASSED" ||
     normalizedStatus === "PASSED_TO_LMS" ||
-    normalizedStatus === "PASSED_OVERRIDE"
+    normalizedStatus === "PASSED_OVERRIDE" ||
+    normalizedStatus === "PASSED_PREVIOUSLY"
   ) {
     return {
-      label: "Onboarding selesai",
+      label:
+        normalizedStatus === "PASSED_PREVIOUSLY"
+          ? "Sudah lulus sebelumnya"
+          : "Onboarding selesai",
       className: "bg-emerald-100 text-emerald-700",
-      helper: formatOnboardingCompletionDuration(
-        summary.startedAt,
-        summary.completedAt
-      ),
+      helper:
+        normalizedStatus === "PASSED_PREVIOUSLY"
+          ? `Diverifikasi ${formatCompactDate(summary.completedAt)}`
+          : formatOnboardingCompletionDuration(
+              summary.startedAt,
+              summary.completedAt
+            ),
     };
   }
 
@@ -800,6 +807,14 @@ const HRDPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
   const [isStartingOnboarding, setIsStartingOnboarding] = useState(false);
+  const [startOnboardingDialog, setStartOnboardingDialog] = useState<{
+    open: boolean;
+    userIds: number[];
+  }>({ open: false, userIds: [] });
+  const [previouslyPassedEmployeeIds, setPreviouslyPassedEmployeeIds] = useState<
+    number[]
+  >([]);
+  const [previouslyPassedNote, setPreviouslyPassedNote] = useState("");
   const [recentlyCreatedEmployee, setRecentlyCreatedEmployee] = useState<{
     UserId: number;
     Name: string | null;
@@ -1167,9 +1182,9 @@ const HRDPage = () => {
     }).length;
   }, [employees]);
 
-  const allSelectableEmployeeIds = useMemo(
+  const startableEmployeeIds = useMemo(
     () =>
-      sortedEmployees
+      employees
         .filter((employee) =>
           canStartEmployeeOnboarding(
             employee,
@@ -1177,11 +1192,11 @@ const HRDPage = () => {
           )
         )
         .map((employee) => employee.UserId),
-    [onboardingSummaryMap, sortedEmployees]
+    [employees, onboardingSummaryMap]
   );
-  const allSelectableEmployeeIdSet = useMemo(
-    () => new Set(allSelectableEmployeeIds),
-    [allSelectableEmployeeIds]
+  const startableEmployeeIdSet = useMemo(
+    () => new Set(startableEmployeeIds),
+    [startableEmployeeIds]
   );
   const selectableEmployeeIds = useMemo(
     () =>
@@ -1205,9 +1220,12 @@ const HRDPage = () => {
   );
 
   const selectedStartableEmployeeIds = selectedEmployeeIds.filter((userId) =>
-    allSelectableEmployeeIdSet.has(userId)
+    startableEmployeeIdSet.has(userId)
   );
   const selectedEligibleCount = selectedStartableEmployeeIds.length;
+  const startOnboardingEmployees = startOnboardingDialog.userIds
+    .map((userId) => employees.find((employee) => employee.UserId === userId))
+    .filter((employee): employee is EmployeeData => Boolean(employee));
   const selectedPageEligibleCount = selectedEmployeeIds.filter((userId) =>
     selectableEmployeeIdSet.has(userId)
   ).length;
@@ -1233,13 +1251,13 @@ const HRDPage = () => {
 
   useEffect(() => {
     setSelectedEmployeeIds((current) => {
-      const next = current.filter((userId) => selectableEmployeeIdSet.has(userId));
+      const next = current.filter((userId) => startableEmployeeIdSet.has(userId));
       return next.length === current.length &&
         next.every((userId, index) => userId === current[index])
         ? current
         : next;
     });
-  }, [selectableEmployeeIdSet]);
+  }, [startableEmployeeIdSet]);
 
   const updateForm = (key: keyof FormState, value: string) => {
     setFormData((current) => {
@@ -1491,8 +1509,46 @@ const HRDPage = () => {
     });
   };
 
-  const startOnboardingForEmployees = async (userIds: number[]) => {
+  const openStartOnboardingDialog = (userIds: number[]) => {
     if (!canCrud || userIds.length === 0 || isStartingOnboarding) {
+      return;
+    }
+
+    setStartOnboardingDialog({ open: true, userIds });
+    setPreviouslyPassedEmployeeIds([]);
+    setPreviouslyPassedNote("");
+  };
+
+  const closeStartOnboardingDialog = () => {
+    if (isStartingOnboarding) return;
+    setStartOnboardingDialog({ open: false, userIds: [] });
+    setPreviouslyPassedEmployeeIds([]);
+    setPreviouslyPassedNote("");
+  };
+
+  const togglePreviouslyPassedEmployee = (userId: number) => {
+    setPreviouslyPassedEmployeeIds((current) =>
+      current.includes(userId)
+        ? current.filter((item) => item !== userId)
+        : [...current, userId]
+    );
+  };
+
+  const startOnboardingForEmployees = async () => {
+    const userIds = startOnboardingDialog.userIds;
+    if (!canCrud || userIds.length === 0 || isStartingOnboarding) {
+      return;
+    }
+
+    const normalizedPreviouslyPassedNote = normalizeText(previouslyPassedNote);
+    if (
+      previouslyPassedEmployeeIds.length > 0 &&
+      !normalizedPreviouslyPassedNote
+    ) {
+      showToast(
+        "Keterangan wajib diisi untuk karyawan yang sudah lulus sebelumnya",
+        "error"
+      );
       return;
     }
 
@@ -1506,6 +1562,8 @@ const HRDPage = () => {
         body: JSON.stringify({
           portalKey: HRD_ONBOARDING_PORTAL_KEY,
           userIds,
+          previouslyPassedUserIds: previouslyPassedEmployeeIds,
+          previouslyPassedNote: normalizedPreviouslyPassedNote,
         }),
       });
 
@@ -1524,6 +1582,11 @@ const HRDPage = () => {
       const skippedCount = Array.isArray(json?.response?.skipped)
         ? json.response.skipped.length
         : 0;
+      const previouslyPassedCount = Array.isArray(
+        json?.response?.previouslyPassed
+      )
+        ? json.response.previouslyPassed.length
+        : 0;
       const firstSkippedReason =
         Array.isArray(json?.response?.skipped) &&
         typeof json.response.skipped[0]?.reason === "string"
@@ -1531,12 +1594,20 @@ const HRDPage = () => {
           : null;
 
       showToast(
-        startedCount > 0
-          ? `Onboarding dimulai untuk ${startedCount} karyawan${
-              skippedCount > 0 ? `, ${skippedCount} dilewati` : ""
-            }.`
-          : firstSkippedReason || "Tidak ada onboarding baru yang dimulai.",
-        startedCount > 0 ? "success" : "error"
+        startedCount > 0 || previouslyPassedCount > 0
+          ? [
+              startedCount > 0
+                ? `Onboarding dimulai untuk ${startedCount} karyawan`
+                : null,
+              previouslyPassedCount > 0
+                ? `${previouslyPassedCount} karyawan dicatat sudah lulus sebelumnya`
+                : null,
+              skippedCount > 0 ? `${skippedCount} dilewati` : null,
+            ]
+              .filter(Boolean)
+              .join(", ") + "."
+          : firstSkippedReason || "Tidak ada data onboarding yang diproses.",
+        startedCount > 0 || previouslyPassedCount > 0 ? "success" : "error"
       );
 
       setSelectedEmployeeIds((current) =>
@@ -1545,6 +1616,9 @@ const HRDPage = () => {
       setRecentlyCreatedEmployee((current) =>
         current && userIds.includes(current.UserId) ? null : current
       );
+      setStartOnboardingDialog({ open: false, userIds: [] });
+      setPreviouslyPassedEmployeeIds([]);
+      setPreviouslyPassedNote("");
       await fetchPageData();
     } catch (error) {
       console.error("Error starting onboarding:", error);
@@ -1962,7 +2036,7 @@ const HRDPage = () => {
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={() =>
-                      startOnboardingForEmployees([recentlyCreatedEmployee.UserId])
+                      openStartOnboardingDialog([recentlyCreatedEmployee.UserId])
                     }
                     disabled={
                       isStartingOnboarding || !canStartRecentlyCreatedEmployee
@@ -2132,7 +2206,8 @@ const HRDPage = () => {
                     Checklist hanya aktif untuk employee yang belum resign, belum
                     punya onboarding aktif, dan sudah masuk struktur organisasi
                     atau PIC pilar/SBU/SBU SUB. `Select all` akan memilih row yang
-                    sedang tampil di halaman tabel.
+                    sedang tampil di halaman tabel. Pilihan tetap tersimpan saat
+                    pencarian atau filter diganti.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -2141,7 +2216,7 @@ const HRDPage = () => {
                   </span>
                   <button
                     onClick={() =>
-                      startOnboardingForEmployees(selectedStartableEmployeeIds)
+                      openStartOnboardingDialog(selectedStartableEmployeeIds)
                     }
                     disabled={selectedEligibleCount === 0 || isStartingOnboarding}
                     className={`rounded-2xl bg-[#272e79] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_42px_-24px_rgba(39,46,121,0.6)] transition hover:bg-[#1f255f] ${
@@ -2995,6 +3070,149 @@ const HRDPage = () => {
                 }`}
               >
                 {isSubmitting ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {startOnboardingDialog.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="border-b border-slate-100 px-6 py-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#5963b8]">
+                Status awal onboarding
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+                Tentukan status {startOnboardingEmployees.length} karyawan
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Karyawan yang tidak dicentang akan memulai onboarding. Centang
+                hanya jika HRD sudah memastikan karyawan tersebut sudah lulus
+                sebelumnya.
+              </p>
+              {startOnboardingEmployees.length > 1 ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPreviouslyPassedEmployeeIds(
+                        startOnboardingEmployees.map((employee) => employee.UserId)
+                      )
+                    }
+                    disabled={isStartingOnboarding}
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                  >
+                    Centang semua sudah lulus sebelumnya
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviouslyPassedEmployeeIds([])}
+                    disabled={isStartingOnboarding}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Mulai onboarding semua
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex-1 space-y-3 overflow-y-auto px-6 py-5">
+              {startOnboardingEmployees.map((employee) => {
+                const summary = onboardingSummaryMap[employee.UserId] ?? null;
+                const roleLabels = Array.from(
+                  new Set(
+                    (summary?.onboardingPlacementDetails ?? [])
+                      .map((detail) => detail.roleLabel?.trim())
+                      .filter(Boolean)
+                  )
+                );
+                const isPreviouslyPassed = previouslyPassedEmployeeIds.includes(
+                  employee.UserId
+                );
+
+                return (
+                  <label
+                    key={employee.UserId}
+                    className={`flex cursor-pointer items-start gap-4 rounded-2xl border px-4 py-4 transition ${
+                      isPreviouslyPassed
+                        ? "border-emerald-200 bg-emerald-50"
+                        : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isPreviouslyPassed}
+                      onChange={() => togglePreviouslyPassedEmployee(employee.UserId)}
+                      disabled={isStartingOnboarding}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold text-slate-900">
+                        {employee.Name || getEmployeeCardNumber(employee)}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">
+                        {getEmployeeCardNumber(employee)}
+                        {roleLabels.length > 0
+                          ? ` • ${roleLabels.join(", ")}`
+                          : " • Anggota struktur organisasi"}
+                      </span>
+                      <span
+                        className={`mt-2 block text-xs font-semibold ${
+                          isPreviouslyPassed ? "text-emerald-700" : "text-[#272e79]"
+                        }`}
+                      >
+                        {isPreviouslyPassed
+                          ? "Sudah lulus sebelumnya"
+                          : "Mulai onboarding"}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+
+              {previouslyPassedEmployeeIds.length > 0 ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                    Keterangan verifikasi
+                    <RequiredMark />
+                  </label>
+                  <textarea
+                    value={previouslyPassedNote}
+                    onChange={(event) => setPreviouslyPassedNote(event.target.value)}
+                    maxLength={1000}
+                    disabled={isStartingOnboarding}
+                    className="mt-3 h-24 w-full rounded-xl border-2 border-emerald-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-1 focus:ring-emerald-300 disabled:opacity-60"
+                    placeholder="Contoh: Kelulusan telah dikonfirmasi oleh HRD."
+                  />
+                  <p className="mt-2 text-xs leading-5 text-emerald-700">
+                    Keterangan, pemberi verifikasi, dan waktu verifikasi akan
+                    disimpan dalam audit log.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-3 border-t border-slate-100 px-6 py-5">
+              <button
+                type="button"
+                onClick={closeStartOnboardingDialog}
+                disabled={isStartingOnboarding}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={startOnboardingForEmployees}
+                disabled={
+                  isStartingOnboarding ||
+                  (previouslyPassedEmployeeIds.length > 0 &&
+                    !normalizeText(previouslyPassedNote))
+                }
+                className="rounded-xl bg-[#272e79] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#1f255f] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isStartingOnboarding ? "Memproses..." : "Simpan dan proses"}
               </button>
             </div>
           </div>

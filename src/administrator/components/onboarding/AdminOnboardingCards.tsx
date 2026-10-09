@@ -18,6 +18,7 @@ import {
   getParticipantNextAction,
   getParticipantProgress,
   getPortalMetrics,
+  isParticipantPassedPreviously,
   normalizeStageStatus,
   stageStatusClass,
   stageStatusLabel,
@@ -224,6 +225,8 @@ export const ParticipantCard = ({
   const progress = getParticipantProgress(participant);
   const currentStage = getCurrentStage(participant);
   const currentStageStatus = normalizeStageStatus(currentStage?.status);
+  const passedPreviously = isParticipantPassedPreviously(participant);
+  const displayedStageStatus = passedPreviously ? "passed" : currentStageStatus;
   const participantHref = `${adminNavigation.basePath}/portal/${portal.portalKey}/user/${encodeURIComponent(participant.participantId)}`;
   const theme = getAdminOnboardingTheme(visualMode);
   const averageExamScore = getParticipantAverageExamScore(participant);
@@ -258,12 +261,16 @@ export const ParticipantCard = ({
                     <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${theme.chipClass}`}>
                       {currentStage
                         ? `Tahap ${currentStage.stageOrder}`
-                        : "Belum ada tahap"}
+                        : passedPreviously
+                          ? "Riwayat sebelumnya"
+                          : "Belum ada tahap"}
                     </span>
                     <span
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[currentStageStatus]}`}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${stageStatusClass[displayedStageStatus]}`}
                     >
-                      {stageStatusLabel[currentStageStatus]}
+                      {passedPreviously
+                        ? "Sudah lulus sebelumnya"
+                        : stageStatusLabel[currentStageStatus]}
                     </span>
                   </div>
                 </div>

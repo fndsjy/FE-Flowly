@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmDialog from "../../components/organisms/DeleteConfirmDialog";
 import { useToast } from "../../components/organisms/MessageToast";
@@ -1062,6 +1063,7 @@ const AdministratorNotificationTemplatePage = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link to="../notification-delivery" className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white">Pengiriman gagal</Link>
             <button
               type="button"
               onClick={loadTemplates}
@@ -1258,13 +1260,9 @@ const AdministratorNotificationTemplatePage = () => {
                   <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                     Template pesan
                   </label>
-                  <span className="text-[11px] text-slate-400">
-                    {manualMessageTemplate.length}/1000
-                  </span>
                 </div>
                 <textarea
                   value={manualMessageTemplate}
-                  maxLength={1000}
                   onChange={(event) =>
                     setManualMessageTemplate(event.target.value)
                   }
@@ -1758,14 +1756,10 @@ const AdministratorNotificationTemplatePage = () => {
                   <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                     Template pesan
                   </label>
-                  <span className="text-[11px] text-slate-400">
-                    {form.messageTemplate.length}/1000
-                  </span>
                 </div>
                 <textarea
                   ref={messageTemplateRef}
                   value={form.messageTemplate}
-                  maxLength={1000}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, messageTemplate: event.target.value }))
                   }

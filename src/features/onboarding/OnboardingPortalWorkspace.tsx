@@ -38,6 +38,8 @@ import type { AdminOnboardingVisualMode } from "../../administrator/lib/onboardi
 import { useToast } from "../../components/organisms/MessageToast";
 import { apiFetch, getApiErrorMessage } from "../../lib/api";
 
+import { examApprovalDeliveryError } from "./exam-approval-delivery";
+
 const ONBOARDING_WORKSPACE_REFRESH_EVENT = "flowly:onboarding-workspace-refresh";
 const ONBOARDING_EXAM_LOCK_STATE = "flowly:onboarding-exam-lock";
 const EXAM_APPROVAL_PASSWORD_LENGTH = 6;
@@ -263,6 +265,7 @@ type RuntimeExamResponse = {
 };
 
 type RuntimeExamStartApprovalResponse = {
+  deliveryStatus?: "NONE" | "PENDING" | "SENT" | "FAILED" | "UNCERTAIN" | "EXPIRED";
   approvalRequired: boolean;
   approvalId?: string | null;
   expiresAt?: string | null;
@@ -331,6 +334,7 @@ const startRuntimeExamOnce = (
 
 const requestRuntimeExamStartApproval = async (stageProgressId: string) => {
   const res = await apiFetch("/onboarding/exam/request-start", {
+    signal: AbortSignal.timeout(60000),
     method: "POST",
     credentials: "include",
     headers: {
@@ -805,13 +809,66 @@ const ExamPanel = ({
   onRuntimeRefresh?: () => void;
 }) => {
   const navigate = useNavigate();
+  const stageProgressId = stage.stageProgressId ?? stage.id;
   const approvalPasswordInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [showExamAgreement, setShowExamAgreement] = useState(false);
   const [approvalRequesting, setApprovalRequesting] = useState(false);
+  const approvalRequestLock = useRef(false);
+  const approvalWaitingStartedAt = useRef(Date.now());
+  const [approvalStatusChecking, setApprovalStatusChecking] = useState(true);
+  const [approvalWaiting, setApprovalWaiting] = useState(false);
+  const [approvalCountdown, setApprovalCountdown] = useState(60);
+  const [approvalFailurePopup, setApprovalFailurePopup] = useState(false);
+  const [approvalDeliveryError, setApprovalDeliveryError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!showExamAgreement) return;
+    let cancelled = false;
+    let busy = false;
+    approvalWaitingStartedAt.current = Date.now();
+    setApprovalStatusChecking(true);
+    setApprovalWaiting(false);
+    const check = async () => {
+      if (busy || approvalRequestLock.current) return;
+      busy = true;
+      try {
+        const res = await apiFetch('/onboarding/exam/request-start/status?stageId=' + encodeURIComponent(stageProgressId), { signal: AbortSignal.timeout(10000) });
+        const json = await res.json();
+        if (!res.ok) throw new Error(getApiErrorMessage(json, 'Status pengiriman belum dapat dikonfirmasi.'));
+        if (cancelled || approvalRequestLock.current) return;
+        const data = json.response as RuntimeExamStartApprovalResponse;
+        setApprovalData(data.deliveryStatus === 'NONE' ? null : data);
+        setApprovalWaiting(data.deliveryStatus === 'PENDING' && Date.now() - approvalWaitingStartedAt.current < 60000);
+        setApprovalDeliveryError(examApprovalDeliveryError(data.deliveryStatus, Date.now() - approvalWaitingStartedAt.current >= 60000));
+      } catch (error) {
+        if (!cancelled && !approvalRequestLock.current) setApprovalDeliveryError(error instanceof Error ? error.message : 'Status belum dapat dikonfirmasi.');
+      } finally {
+        busy = false;
+        if (!cancelled) {
+          setApprovalStatusChecking(false);
+          if (Date.now() - approvalWaitingStartedAt.current >= 60000) setApprovalWaiting(false);
+        }
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => { void check(); }, 2000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [showExamAgreement, stageProgressId]);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [approvalData, setApprovalData] =
     useState<RuntimeExamStartApprovalResponse | null>(null);
   const [approvalPassword, setApprovalPassword] = useState("");
+  useEffect(() => {
+    if (!showExamAgreement || !(approvalRequesting || approvalWaiting) || approvalData?.deliveryStatus === "SENT") return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((60000 - (Date.now() - approvalWaitingStartedAt.current)) / 1000));
+      setApprovalCountdown(remaining);
+      if (remaining === 0) setApprovalWaiting(false);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [showExamAgreement, approvalRequesting, approvalWaiting, approvalData?.deliveryStatus]);
+
   const doneMaterials = countReadMaterials(stage.materials);
   const ready =
     stage.materials.length === 0 || doneMaterials === stage.materials.length;
@@ -840,7 +897,17 @@ const ExamPanel = ({
           : "ready"
         : assessment.status;
   const examUrl = `${scenario.basePath}/exam/${stage.id}`;
-  const stageProgressId = stage.stageProgressId ?? stage.id;
+
+  const lastDeliveryStatus = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (approvalData?.deliveryStatus === "FAILED" && lastDeliveryStatus.current !== "FAILED") setApprovalFailurePopup(true);
+    if (approvalData?.deliveryStatus === "SENT" && lastDeliveryStatus.current !== "SENT") {
+      setApprovalError(null);
+      setApprovalDeliveryError(null);
+      setApprovalFailurePopup(false);
+    }
+    lastDeliveryStatus.current = approvalData?.deliveryStatus;
+  }, [approvalData?.deliveryStatus]);
   const approvalExpiresAtLabel = approvalData?.expiresAt
     ? formatDateTime(approvalData.expiresAt)
     : null;
@@ -851,8 +918,12 @@ const ExamPanel = ({
   const approvalPasswordDigits = approvalPassword.replace(/\D+/g, "");
   const closeExamAgreement = () => {
     setShowExamAgreement(false);
+    setApprovalWaiting(false);
+    setApprovalFailurePopup(false);
+    setApprovalStatusChecking(true);
     setApprovalRequesting(false);
     setApprovalError(null);
+    setApprovalDeliveryError(null);
     setApprovalData(null);
     setApprovalPassword("");
   };
@@ -937,14 +1008,20 @@ const ExamPanel = ({
     }
 
     setApprovalError(null);
+    setApprovalDeliveryError(null);
     setApprovalData(null);
     setApprovalPassword("");
     setShowExamAgreement(true);
   };
   const handleRequestExamApproval = async () => {
+    if (approvalRequestLock.current || approvalRequesting || approvalWaiting || approvalStatusChecking) return;
+    approvalRequestLock.current = true;
+    approvalWaitingStartedAt.current = Date.now();
+    setApprovalCountdown(60);
     if (examInProgress) {
       closeExamAgreement();
       navigate(examUrl);
+      approvalRequestLock.current = false;
       return;
     }
 
@@ -952,13 +1029,16 @@ const ExamPanel = ({
     setApprovalError(null);
     try {
       const response = await requestRuntimeExamStartApproval(stageProgressId);
-      if (!response?.approvalRequired || response.hasActiveSession) {
+      if (!response) throw new Error("Status permintaan belum dapat dikonfirmasi. Silakan tunggu pemeriksaan status.");
+      if (!response.approvalRequired || response.hasActiveSession) {
         closeExamAgreement();
         navigate(examUrl);
         return;
       }
 
       setApprovalData(response);
+      setApprovalWaiting(response.deliveryStatus === "PENDING");
+      setApprovalDeliveryError(examApprovalDeliveryError(response.deliveryStatus));
       setApprovalPassword("");
     } catch (error) {
       const message =
@@ -969,6 +1049,7 @@ const ExamPanel = ({
       }
       setApprovalError(message);
     } finally {
+      approvalRequestLock.current = false;
       setApprovalRequesting(false);
     }
   };
@@ -1003,10 +1084,10 @@ const ExamPanel = ({
   };
 
   useEffect(() => {
-    if (showExamAgreement && approvalData?.approvalRequired) {
+    if (showExamAgreement && approvalData?.deliveryStatus === "SENT") {
       focusApprovalPasswordInput(0);
     }
-  }, [approvalData?.approvalRequired, showExamAgreement]);
+  }, [approvalData?.deliveryStatus, showExamAgreement]);
 
   return (
     <>
@@ -1126,6 +1207,11 @@ const ExamPanel = ({
         ) : null}
       </section>
 
+      {approvalFailurePopup && showExamAgreement ? (
+        <div role="alertdialog" aria-modal="true" aria-label="Pengiriman password gagal" className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="max-w-sm rounded-2xl bg-white p-6 shadow-xl"><p className="font-semibold">Password belum berhasil dikirim ke pengawas. Silakan coba kembali.</p><button type="button" className="mt-4 rounded-full bg-slate-900 px-4 py-2 text-white" onClick={() => setApprovalFailurePopup(false)}>Mengerti</button></div>
+        </div>
+      ) : null}
       {showExamAgreement ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
           <button
@@ -1135,7 +1221,7 @@ const ExamPanel = ({
             className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
           />
           <section className="relative w-full max-w-xl rounded-[28px] border border-white/75 bg-white p-6 shadow-[0_32px_90px_-34px_rgba(15,23,42,0.5)]">
-            {approvalData?.approvalRequired ? (
+            {approvalData?.approvalRequired && approvalData.deliveryStatus === "SENT" ? (
               <>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
                   Password HRD
@@ -1238,9 +1324,19 @@ const ExamPanel = ({
                 <p className="mt-4 text-sm leading-7 text-slate-600">
                   Pastikan koneksi stabil dan Anda siap fokus sampai ujian selesai.
                 </p>
-                {approvalError ? (
+                {(approvalRequesting || approvalWaiting) && approvalCountdown > 0 ? (
+                  <p role="timer" aria-label="Sisa waktu tunggu pengiriman" aria-live="off" className="mt-3 text-sm text-slate-600">
+                    Sisa waktu tunggu: <span className="font-semibold tabular-nums text-slate-900">{approvalCountdown} detik</span>.
+                  </p>
+                ) : approvalData?.deliveryStatus === "PENDING" && approvalCountdown === 0 ? (
+                  <p role="status" className="mt-3 text-sm text-slate-600">
+                    Waktu tunggu selesai. Tekan Coba lagi untuk memeriksa status pengiriman.
+                  </p>
+                ) : null}
+
+                {approvalError || approvalDeliveryError ? (
                   <p className="mt-3 text-sm font-semibold text-rose-700">
-                    {approvalError}
+                    {approvalError || approvalDeliveryError}
                   </p>
                 ) : null}
                 <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -1253,7 +1349,8 @@ const ExamPanel = ({
                   </button>
                   <button
                     type="button"
-                    disabled={approvalRequesting}
+                    disabled={approvalRequesting || approvalWaiting || approvalStatusChecking}
+                    aria-busy={approvalRequesting || approvalWaiting}
                     onClick={handleRequestExamApproval}
                     className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${
                       approvalRequesting
@@ -1261,7 +1358,7 @@ const ExamPanel = ({
                         : scenario.theme.buttonClass
                     }`}
                   >
-                    {approvalRequesting ? "Mengirim password..." : "Saya setuju"}
+                    {approvalRequesting || approvalWaiting ? <><span aria-hidden="true" className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />Menunggu pengiriman...</> : approvalStatusChecking ? "Memeriksa status..." : ["FAILED", "EXPIRED", "UNCERTAIN", "PENDING"].includes(approvalData?.deliveryStatus ?? "") ? "Coba lagi" : "Saya setuju"}
                   </button>
                 </div>
               </>

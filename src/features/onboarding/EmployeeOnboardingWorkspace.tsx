@@ -180,6 +180,8 @@ const mapAssignmentStatus = (status: string): OverallOnboardingStatus => {
     case "PASSED_TO_LMS":
     case "PASSED":
     case "COMPLETED":
+    case "PASSED_OVERRIDE":
+    case "PASSED_PREVIOUSLY":
       return "passed_to_lms";
     case "TRANSFER_REVIEW":
     case "FAILED":

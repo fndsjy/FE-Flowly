@@ -13,6 +13,7 @@ import {
   getParticipantLastActivityAt,
   getParticipantNextAction,
   getParticipantProgress,
+  isParticipantPassedPreviously,
   normalizeStageStatus,
   stageStatusClass,
   stageStatusLabel,
@@ -308,6 +309,8 @@ export default function AdminParticipantDetailPage({
 
   const currentStage = getCurrentStage(participant);
   const currentStageStatus = normalizeStageStatus(currentStage?.status);
+  const passedPreviously = isParticipantPassedPreviously(participant);
+  const displayedStageStatus = passedPreviously ? "passed" : currentStageStatus;
   const progress = getParticipantProgress(participant);
   const lastActivityAt = getParticipantLastActivityAt(participant);
   const averageExamScore = getParticipantAverageExamScore(participant);
@@ -318,6 +321,7 @@ export default function AdminParticipantDetailPage({
     normalizedAssignmentStatus === "PASSED" ||
     normalizedAssignmentStatus === "PASSED_TO_LMS" ||
     normalizedAssignmentStatus === "PASSED_OVERRIDE" ||
+    normalizedAssignmentStatus === "PASSED_PREVIOUSLY" ||
     normalizedAssignmentStatus === "FAIL_FINAL" ||
     normalizedAssignmentStatus === "CANCELLED";
   const isTransferReview = normalizedAssignmentStatus === "TRANSFER_REVIEW";
@@ -483,9 +487,11 @@ export default function AdminParticipantDetailPage({
                 {portal.portalName}
               </span>
               <span
-                className={`rounded-full border px-4 py-2 text-xs font-semibold ${stageStatusClass[currentStageStatus]}`}
+                className={`rounded-full border px-4 py-2 text-xs font-semibold ${stageStatusClass[displayedStageStatus]}`}
               >
-                {stageStatusLabel[currentStageStatus]}
+                {passedPreviously
+                  ? "Sudah lulus sebelumnya"
+                  : stageStatusLabel[currentStageStatus]}
               </span>
             </div>
 
@@ -528,8 +534,19 @@ export default function AdminParticipantDetailPage({
             />
             <MetricCard
               label="Tahap aktif"
-              value={currentStage ? `Tahap ${currentStage.stageOrder}` : "-"}
-              helper={currentStage?.stageName ?? "Belum ada tahap aktif."}
+              value={
+                currentStage
+                  ? `Tahap ${currentStage.stageOrder}`
+                  : passedPreviously
+                    ? "Riwayat"
+                    : "-"
+              }
+              helper={
+                currentStage?.stageName ??
+                (passedPreviously
+                  ? "Tidak memerlukan tahap onboarding."
+                  : "Belum ada tahap aktif.")
+              }
               visualMode={visualMode}
             />
             <MetricCard
@@ -540,8 +557,16 @@ export default function AdminParticipantDetailPage({
             />
             <MetricCard
               label="Materi dibuka"
-              value={`${participant.readMaterialCount}/${Math.max(participant.totalMaterialCount, 1)}`}
-              helper="Jumlah materi yang sudah pernah dibuka peserta."
+              value={
+                passedPreviously
+                  ? "-"
+                  : `${participant.readMaterialCount}/${Math.max(participant.totalMaterialCount, 1)}`
+              }
+              helper={
+                passedPreviously
+                  ? "Tidak ada materi yang diwajibkan."
+                  : "Jumlah materi yang sudah pernah dibuka peserta."
+              }
               visualMode={visualMode}
             />
             <MetricCard
@@ -589,7 +614,7 @@ export default function AdminParticipantDetailPage({
                     : "border-[#e7d8c6] bg-[#fffaf2] text-[#8b7a66]"
               }`}
             >
-              Status: {participant.status}
+              Status: {passedPreviously ? "Sudah lulus sebelumnya" : participant.status}
             </span>
           </div>
 

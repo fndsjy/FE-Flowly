@@ -1,3 +1,4 @@
+import AdministratorFailedNotificationPage from "./AdministratorFailedNotificationPage";
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import OnboardingAdministratorExamsPage from "./onboarding/OnboardingAdministratorExamsPage";
@@ -120,6 +121,10 @@ const AdministratorWorkspacePage = () => {
             <Route
               path="onboarding-exams"
               element={<OnboardingAdministratorExamsPage />}
+            />
+            <Route
+              path="notification-delivery"
+              element={<AdministratorFailedNotificationPage />}
             />
             <Route
               path="notification-template"
