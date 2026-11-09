@@ -8,6 +8,8 @@ import {
   useTransform,
 } from "framer-motion";
 import { Link } from "react-router-dom";
+import { apiFetch, getApiErrorMessage } from "../../lib/api";
+import { buildScenario, type WorkspacePortal } from "./runtime-scenario";
 import { isExternalRoute } from "../../lib/routes";
 import {
   getOnboardingScenario,
@@ -44,7 +46,6 @@ type StageMetric = {
   materialsReading: number;
   materialsPending: number;
   score: number | null;
-  projectedScore: number;
   passScore: number;
 };
 
@@ -333,77 +334,13 @@ const hexToRgba = (hex: string, alpha: number) => {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 };
 
-const getAssessmentProgress = (status: AssessmentStatus, score: number | null) => {
-  if (typeof score === "number") {
-    return clamp(score, 0, 100) / 100;
-  }
-
-  switch (status) {
-    case "passed":
-      return 1;
-    case "submitted":
-      return 0.84;
-    case "ready":
-      return 0.66;
-    case "remedial":
-      return 0.52;
-    case "failed_window":
-      return 0.38;
-    default:
-      return 0.08;
-  }
-};
-
-const getProjectedScore = (status: AssessmentStatus, passScore: number) => {
-  switch (status) {
-    case "passed":
-      return Math.max(passScore, 82);
-    case "submitted":
-      return Math.round(passScore * 0.9);
-    case "ready":
-      return Math.round(passScore * 0.72);
-    case "remedial":
-      return Math.round(passScore * 0.58);
-    case "failed_window":
-      return Math.round(passScore * 0.44);
-    default:
-      return Math.round(passScore * 0.18);
-  }
-};
-
 const buildCompletionPercent = (scenario: OnboardingScenario) => {
-  if (scenario.stages.length === 0) {
-    return 0;
-  }
-
-  const showAssessmentFeatures = shouldShowAssessmentFeatures(scenario);
-  const weightedProgress = scenario.stages.reduce((sum, stage) => {
-    if (stage.status === "passed") {
-      return sum + 1;
-    }
-
-    const totalMaterials = Math.max(stage.materials.length, 1);
-    const completedMaterials = stage.materials.filter(
-      (material) => material.status === "completed"
-    ).length;
-    const readingMaterials = stage.materials.filter(
-      (material) => material.status === "reading"
-    ).length;
-    const materialRatio =
-      (completedMaterials + readingMaterials * 0.55) / totalMaterials;
-    if (!showAssessmentFeatures) {
-      return sum + clamp(materialRatio, 0, 1);
-    }
-
-    const assessmentRatio = getAssessmentProgress(
-      stage.assessment.status,
-      stage.assessment.score
-    );
-
-    return sum + clamp(materialRatio * 0.62 + assessmentRatio * 0.38, 0, 1);
-  }, 0);
-
-  return Math.round((weightedProgress / scenario.stages.length) * 100);
+  const materials = scenario.stages.flatMap((stage) => stage.materials);
+  const completed = materials.filter((material) => material.status === "completed").length;
+  const assessmentCount = shouldShowAssessmentFeatures(scenario) ? scenario.stages.length : 0;
+  const passed = assessmentCount ? scenario.stages.filter((stage) => stage.status === "passed").length : 0;
+  const total = materials.length + assessmentCount;
+  return total ? Math.round(((completed + passed) / total) * 100) : 0;
 };
 
 const buildNextAction = (scenario: OnboardingScenario, currentStage: OnboardingStage) => {
@@ -626,10 +563,6 @@ const buildMetrics = (scenario: OnboardingScenario): DashboardMetrics => {
       materialsReading,
       materialsPending,
       score: stage.assessment.score,
-      projectedScore: getProjectedScore(
-        stage.assessment.status,
-        stage.assessment.passScore
-      ),
       passScore: stage.assessment.passScore,
     };
   });
@@ -872,11 +805,11 @@ const ActionAnchor = ({
   );
 };
 
-const PortalOnboardingDashboard = ({
+const DashboardContent = ({
   portalKey,
   userName,
-}: PortalOnboardingDashboardProps) => {
-  const scenario = getOnboardingScenario(portalKey);
+  scenario,
+}: PortalOnboardingDashboardProps & { scenario: OnboardingScenario }) => {
   const visual = portalVisuals[portalKey];
   const metrics = buildMetrics(scenario);
   const shouldReduceMotion = useReducedMotion();
@@ -925,7 +858,7 @@ const PortalOnboardingDashboard = ({
   const chartLabelBandHeight = 52;
   const chartCanvasHeight = chartTrendBandHeight + chartPlotHeight;
   const stageTrendValues = metrics.stageMetrics.map((stage) =>
-    typeof stage.score === "number" ? stage.score : stage.projectedScore
+    stage.score ?? 0
   );
   const stageTrendMin = Math.min(...stageTrendValues);
   const stageTrendMax = Math.max(...stageTrendValues);
@@ -1018,7 +951,7 @@ const PortalOnboardingDashboard = ({
               </div>
               <div className="rounded-[22px] border border-white/10 bg-white/[0.05] px-4 py-3 backdrop-blur">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/58">
-                  Mentor
+                  PIC SBU Sub
                 </div>
                 <div className="mt-2 text-sm font-semibold text-white">
                   {scenario.mentorName}
@@ -1113,7 +1046,7 @@ const PortalOnboardingDashboard = ({
               label="Material selesai"
               target={metrics.completedMaterials}
               formatValue={(value) => `${value}/${metrics.totalMaterials}`}
-              helper={`${metrics.completedMinutes}/${metrics.totalMinutes} menit materi sudah selesai`}
+              helper={`${metrics.readingMaterials} sedang dibaca, ${metrics.pendingMaterials} belum selesai`}
               visual={visual}
               delay={0.34}
             />
@@ -1315,7 +1248,7 @@ const PortalOnboardingDashboard = ({
         {showAssessmentFeatures ? (
           <DashboardCard
             title="Assessment performance"
-            description="Perbandingan score per tahap terhadap pass line. Jika score belum muncul, dashboard menampilkan estimasi readiness dari status assessment saat ini."
+            description="Nilai ujian yang tercatat per tahap dan batas kelulusannya. Tahap tanpa nilai ditampilkan sebagai -."
             visual={visual}
             revealFrom="right"
           >
@@ -1365,7 +1298,7 @@ const PortalOnboardingDashboard = ({
                     aria-hidden="true"
                   >
                     <motion.polyline
-                      points={stageTrendPoints}
+                      points={metrics.stageMetrics.every((stage) => stage.score !== null) ? stageTrendPoints : ""}
                       fill="none"
                       stroke={hexToRgba(visual.accent, 0.38)}
                       strokeWidth="0.9"
@@ -1386,7 +1319,7 @@ const PortalOnboardingDashboard = ({
                   >
                     {metrics.stageMetrics.map((stage, index) => {
                       const value = stageTrendValues[index];
-                      const barHeight = Math.max(24, (value / 100) * chartPlotHeight);
+                      const barHeight = (value / 100) * chartPlotHeight;
 
                       return (
                         <div key={stage.id} className="relative h-full px-2">
@@ -1415,7 +1348,7 @@ const PortalOnboardingDashboard = ({
                                   duration={0.7}
                                 />
                               ) : (
-                                `${value}*`
+                                "-"
                               )}
                             </motion.div>
 
@@ -1486,7 +1419,7 @@ const PortalOnboardingDashboard = ({
                     className="h-2.5 w-2.5 rounded-full"
                     style={{ backgroundColor: hexToRgba(visual.accent, 0.55) }}
                   ></span>
-                  Estimasi readiness
+                  Belum dinilai ditampilkan sebagai -
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <span className="font-semibold text-slate-400">Pass</span>
@@ -1584,6 +1517,67 @@ const PortalOnboardingDashboard = ({
 
     </div>
   );
+};
+
+const PortalOnboardingDashboard = (props: PortalOnboardingDashboardProps) => {
+  const [scenario, setScenario] = useState<OnboardingScenario | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    if (props.portalKey !== "EMPLOYEE") return;
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await apiFetch("/onboarding/me", { credentials: "include" });
+        const json = await response.json();
+        if (!response.ok) throw new Error(getApiErrorMessage(json, "Gagal memuat dashboard onboarding"));
+        const portals: WorkspacePortal[] = Array.isArray(json?.response?.portals) ? json.response.portals : [];
+        const portal = portals.find((item) => item.portalKey.trim().toUpperCase() === "EMPLOYEE");
+        if (mounted) setScenario(portal ? buildScenario(portal, "EMPLOYEE") : null);
+      } catch (err) {
+        if (mounted) {
+          setScenario(null);
+          setError(err instanceof Error ? err.message : "Gagal memuat dashboard onboarding");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    const refresh = () => { void load(); };
+    const storageRefresh = (event: StorageEvent) => {
+      if (event.key === "flowly:onboarding-workspace-refresh") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", storageRefresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", storageRefresh);
+    };
+  }, [props.portalKey, props.userName, refreshTick]);
+
+  if (props.portalKey !== "EMPLOYEE") {
+    return <DashboardContent {...props} scenario={getOnboardingScenario(props.portalKey)} />;
+  }
+  if (loading || error || !scenario || scenario.stages.length === 0) {
+    return (
+      <section className="rounded-[32px] border border-slate-200 bg-white p-8" aria-live="polite">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {loading ? "Memuat dashboard onboarding..." : error ? "Dashboard belum dapat dimuat" : "Belum ada tahap onboarding"}
+        </h1>
+        <p className="mt-3 text-sm text-slate-600">
+          {loading ? "Mengambil progres dan penempatan Anda." : error || "Tahap dan materi akan tampil setelah onboarding Anda ditetapkan oleh HRD."}
+        </p>
+        {error ? <button type="button" className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm text-white" onClick={() => setRefreshTick((value) => value + 1)}>Coba lagi</button> : null}
+      </section>
+    );
+  }
+  return <DashboardContent {...props} scenario={scenario} />;
 };
 
 export default PortalOnboardingDashboard;
