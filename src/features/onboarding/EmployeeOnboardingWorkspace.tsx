@@ -39,14 +39,14 @@ export default function EmployeeOnboardingWorkspace() {
 
   useEffect(() => {
     const hasCompletedProfileOnboarding = Boolean(
-      profile?.onboardingPassed || profile?.statusLMS
+      profile?.onboardingPassed
     );
     const profileRefreshKey =
       profile?.userId ?? String(profile?.employeeUserId ?? "current");
 
     hasCompletedProfileOnboardingRef.current = hasCompletedProfileOnboarding;
     profileRefreshKeyRef.current = profileRefreshKey;
-  }, [profile?.employeeUserId, profile?.onboardingPassed, profile?.statusLMS, profile?.userId]);
+  }, [profile?.employeeUserId, profile?.onboardingPassed, profile?.userId]);
 
   const loadWorkspace = async (isMounted?: () => boolean) => {
     if (!isMounted || isMounted()) {

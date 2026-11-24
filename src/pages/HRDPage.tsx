@@ -12,6 +12,7 @@ import BackButton from "../components/atoms/BackButton";
 import { OptionalMark, RequiredMark } from "../components/atoms/FormMarks";
 import Sidebar from "../components/organisms/Sidebar";
 import DeleteConfirmDialog from "../components/organisms/DeleteConfirmDialog";
+import EmployeeLmsAccessPanel from "../components/organisms/EmployeeLmsAccessPanel";
 import { useToast } from "../components/organisms/MessageToast";
 import { useAccessSummary } from "../hooks/useAccessSummary";
 import { useProfile } from "../hooks/useProfile";
@@ -699,7 +700,11 @@ const getOnboardingStatusMeta = (
   };
 };
 
-const CANCELABLE_ONBOARDING_STATUSES = new Set(["IN_PROGRESS"]);
+const CANCELABLE_ONBOARDING_STATUSES = new Set([
+  "IN_PROGRESS",
+  "REMEDIAL",
+  "WAITING_ADMIN",
+]);
 
 const canCancelOnboardingSummary = (
   summary?: EmployeeOnboardingSummaryData | null
@@ -2007,6 +2012,8 @@ const HRDPage = () => {
               </div>
             </div>
           </div>
+
+          {canCrud && <EmployeeLmsAccessPanel onUpdated={() => { void fetchPageData(true); }} />}
 
           {canCrud && recentlyCreatedEmployee && (
             <div className="relative overflow-hidden rounded-[28px] border border-sky-200 bg-[linear-gradient(135deg,_#eff6ff_0%,_#f8fafc_45%,_#eef2ff_100%)] p-5 shadow-[0_20px_45px_-32px_rgba(37,99,235,0.45)]">
